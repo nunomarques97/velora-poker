@@ -16,8 +16,9 @@ application functionality has been implemented yet.
 
 **Pre-development / Architecture & Product Validation**
 
-No technology stack has been chosen yet. No poker HUD functionality exists
-in this repository. The project is not ready for contributions or use.
+The application shell (Tauri 2 + React + TypeScript) has been scaffolded.
+No poker HUD functionality exists in this repository yet. The project is
+not ready for contributions or use.
 
 ## Development Principles
 
@@ -34,16 +35,61 @@ in this repository. The project is not ready for contributions or use.
 
 ## Architecture
 
-_To be defined._
+**Technical foundation (chosen):**
 
-Architecture decisions (desktop framework, overlay rendering approach, hand
-history parsing strategy, statistics engine design, backend/cloud sync
-approach, subscription/billing provider, etc.) will be documented here once
-made.
+- [Tauri 2](https://tauri.app/) — Rust-based desktop application shell
+- [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) — frontend UI
+- [Vite](https://vitejs.dev/) — frontend build tool
+- Windows-first target platform
+
+This is only the application shell. No overlay rendering, table detection,
+hand history parsing, statistics engine, authentication, backend, or
+payments have been implemented. Those remain open architecture decisions to
+be made and documented here as the project progresses.
 
 ## Setup
 
-_To be defined._
+**Prerequisites:**
 
-Development environment setup instructions will be added once the
-technology stack is decided.
+- [Node.js](https://nodejs.org/) 20+ and npm
+- [Rust](https://www.rust-lang.org/tools/install) (stable toolchain, MSVC)
+- On Windows: the [Tauri prerequisites](https://tauri.app/start/prerequisites/)
+  — Microsoft C++ Build Tools (Desktop development with C++ workload) and
+  WebView2 Runtime (preinstalled on most modern Windows systems)
+
+**Install dependencies:**
+
+```sh
+npm install
+```
+
+**Run the app in development mode:**
+
+```sh
+npm run tauri dev
+```
+
+**Build a production bundle:**
+
+```sh
+npm run tauri build
+```
+
+**Frontend-only commands** (useful for quick UI iteration without the Rust
+shell):
+
+```sh
+npm run dev       # start the Vite dev server
+npm run build      # type-check and build the frontend
+npm run preview    # preview the built frontend
+```
+
+## Project Structure
+
+```
+velora-poker/
+├── src/            # React + TypeScript frontend
+├── src-tauri/      # Rust backend / Tauri application shell
+├── tests/          # test suites (placeholder)
+└── assets/         # non-code project assets (placeholder)
+```

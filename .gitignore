@@ -5,21 +5,27 @@ Desktop.ini
 $RECYCLE.BIN/
 
 # Editors / IDEs
-.vscode/
+.vscode/*
+!.vscode/extensions.json
 .idea/
 *.swp
 *.swo
 
 # Logs
 *.log
+npm-debug.log*
 
 # Environment / secrets
 .env
 .env.*
 !.env.example
 
-# Build / dependency output (generic placeholders until a stack is chosen)
-/dist/
-/build/
-/out/
+# Node / frontend build output
 /node_modules/
+/dist/
+/dist-ssr/
+*.local
+
+# Rust / Tauri build output
+/src-tauri/target/
+/src-tauri/gen/schemas/
