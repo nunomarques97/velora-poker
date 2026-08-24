@@ -47,3 +47,10 @@ export interface TableSeat {
   seat: number;
   player: Player;
 }
+
+export interface ImportStatus {
+  configuredDir: string | null;
+  handsImported: number;
+  lastImportAt: string | null;
+  parserStatus: string;
+}
