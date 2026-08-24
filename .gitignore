@@ -1,0 +1,25 @@
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Editors / IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Build / dependency output (generic placeholders until a stack is chosen)
+/dist/
+/build/
+/out/
+/node_modules/
