@@ -29,4 +29,15 @@ export default defineConfig(async () => ({
       ignored: ["**/src-tauri/**"],
     },
   },
+
+  // Two HTML entry points: the main app window and the transparent HUD
+  // overlay window (a separate Tauri WebviewWindow pointed at overlay.html).
+  build: {
+    rollupOptions: {
+      input: {
+        main: "index.html",
+        overlay: "overlay.html",
+      },
+    },
+  },
 }));

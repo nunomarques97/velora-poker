@@ -69,17 +69,43 @@ pub struct ParsedPlayerResult {
     pub won_at_showdown: bool,
 }
 
+/// Cash-game stakes and tournament levels have different semantics (real/play
+/// money per-hand stakes vs. a shared, escalating chip-count level shared by
+/// the whole field) — callers must not assume `small_blind`/`big_blind` mean
+/// "money" for a tournament hand.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HandFormat {
+    Cash,
+    Tournament,
+}
+
+impl HandFormat {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            HandFormat::Cash => "cash",
+            HandFormat::Tournament => "tournament",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ParsedHand {
     pub hand_id: String,
     pub site: String,
+    pub format: HandFormat,
     pub table_name: String,
     pub max_seats: i64,
     pub button_seat: i64,
     pub game_type: String,
+    /// For tournaments this is the current level's blinds (chips, not
+    /// money), not a cash-game stake.
     pub small_blind: f64,
     pub big_blind: f64,
     pub currency: String,
+    /// Tournament-only metadata; `None` for cash hands.
+    pub tournament_id: Option<String>,
+    pub buy_in: Option<String>,
+    pub level: Option<String>,
     pub played_at: String,
     pub hero_name: Option<String>,
     pub seats: Vec<ParsedSeat>,

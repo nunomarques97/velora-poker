@@ -4,15 +4,17 @@ use regex::Regex;
 use std::sync::OnceLock;
 
 use super::model::{
-    ActionType, ParseError, ParsedAction, ParsedHand, ParsedPlayerResult, ParsedSeat, Street,
+    ActionType, HandFormat, ParseError, ParsedAction, ParsedHand, ParsedPlayerResult, ParsedSeat,
+    Street,
 };
 
 /// Parses PokerStars hand history text into structured [`ParsedHand`] values.
 ///
-/// Only cash-game No Limit / Limit / Pot Limit Hold'em style hand histories with a
-/// standard `PokerStars Hand #...:` header are currently supported. Tournament
-/// summaries and other poker sites are out of scope for this parser; additional
-/// site/format parsers can be added later behind the [`HandHistoryParser`] trait.
+/// Supports cash-game and tournament (including Zoom tournament) No Limit /
+/// Limit / Pot Limit Hold'em style hand histories with a standard
+/// `PokerStars Hand #...:` header. Other poker sites are out of scope for
+/// this parser; additional site/format parsers can be added later behind the
+/// [`HandHistoryParser`] trait.
 pub trait HandHistoryParser {
     fn site(&self) -> &'static str;
     fn parse(&self, text: &str) -> Vec<Result<ParsedHand, ParseError>>;
@@ -58,9 +60,19 @@ fn header_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(
-            r"^PokerStars Hand #(\d+):\s+(.+?)\s+\(([\$€£]?)([\d.]+)/([\$€£]?)([\d.]+)(?:\s+([A-Z]{3}))?\)\s+-\s+(\d{4}/\d{2}/\d{2})\s+(\d{2}:\d{2}:\d{2})",
+            r"^PokerStars Hand #(\d+):\s+(.+?)\s+\(([\$€£]?)([\d.]+)/([\$€£]?)([\d.]+)(?:\s+([A-Z]{3}))?\)\s+-\s+(\d{4}/\d{2}/\d{2})\s+(\d{1,2}:\d{2}:\d{2})",
         )
         .expect("valid header regex")
+    })
+}
+
+fn tournament_header_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(
+            r"^PokerStars Hand #(\d+): (?:Zoom )?Tournament #(\d+), (.+?) - Level (\S+)\s*\(([\d,]+)/([\d,]+)\) - (\d{4}/\d{2}/\d{2}) (\d{1,2}:\d{2}:\d{2})",
+        )
+        .expect("valid tournament header regex")
     })
 }
 
@@ -101,6 +113,16 @@ fn currency_from_symbol(symbol: &str, code: Option<&str>) -> String {
     .to_string()
 }
 
+/// PokerStars doesn't always zero-pad a single-digit hour (e.g. `0:06:23`
+/// rather than `00:06:23`), but a stored `played_at` should stay
+/// lexicographically sortable like a real ISO-8601 timestamp.
+fn pad_time(time: &str) -> String {
+    match time.split_once(':') {
+        Some((hour, rest)) if hour.len() == 1 => format!("0{hour}:{rest}"),
+        _ => time.to_string(),
+    }
+}
+
 fn parse_money(s: &str) -> Option<f64> {
     let cleaned: String = s
         .chars()
@@ -111,6 +133,103 @@ fn parse_money(s: &str) -> Option<f64> {
     } else {
         cleaned.parse::<f64>().ok()
     }
+}
+
+/// Splits a tournament header's descriptive segment (e.g. `"44000+6000
+/// Hold'em No Limit"` or `"$10+$1 USD Hold'em No Limit"`) into a best-effort
+/// buy-in prefix and the remaining game-type text. Falls back to treating
+/// the whole segment as the game type when no leading buy-in-shaped prefix
+/// is found (e.g. `"Freeroll Hold'em No Limit"`), rather than guessing.
+fn split_buyin_and_game_type(raw: &str) -> (Option<String>, String) {
+    let buyin_end = raw.find(|c: char| c.is_alphabetic()).unwrap_or(0);
+    if buyin_end > 0 {
+        let buy_in = raw[..buyin_end].trim().to_string();
+        let game_type = raw[buyin_end..].trim().to_string();
+        if !buy_in.is_empty() && !game_type.is_empty() {
+            return (Some(buy_in), game_type);
+        }
+    }
+    (None, raw.trim().to_string())
+}
+
+struct HeaderInfo {
+    hand_id: String,
+    format: HandFormat,
+    game_type: String,
+    small_blind: f64,
+    big_blind: f64,
+    currency: String,
+    tournament_id: Option<String>,
+    buy_in: Option<String>,
+    level: Option<String>,
+    played_at: String,
+}
+
+fn parse_header(line: &str) -> Result<HeaderInfo, ParseError> {
+    if line.contains("Tournament #") {
+        parse_tournament_header(line)
+    } else {
+        parse_cash_header(line)
+    }
+}
+
+fn parse_cash_header(line: &str) -> Result<HeaderInfo, ParseError> {
+    let header = header_regex().captures(line).ok_or(ParseError::MissingHeader)?;
+
+    let hand_id = header[1].to_string();
+    let game_type = header[2].to_string();
+    let sb_symbol = &header[3];
+    let small_blind = parse_money(&header[4]).unwrap_or(0.0);
+    let bb_symbol = &header[5];
+    let big_blind = parse_money(&header[6]).unwrap_or(0.0);
+    let currency_code = header.get(7).map(|m| m.as_str());
+    let currency = currency_from_symbol(
+        if !sb_symbol.is_empty() { sb_symbol } else { bb_symbol },
+        currency_code,
+    );
+    let date = &header[8];
+    let time = &header[9];
+
+    Ok(HeaderInfo {
+        hand_id,
+        format: HandFormat::Cash,
+        game_type,
+        small_blind,
+        big_blind,
+        currency,
+        tournament_id: None,
+        buy_in: None,
+        level: None,
+        played_at: format!("{}T{}", date.replace('/', "-"), pad_time(time)),
+    })
+}
+
+fn parse_tournament_header(line: &str) -> Result<HeaderInfo, ParseError> {
+    let header = tournament_header_regex()
+        .captures(line)
+        .ok_or_else(|| ParseError::UnsupportedFormat("unrecognized tournament header format".to_string()))?;
+
+    let hand_id = header[1].to_string();
+    let tournament_id = header[2].to_string();
+    let (buy_in, game_type) = split_buyin_and_game_type(&header[3]);
+    let level = header[4].to_string();
+    let small_blind = parse_money(&header[5]).unwrap_or(0.0);
+    let big_blind = parse_money(&header[6]).unwrap_or(0.0);
+    let date = &header[7];
+    let time = &header[8];
+
+    Ok(HeaderInfo {
+        hand_id,
+        format: HandFormat::Tournament,
+        game_type,
+        small_blind,
+        big_blind,
+        currency: "CHIPS".to_string(),
+        tournament_id: Some(tournament_id),
+        buy_in,
+        level: Some(level),
+        played_at: format!("{}T{}", date.replace('/', "-"), pad_time(time)),
+    })
 }
 
 fn parse_action_desc(desc: &str) -> Option<(ActionType, Option<f64>, bool)> {
@@ -187,31 +306,7 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
     let mut lines = block.lines();
     let header_line = lines.next().ok_or(ParseError::MissingHeader)?;
 
-    let header = header_regex()
-        .captures(header_line)
-        .ok_or(ParseError::MissingHeader)?;
-
-    let hand_id = header[1].to_string();
-    let game_type = header[2].to_string();
-
-    if game_type.contains("Tournament") {
-        return Err(ParseError::UnsupportedFormat(
-            "tournament hand histories are not yet supported".to_string(),
-        ));
-    }
-
-    let sb_symbol = &header[3];
-    let small_blind = parse_money(&header[4]).unwrap_or(0.0);
-    let bb_symbol = &header[5];
-    let big_blind = parse_money(&header[6]).unwrap_or(0.0);
-    let currency_code = header.get(7).map(|m| m.as_str());
-    let currency = currency_from_symbol(
-        if !sb_symbol.is_empty() { sb_symbol } else { bb_symbol },
-        currency_code,
-    );
-    let date = &header[8];
-    let time = &header[9];
-    let played_at = format!("{}T{}", date.replace('/', "-"), time);
+    let header = parse_header(header_line)?;
 
     let mut table_name = String::new();
     let mut max_seats = 0i64;
@@ -328,16 +423,20 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
     }
 
     Ok(ParsedHand {
-        hand_id,
+        hand_id: header.hand_id,
         site: "pokerstars".to_string(),
+        format: header.format,
         table_name,
         max_seats,
         button_seat,
-        game_type,
-        small_blind,
-        big_blind,
-        currency,
-        played_at,
+        game_type: header.game_type,
+        small_blind: header.small_blind,
+        big_blind: header.big_blind,
+        currency: header.currency,
+        tournament_id: header.tournament_id,
+        buy_in: header.buy_in,
+        level: header.level,
+        played_at: header.played_at,
         hero_name,
         seats,
         actions,

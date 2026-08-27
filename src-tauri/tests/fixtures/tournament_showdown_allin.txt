@@ -1,0 +1,57 @@
+PokerStars Hand #261851768288: Tournament #4025638884, 44000+6000 Hold'em No Limit - Level VII (60/120) - 2026/08/24 13:01:03 WET [2026/08/24 8:01:03 ET]
+Table '4025638884 1' 9-max Seat #4 is the button
+Seat 1: Opponent7 (1363 in chips)
+Seat 2: TourneyHero (1500 in chips)
+Seat 3: Opponent8 (1500 in chips)
+Seat 4: Opponent9 (950 in chips)
+Seat 5: Opponént10 (1254 in chips)
+Seat 6: Opponent11 (5444 in chips)
+Seat 7: opponent--12 (1500 in chips)
+Seat 8: Opponent13 (1500 in chips)
+Seat 9: Opponent14 (2465 in chips)
+Opponent7: posts the ante 12
+TourneyHero: posts the ante 12
+Opponent8: posts the ante 12
+Opponent9: posts the ante 12
+Opponént10: posts the ante 12
+Opponent11: posts the ante 12
+opponent--12: posts the ante 12
+Opponent13: posts the ante 12
+Opponent14: posts the ante 12
+Opponént10: posts small blind 60
+Opponent11: posts big blind 120
+*** HOLE CARDS ***
+Dealt to TourneyHero [Kd Ks]
+opponent--12: folds
+Opponent13: calls 120
+Opponent14: folds
+Opponent7: calls 120
+TourneyHero: raises 420 to 540
+Opponent8: folds
+Opponent9: folds
+Opponént10: folds
+Opponent11: folds
+Opponent13: calls 420
+Opponent7: folds
+*** FLOP *** [8h Ad Jc]
+Opponent13: bets 948 and is all-in
+TourneyHero: calls 948 and is all-in
+*** TURN *** [8h Ad Jc] [Qc]
+*** RIVER *** [8h Ad Jc Qc] [8s]
+*** SHOW DOWN ***
+Opponent13: shows [Jd Ac] (two pair, Aces and Jacks)
+TourneyHero: shows [Kd Ks] (two pair, Kings and Eights)
+Opponent13 collected 3384 from pot
+TourneyHero finished the tournament
+*** SUMMARY ***
+Total pot 3384 | Rake 0
+Board [8h Ad Jc Qc 8s]
+Seat 1: Opponent7 folded before Flop
+Seat 2: TourneyHero showed [Kd Ks] and lost with two pair, Kings and Eights
+Seat 3: Opponent8 folded before Flop (didn't bet)
+Seat 4: Opponent9 (button) folded before Flop (didn't bet)
+Seat 5: Opponént10 (small blind) folded before Flop
+Seat 6: Opponent11 (big blind) folded before Flop
+Seat 7: opponent--12 folded before Flop (didn't bet)
+Seat 8: Opponent13 showed [Jd Ac] and won (3384) with two pair, Aces and Jacks
+Seat 9: Opponent14 folded before Flop (didn't bet)

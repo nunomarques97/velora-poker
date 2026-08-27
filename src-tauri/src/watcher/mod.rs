@@ -1,16 +1,19 @@
 use std::path::{Path, PathBuf};
 
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 use crate::db;
 use crate::import;
 use crate::state::AppState;
 
-/// Starts watching `dir` (non-recursively) for created/modified `.txt`
-/// files, importing any newly appearing hands as they are written by
-/// PokerStars. The returned watcher must be kept alive (e.g. stored in
-/// [`AppState`]) for watching to continue.
+/// Starts watching `dir` recursively for created/modified `.txt` files,
+/// importing any newly appearing hands as they are written by PokerStars.
+/// Recursive so that per-screen-name subdirectories (e.g.
+/// `HandHistory\<ScreenName>\*.txt`, including ones created after watching
+/// starts) are picked up without the caller needing to know the screen
+/// name(s) in advance. The returned watcher must be kept alive (e.g. stored
+/// in [`AppState`]) for watching to continue.
 pub fn start_watching(
     app_handle: tauri::AppHandle,
     dir: PathBuf,
@@ -27,7 +30,7 @@ pub fn start_watching(
         }
     })?;
 
-    watcher.watch(&dir, RecursiveMode::NonRecursive)?;
+    watcher.watch(&dir, RecursiveMode::Recursive)?;
     Ok(watcher)
 }
 
@@ -51,5 +54,8 @@ fn handle_file_event(app_handle: &tauri::AppHandle, path: &Path) {
         if let Ok(mut import_state) = state.import.lock() {
             import_state.last_import_at = Some(db::now_iso());
         }
+        // Event-driven refresh: the frontend (main window and overlay) listen
+        // for this instead of polling SQLite on a timer.
+        let _ = app_handle.emit("hands-imported", summary.hands_imported);
     }
 }

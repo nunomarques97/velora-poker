@@ -1,0 +1,297 @@
+.card {
+  --player-color: #6b7480;
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 76px;
+  width: max-content;
+  background: #12151c;
+  border: 1.5px solid var(--player-color);
+  border-radius: 38px 14px 14px 38px;
+  box-shadow:
+    0 0 10px 0 color-mix(in srgb, var(--player-color) 55%, transparent),
+    0 0 22px 2px color-mix(in srgb, var(--player-color) 30%, transparent),
+    0 10px 22px rgba(0, 0, 0, 0.45);
+  padding: 4px 16px 4px 4px;
+  gap: 12px;
+  user-select: none;
+  transition: box-shadow 160ms ease;
+}
+
+.dragHandle {
+  cursor: grab;
+  flex-shrink: 0;
+}
+
+/* --- Ring / avatar --- */
+
+.ring {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ringSegments {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(from -140deg, transparent 0deg 2.2deg, rgba(0, 0, 0, 0.55) 2.2deg 4.4deg),
+    conic-gradient(from -140deg, var(--player-color) 0deg 280deg, rgba(255, 255, 255, 0.06) 280deg 360deg);
+  -webkit-mask: radial-gradient(circle, transparent 65%, black 70%);
+  mask: radial-gradient(circle, transparent 65%, black 70%);
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--player-color) 70%, transparent));
+}
+
+.avatar {
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: #0a0c10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 6px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+
+.handsInRing {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 600;
+  color: #838da3;
+  z-index: 2;
+}
+
+/* --- Content --- */
+
+.content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 150px;
+  background: transparent;
+  border: none;
+  padding: 6px 0;
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.identityRow {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 128px;
+}
+
+.classificationLabel {
+  font-size: 8.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--player-color);
+  white-space: nowrap;
+}
+
+.stackRow {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-top: 1px;
+}
+
+.chips {
+  font-size: 16px;
+  font-weight: 800;
+  color: #f4f6fa;
+  font-variant-numeric: tabular-nums;
+}
+
+.bbValue {
+  font-size: 13px;
+  font-weight: 800;
+  color: #4fd1ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.bbLabel {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-tertiary);
+}
+
+.noSnapshot {
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+
+.statRow {
+  display: flex;
+  align-items: flex-start;
+  margin-top: 3px;
+  animation: statPageIn 180ms ease;
+}
+
+@keyframes statPageIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.statCell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 10px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.statCell:first-child {
+  padding-left: 0;
+  border-left: none;
+}
+
+.statValue {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.statLabel {
+  font-size: 8px;
+  margin-top: 3px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.dots {
+  display: flex;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+
+.dot:hover {
+  background: color-mix(in srgb, var(--player-color) 60%, rgba(255, 255, 255, 0.16));
+}
+
+.dotActive {
+  background: var(--player-color);
+  transform: scale(1.3);
+  box-shadow: 0 0 6px 0 color-mix(in srgb, var(--player-color) 70%, transparent);
+}
+
+/* --- Velora Classic: same structure, calmer/flatter treatment --- */
+
+.velora_classic {
+  border-radius: 14px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+}
+
+.velora_classic .ringSegments {
+  background: conic-gradient(var(--player-color) 0deg 360deg);
+  filter: none;
+}
+
+.velora_classic .avatar {
+  inset: 8px;
+}
+
+/* --- Minimal: small, flat, no glow, no classification text --- */
+
+.minimal {
+  height: 52px;
+  border-radius: 26px 10px 10px 26px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  padding: 3px 12px 3px 3px;
+  gap: 8px;
+}
+
+.minimal .ring {
+  width: 44px;
+  height: 44px;
+}
+
+.minimal .avatar {
+  font-size: 11px;
+  inset: 5px;
+}
+
+.minimal .handsInRing {
+  display: none;
+}
+
+.minimal .content {
+  min-width: 100px;
+  padding: 3px 0;
+  gap: 1px;
+}
+
+.minimal .name {
+  font-size: 11px;
+  max-width: 90px;
+}
+
+.minimal .classificationLabel {
+  display: none;
+}
+
+.minimal .chips {
+  font-size: 12.5px;
+}
+
+.minimal .bbValue {
+  font-size: 10.5px;
+}
+
+.minimal .statCell {
+  padding: 0 6px;
+}
+
+.minimal .statValue {
+  font-size: 12px;
+}
+
+.minimal .statLabel {
+  font-size: 7px;
+}
+
+.minimal .dots {
+  margin-top: 3px;
+}

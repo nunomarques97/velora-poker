@@ -1,4 +1,6 @@
-use velora_poker_lib::parser::{split_hands, ActionType, HandHistoryParser, ParseError, PokerStarsParser, Street};
+use velora_poker_lib::parser::{
+    split_hands, ActionType, HandFormat, HandHistoryParser, ParseError, PokerStarsParser, Street,
+};
 
 const SHOWDOWN_HAND: &str = include_str!("fixtures/hand_3bet_showdown.txt");
 const CBET_FOLD_HAND: &str = include_str!("fixtures/hand_cbet_fold.txt");
@@ -12,6 +14,7 @@ fn parses_header_fields() {
 
     assert_eq!(hand.hand_id, "200000000001");
     assert_eq!(hand.site, "pokerstars");
+    assert_eq!(hand.format, HandFormat::Cash);
     assert_eq!(hand.table_name, "Atlas III");
     assert_eq!(hand.max_seats, 3);
     assert_eq!(hand.button_seat, 1);
@@ -99,10 +102,26 @@ fn splits_multiple_hands_from_one_file() {
 }
 
 #[test]
-fn rejects_tournament_hands_as_unsupported() {
+fn parses_tournament_headers_as_supported() {
+    // Tournament hand histories are now supported (see tournament_parser_tests.rs
+    // for full coverage); this just confirms the dispatch no longer rejects them.
     let tournament_header = "PokerStars Hand #200000000099: Tournament #123456, $5+$0.50 USD Hold'em No Limit - Level I (10/20) - 2026/08/20 21:15:03 ET";
     let parser = PokerStarsParser;
     let results = parser.parse(tournament_header);
+    assert_eq!(results.len(), 1);
+    let hand = results[0].as_ref().expect("tournament header should parse");
+    assert_eq!(hand.format, HandFormat::Tournament);
+    assert_eq!(hand.tournament_id.as_deref(), Some("123456"));
+}
+
+#[test]
+fn rejects_unrecognized_tournament_header_format() {
+    // Contains "Tournament #" (so it's dispatched to the tournament parser)
+    // but doesn't match the recognized structure at all — must fail
+    // explicitly rather than silently produce a garbage/empty hand.
+    let malformed = "PokerStars Hand #200000000098: Tournament #123456 something completely different - 2026/08/20 21:15:03 ET";
+    let parser = PokerStarsParser;
+    let results = parser.parse(malformed);
     assert_eq!(results.len(), 1);
     match &results[0] {
         Err(ParseError::UnsupportedFormat(_)) => {}

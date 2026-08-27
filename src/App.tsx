@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 import { Sidebar } from "./components/Sidebar/Sidebar";
 import { PlayerProfileDrawer } from "./components/PlayerProfileDrawer/PlayerProfileDrawer";
@@ -7,13 +7,35 @@ import { PlayersView } from "./views/PlayersView";
 import { SessionsView } from "./views/SessionsView";
 import { HudProfilesView } from "./views/HudProfilesView";
 import { SettingsView } from "./views/SettingsView";
+import { OnboardingFlow } from "./onboarding/OnboardingFlow";
 import type { Player } from "./data/types";
+import { getAppSettings, isTauriAvailable } from "./data/api";
 
 export type View = "dashboard" | "players" | "sessions" | "hud" | "settings";
 
 function App() {
   const [view, setView] = useState<View>("dashboard");
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!isTauriAvailable()) {
+      // Plain browser preview: skip onboarding, real settings aren't reachable anyway.
+      setOnboardingComplete(true);
+      return;
+    }
+    getAppSettings()
+      .then((s) => setOnboardingComplete(s.onboardingComplete))
+      .catch(() => setOnboardingComplete(true));
+  }, []);
+
+  if (onboardingComplete === null) {
+    return null;
+  }
+
+  if (!onboardingComplete) {
+    return <OnboardingFlow onComplete={() => setOnboardingComplete(true)} />;
+  }
 
   return (
     <div className="app-shell">
@@ -33,6 +55,7 @@ function App() {
         <PlayerProfileDrawer
           player={selectedPlayer}
           onClose={() => setSelectedPlayer(null)}
+          onPlayerUpdated={setSelectedPlayer}
         />
       )}
     </div>

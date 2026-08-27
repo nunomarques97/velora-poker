@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
-import type { ImportStatus } from "../data/types";
-import { DesktopAppRequiredError, getImportStatus, setHandHistoryDir } from "../data/api";
+import type { AppSettings, HudProfile, ImportStatus } from "../data/types";
+import {
+  DesktopAppRequiredError,
+  getActiveHudProfile,
+  getAppSettings,
+  getImportStatus,
+  resetOnboarding,
+  setHandHistoryDir,
+  setHudProfileMinHands,
+} from "../data/api";
 import styles from "./SettingsView.module.css";
 
 const SETTINGS_ITEMS = [
   {
     label: "Table Detection",
     description: "Automatically detect open poker tables.",
-  },
-  {
-    label: "HUD Appearance",
-    description: "Theme, opacity, and stat display density.",
   },
   {
     label: "Account",
@@ -38,7 +42,7 @@ function formatParserStatus(status: string): string {
     case "not_configured":
       return "No folder configured";
     default:
-      return status.startsWith("error:") ? status : status;
+      return status;
   }
 }
 
@@ -47,6 +51,11 @@ export function SettingsView() {
   const [pathInput, setPathInput] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const [hudProfile, setHudProfile] = useState<HudProfile | null>(null);
+  const [minHandsInput, setMinHandsInput] = useState("25");
+  const [resetting, setResetting] = useState(false);
 
   function load() {
     getImportStatus()
@@ -61,6 +70,17 @@ export function SettingsView() {
           setState({ status: "error", message: String(err) });
         }
       });
+
+    getAppSettings()
+      .then(setAppSettings)
+      .catch(() => undefined);
+
+    getActiveHudProfile()
+      .then((p) => {
+        setHudProfile(p);
+        setMinHandsInput(String(p.minHands));
+      })
+      .catch(() => undefined);
   }
 
   useEffect(() => {
@@ -80,11 +100,54 @@ export function SettingsView() {
     }
   }
 
+  async function handleMinHandsBlur() {
+    if (!hudProfile) return;
+    const parsed = Number.parseInt(minHandsInput, 10);
+    const value = Number.isFinite(parsed) && parsed >= 0 ? parsed : hudProfile.minHands;
+    setMinHandsInput(String(value));
+    const updated = await setHudProfileMinHands(hudProfile.id, value);
+    setHudProfile(updated);
+  }
+
+  async function handleResetSetup() {
+    setResetting(true);
+    try {
+      await resetOnboarding();
+      window.location.reload();
+    } finally {
+      setResetting(false);
+    }
+  }
+
   return (
     <div>
       <div className="view-header">
         <h1>Settings</h1>
         <p>Configuration will become available as features are implemented.</p>
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>Poker Room</div>
+        {appSettings ? (
+          <div className={styles.roomRow}>
+            <div>
+              <div className={styles.roomName}>
+                {appSettings.pokerRoom === "pokerstars" ? "PokerStars" : "Not configured"}
+              </div>
+              <div className={styles.roomHint}>Redo the onboarding flow to change rooms or HUD.</div>
+            </div>
+            <button
+              type="button"
+              className={styles.resetSetupButton}
+              disabled={resetting}
+              onClick={handleResetSetup}
+            >
+              {resetting ? "Resetting…" : "Redo Setup"}
+            </button>
+          </div>
+        ) : (
+          <div className={styles.stateBox}>Loading&hellip;</div>
+        )}
       </div>
 
       <div className={styles.section}>
@@ -101,7 +164,7 @@ export function SettingsView() {
             <input
               className={styles.folderInput}
               type="text"
-              placeholder="C:\Users\you\AppData\Local\PokerStars\HandHistory\ScreenName"
+              placeholder="C:\Users\you\AppData\Local\PokerStars\HandHistory"
               value={pathInput}
               onChange={(e) => setPathInput(e.target.value)}
             />
@@ -142,6 +205,43 @@ export function SettingsView() {
               </span>
             </div>
           </div>
+        )}
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>HUD</div>
+        {hudProfile ? (
+          <>
+            <div className={styles.statusGrid}>
+              <div className={styles.statusCell}>
+                <span className={styles.statusLabel}>Active Model</span>
+                <span className={styles.statusValue}>{hudProfile.name}</span>
+              </div>
+              <div className={styles.statusCell}>
+                <span className={styles.statusLabel}>Overlay</span>
+                <span className={styles.statusValue}>
+                  {appSettings?.overlayEnabled ? "Enabled" : "Disabled"}
+                </span>
+              </div>
+            </div>
+            <label className={styles.minHandsRow}>
+              Minimum hands before automatic classification
+              <input
+                className={styles.minHandsInput}
+                type="number"
+                min={0}
+                value={minHandsInput}
+                onChange={(e) => setMinHandsInput(e.target.value)}
+                onBlur={handleMinHandsBlur}
+              />
+            </label>
+            <p className={styles.hudHint}>
+              Switch HUD models, open the overlay, and manage per-player color overrides from the
+              HUD Profiles page.
+            </p>
+          </>
+        ) : (
+          <div className={styles.stateBox}>Loading&hellip;</div>
         )}
       </div>
 

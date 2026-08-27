@@ -51,20 +51,40 @@ pub fn import_file(conn: &mut Connection, path: &std::path::Path) -> Result<Impo
     import_text(conn, &text)
 }
 
+/// Imports every `.txt` file found anywhere under `dir`, including nested
+/// per-screen-name subdirectories PokerStars creates (e.g.
+/// `HandHistory\<ScreenName>\*.txt`). Never looks outside `dir`.
 pub fn import_directory(
     conn: &mut Connection,
     dir: &std::path::Path,
 ) -> Result<ImportSummary, String> {
     let mut summary = ImportSummary::default();
-    let entries = std::fs::read_dir(dir).map_err(|e| e.to_string())?;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().map_or(false, |ext| ext == "txt") {
-            let file_summary = import_file(conn, &path)?;
-            summary.merge(file_summary);
-        }
+    for path in collect_txt_files(dir) {
+        let file_summary = import_file(conn, &path)?;
+        summary.merge(file_summary);
     }
     Ok(summary)
+}
+
+/// Recursively collects `.txt` file paths under `dir`, descending into any
+/// number of nested subdirectories (e.g. one per PokerStars screen name).
+fn collect_txt_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut files = Vec::new();
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(_) => return files,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            files.extend(collect_txt_files(&path));
+        } else if path.extension().map_or(false, |ext| ext == "txt") {
+            files.push(path);
+        }
+    }
+
+    files
 }
 
 fn import_hand(conn: &mut Connection, hand: &ParsedHand) -> Result<bool, rusqlite::Error> {
@@ -84,13 +104,17 @@ fn import_hand(conn: &mut Connection, hand: &ParsedHand) -> Result<bool, rusqlit
     }
 
     tx.execute(
-        "INSERT INTO hands (site, hand_id, table_name, game_type, small_blind, big_blind, currency, max_seats, button_seat, played_at, raw_text, imported_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        "INSERT INTO hands (site, hand_id, format, table_name, game_type, tournament_id, buy_in, level, small_blind, big_blind, currency, max_seats, button_seat, played_at, raw_text, imported_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         params![
             hand.site,
             hand.hand_id,
+            hand.format.as_str(),
             hand.table_name,
             hand.game_type,
+            hand.tournament_id,
+            hand.buy_in,
+            hand.level,
             hand.small_blind,
             hand.big_blind,
             hand.currency,

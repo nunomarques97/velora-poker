@@ -1,0 +1,38 @@
+PokerStars Hand #261851769364: Tournament #4025640258, 44000+6000 Hold'em No Limit - Level VIII (100/200) - 2026/08/24 13:01:14 WET [2026/08/24 8:01:14 ET]
+Table '4025640258 10' 8-max Seat #1 is the button
+Seat 1: Opponent1 (5000 in chips)
+Seat 2: Opponent2 (5000 in chips)
+Seat 3: Opponent3 (5000 in chips)
+Seat 4: Opponent4 (5000 in chips)
+Seat 5: Opponent5 (13035 in chips)
+Seat 6: Opponent6 (5000 in chips)
+Seat 7: TourneyHero (5000 in chips)
+Opponent1: posts the ante 25
+Opponent2: posts the ante 25
+Opponent3: posts the ante 25
+Opponent4: posts the ante 25
+Opponent5: posts the ante 25
+Opponent6: posts the ante 25
+TourneyHero: posts the ante 25
+Opponent2: posts small blind 100
+Opponent3: posts big blind 200
+*** HOLE CARDS ***
+Dealt to TourneyHero [6s Qd]
+Opponent4: folds
+Opponent5: folds
+Opponent6: folds
+TourneyHero: folds
+Opponent1: folds
+Opponent2: folds
+Uncalled bet (100) returned to Opponent3
+Opponent3 collected 375 from pot
+Opponent3: doesn't show hand
+*** SUMMARY ***
+Total pot 375 | Rake 0
+Seat 1: Opponent1 (button) folded before Flop (didn't bet)
+Seat 2: Opponent2 (small blind) folded before Flop
+Seat 3: Opponent3 (big blind) collected (375)
+Seat 4: Opponent4 folded before Flop (didn't bet)
+Seat 5: Opponent5 folded before Flop (didn't bet)
+Seat 6: Opponent6 folded before Flop (didn't bet)
+Seat 7: TourneyHero folded before Flop (didn't bet)

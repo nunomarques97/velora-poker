@@ -1,6 +1,6 @@
 import type {
   DashboardSummary,
-  HudProfile,
+  MockHudProfile,
   Player,
   Session,
 } from "./types";
@@ -170,7 +170,7 @@ export const sessions: Session[] = [
   },
 ];
 
-export const hudProfiles: HudProfile[] = [
+export const hudProfiles: MockHudProfile[] = [
   {
     id: "default-6max",
     name: "Default 6-max",

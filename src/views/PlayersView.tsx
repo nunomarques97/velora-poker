@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Player } from "../data/types";
-import { DesktopAppRequiredError, getPlayers } from "../data/api";
+import { DesktopAppRequiredError, getPlayers, onHandsImported } from "../data/api";
 import styles from "./PlayersView.module.css";
 
 interface PlayersViewProps {
@@ -19,21 +19,27 @@ export function PlayersView({ onSelectPlayer }: PlayersViewProps) {
   useEffect(() => {
     let cancelled = false;
 
-    getPlayers()
-      .then((players) => {
-        if (!cancelled) setState({ status: "ready", players });
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        if (err instanceof DesktopAppRequiredError) {
-          setState({ status: "unavailable", message: err.message });
-        } else {
-          setState({ status: "error", message: String(err) });
-        }
-      });
+    function load() {
+      getPlayers()
+        .then((players) => {
+          if (!cancelled) setState({ status: "ready", players });
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          if (err instanceof DesktopAppRequiredError) {
+            setState({ status: "unavailable", message: err.message });
+          } else {
+            setState({ status: "error", message: String(err) });
+          }
+        });
+    }
+
+    load();
+    const unlisten = onHandsImported(load).catch(() => undefined);
 
     return () => {
       cancelled = true;
+      unlisten.then((fn) => fn?.());
     };
   }, []);
 
@@ -81,10 +87,27 @@ export function PlayersView({ onSelectPlayer }: PlayersViewProps) {
               onClick={() => onSelectPlayer(player)}
             >
               <span className={styles.playerCell}>
-                <span className={styles.avatar}>
+                <span
+                  className={styles.avatar}
+                  style={
+                    player.classification
+                      ? { boxShadow: `0 0 0 2px ${player.classification.color}` }
+                      : undefined
+                  }
+                >
                   {player.name.slice(0, 2).toUpperCase()}
                 </span>
-                <span className={styles.name}>{player.name}</span>
+                <span>
+                  <span className={styles.name}>{player.name}</span>
+                  {player.classification && (
+                    <span
+                      className={styles.classificationChip}
+                      style={{ color: player.classification.color }}
+                    >
+                      {player.classification.label}
+                    </span>
+                  )}
+                </span>
               </span>
               <span className={`${styles.statValue} tabular`}>
                 {player.hands.toLocaleString()}

@@ -1,9 +1,12 @@
 mod commands;
+mod overlay;
 mod settings;
 mod state;
 mod watcher;
 
+pub mod classification;
 pub mod db;
+pub mod hud;
 pub mod import;
 pub mod parser;
 pub mod stats;
@@ -16,10 +19,29 @@ use state::AppState;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::get_players,
+            commands::set_player_color_override,
+            commands::clear_player_color_override,
             commands::get_import_status,
             commands::set_hand_history_dir,
+            commands::detect_pokerstars_dirs,
+            commands::validate_hand_history_dir,
+            commands::pick_folder_dialog,
+            commands::get_app_settings,
+            commands::complete_onboarding,
+            commands::reset_onboarding,
+            commands::get_hud_profiles,
+            commands::get_active_hud_profile,
+            commands::set_active_hud_profile,
+            commands::set_hud_profile_min_hands,
+            commands::open_overlay,
+            commands::close_overlay,
+            commands::is_overlay_open,
+            commands::set_overlay_click_through,
+            commands::save_hud_position,
+            commands::get_hud_positions,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -77,6 +99,15 @@ pub fn run() {
                     }
                 }
             }
+
+            // The overlay is intentionally NOT auto-reopened here. Creating a
+            // second WebviewWindow synchronously inside `setup()` — before
+            // the main window's own WebView2 environment has finished
+            // initializing — reliably crashed the whole process on Windows
+            // (observed as `velora-poker.exe` exiting with 0xcfffffff a few
+            // seconds after launch). The overlay is only ever created by an
+            // explicit user action (the "Open Overlay" command), which is
+            // stable; see `overlay::open`.
 
             Ok(())
         })

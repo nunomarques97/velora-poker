@@ -61,9 +61,19 @@
 }
 
 .name {
+  display: block;
   font-size: 13.5px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.classificationChip {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-top: 1px;
 }
 
 .statValue {

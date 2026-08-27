@@ -1,0 +1,22 @@
+PokerStars Hand #261851999001: Zoom Tournament #4025999001, 10+1 Hold'em No Limit - Level I (10/20) - 2026/08/24 14:00:00 WET [2026/08/24 9:00:00 ET]
+Table '4025999001 1' 6-max Seat #1 is the button
+Seat 1: alpha99 (1500 in chips)
+Seat 2: beta77 (1500 in chips)
+Seat 3: TourneyHero (1500 in chips)
+alpha99: posts the ante 2
+beta77: posts the ante 2
+TourneyHero: posts the ante 2
+beta77: posts small blind 10
+TourneyHero: posts big blind 20
+*** HOLE CARDS ***
+Dealt to TourneyHero [2c 7d]
+alpha99: folds
+beta77: folds
+Uncalled bet (10) returned to TourneyHero
+TourneyHero collected 46 from pot
+TourneyHero: doesn't show hand
+*** SUMMARY ***
+Total pot 46 | Rake 0
+Seat 1: alpha99 (button) folded before Flop (didn't bet)
+Seat 2: beta77 (small blind) folded before Flop
+Seat 3: TourneyHero (big blind) collected (46)

@@ -1,0 +1,52 @@
+:root {
+  --bg-base: #0a0c10;
+  --bg-surface: #121620;
+  --bg-surface-alt: #161b26;
+  --bg-elevated: #1b2130;
+  --bg-hover: #1f2635;
+
+  --border-subtle: #232a38;
+  --border-strong: #323b4d;
+
+  --text-primary: #e8ebf2;
+  --text-secondary: #9aa4b8;
+  --text-tertiary: #66708a;
+
+  --accent: #6f8fff;
+  --accent-soft: rgba(111, 143, 255, 0.12);
+  --accent-strong: #89a4ff;
+
+  --positive: #57b88b;
+  --positive-soft: rgba(87, 184, 139, 0.12);
+  --negative: #d97b62;
+  --negative-soft: rgba(217, 123, 98, 0.12);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  --shadow-elevated: 0 12px 32px rgba(0, 0, 0, 0.4);
+
+  font-family:
+    "Segoe UI Variable",
+    "Segoe UI",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Inter",
+    Roboto,
+    sans-serif;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
