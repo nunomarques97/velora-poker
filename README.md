@@ -1,51 +1,14 @@
 # Velora Poker
 
-## Purpose
+Velora Poker is a Windows-first desktop poker HUD (Heads-Up Display), built with Tauri 2 (Rust) + React 19/TypeScript. It watches a PokerStars hand-history folder, parses hands (cash, tournament, Zoom) into a local SQLite database, computes per-opponent statistics (VPIP, PFR, 3-bet, fold-to-3-bet, C-bet, fold-to-C-bet, AF, WTSD, W$SD), classifies opponents into archetypes (TAG / LAG / Maniac / Loose-Passive / Recreational, with manual override), and displays everything on a real always-on-top transparent overlay with draggable per-player HUD cards.
 
-Velora Poker is a commercial, Windows-first poker HUD (Heads-Up Display)
-application. It will provide players with a real-time table overlay showing
-opponent statistics derived from hand history, along with a minimal in-game
-HUD, a detailed player-profile overlay, an underlying statistics engine, user
-accounts, subscription billing, and cloud synchronization of data across
-devices.
+Everything runs locally. Accounts, billing and cloud sync are part of the long-term vision but are intentionally out of scope for the current MVP.
 
-This repository currently contains **only the project bootstrap** — no
-application functionality has been implemented yet.
+## Current status
 
-## Current Status
 
-**Pre-development / Architecture & Product Validation**
+## Documentation
 
-The application shell (Tauri 2 + React + TypeScript) has been scaffolded.
-No poker HUD functionality exists in this repository yet. The project is
-not ready for contributions or use.
-
-## Development Principles
-
-- Make deliberate, documented architecture decisions before writing feature
-  code — avoid technology choices made by default or by accident.
-- Keep the dependency footprint minimal; add a dependency only when it earns
-  its place.
-- Favor a clean, professional project structure appropriate for a
-  commercial desktop application from day one.
-- Treat correctness and data handling (hand histories, statistics, user
-  accounts) as first-class concerns given the commercial nature of the
-  product.
-- Document decisions as they are made, rather than after the fact.
-
-## Architecture
-
-**Technical foundation (chosen):**
-
-- [Tauri 2](https://tauri.app/) — Rust-based desktop application shell
-- [React 19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/) — frontend UI
-- [Vite](https://vitejs.dev/) — frontend build tool
-- Windows-first target platform
-
-This is only the application shell. No overlay rendering, table detection,
-hand history parsing, statistics engine, authentication, backend, or
-payments have been implemented. Those remain open architecture decisions to
-be made and documented here as the project progresses.
 
 ## Setup
 
@@ -53,9 +16,7 @@ be made and documented here as the project progresses.
 
 - [Node.js](https://nodejs.org/) 20+ and npm
 - [Rust](https://www.rust-lang.org/tools/install) (stable toolchain, MSVC)
-- On Windows: the [Tauri prerequisites](https://tauri.app/start/prerequisites/)
-  — Microsoft C++ Build Tools (Desktop development with C++ workload) and
-  WebView2 Runtime (preinstalled on most modern Windows systems)
+- On Windows: the [Tauri prerequisites](https://tauri.app/start/prerequisites/) — Microsoft C++ Build Tools (Desktop development with C++ workload) and WebView2 Runtime (preinstalled on most modern Windows systems)
 
 **Install dependencies:**
 
@@ -75,21 +36,27 @@ npm run tauri dev
 npm run tauri build
 ```
 
-**Frontend-only commands** (useful for quick UI iteration without the Rust
-shell):
+**Frontend-only commands** (quick UI iteration without the Rust shell):
 
 ```sh
-npm run dev       # start the Vite dev server
+npm run dev        # start the Vite dev server
 npm run build      # type-check and build the frontend
 npm run preview    # preview the built frontend
 ```
 
-## Project Structure
+**Rust tests:**
+
+```sh
+cd src-tauri && cargo test
+```
+
+## Project structure
 
 ```
 velora-poker/
-├── src/            # React + TypeScript frontend
-├── src-tauri/      # Rust backend / Tauri application shell
-├── tests/          # test suites (placeholder)
-└── assets/         # non-code project assets (placeholder)
+├── src/            # React + TypeScript frontend (views, hud/, overlay/, onboarding/)
+├── src-tauri/      # Rust backend: parser, import, watcher, db, stats, classification, hud, overlay
+│   └── tests/      # Rust integration tests + fixtures
+├── overlay.html    # entry point for the transparent overlay window
+└── assets/         # non-code project assets
 ```
