@@ -15,6 +15,22 @@
         "title": "Velora Poker",
         "width": 800,
         "height": 600
+      },
+      {
+        "label": "overlay",
+        "url": "overlay.html",
+        "title": "Velora Overlay",
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "resizable": true,
+        "width": 1400,
+        "height": 900,
+        "x": 80,
+        "y": 80,
+        "visible": false
       }
     ],
     "security": {

@@ -101,14 +101,19 @@ pub fn run() {
                 }
             }
 
-            // The overlay is intentionally NOT auto-reopened here. Creating a
-            // second WebviewWindow synchronously inside `setup()` — before
-            // the main window's own WebView2 environment has finished
-            // initializing — reliably crashed the whole process on Windows
-            // (observed as `velora-poker.exe` exiting with 0xcfffffff a few
-            // seconds after launch). The overlay is only ever created by an
-            // explicit user action (the "Open Overlay" command), which is
-            // stable; see `overlay::open`.
+            // the overlay window is now declared
+            // statically in `tauri.conf.json` (`visible: false`), so Tauri
+            // creates it as part of its own normal batch window-bootstrap —
+            // the same mechanism the main window has always used without
+            // issue — rather than via a manual `WebviewWindowBuilder::build()`
+            // call from inside this closure. That manual, out-of-band
+            // approach (building a second window synchronously in `setup()`,
+            // before the main window's own WebView2 environment had finished
+            // initializing) is what reliably crashed the whole process on
+            // Windows historically (`velora-poker.exe` exiting with
+            // 0xcfffffff a few seconds after launch) — this static
+            // declaration does not do that. It stays hidden until the user
+            // clicks "Open Overlay"; see `overlay::open`.
 
             Ok(())
         })
