@@ -135,6 +135,32 @@ pub fn clear_player_color_override(
 }
 
 // ---------------------------------------------------------------------
+// Dashboard
+// ---------------------------------------------------------------------
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DashboardSummaryPayload {
+    pub hands_played: i64,
+    pub players_tracked: i64,
+    pub current_hud_profile: String,
+}
+
+#[tauri::command]
+pub fn get_dashboard_summary(state: State<AppState>) -> Result<DashboardSummaryPayload, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let hands_played = db::count_hands(&conn).map_err(|e| e.to_string())?;
+    let players_tracked = db::list_players(&conn).map_err(|e| e.to_string())?.len() as i64;
+    let current_hud_profile = hud::get_active_profile(&conn).map_err(|e| e.to_string())?.name;
+
+    Ok(DashboardSummaryPayload {
+        hands_played,
+        players_tracked,
+        current_hud_profile,
+    })
+}
+
+// ---------------------------------------------------------------------
 // Hand history import status / configuration
 // ---------------------------------------------------------------------
 

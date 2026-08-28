@@ -24,6 +24,7 @@ pub fn run() {
             commands::get_players,
             commands::set_player_color_override,
             commands::clear_player_color_override,
+            commands::get_dashboard_summary,
             commands::get_import_status,
             commands::set_hand_history_dir,
             commands::detect_pokerstars_dirs,

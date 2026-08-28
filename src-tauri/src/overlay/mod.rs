@@ -14,6 +14,22 @@ pub const OVERLAY_LABEL: &str = "overlay";
 /// than hang the calling command — and by extension the frontend button —
 /// forever, this surfaces a clear error after a few seconds so the app stays
 /// usable even if the overlay itself can't come up in that environment.
+///
+/// KNOWN UNRESOLVED BUG even when this returns Ok
+/// and the window materializes well within the timeout, its content does
+/// not visibly paint — confirmed with `transparent`/`decorations`/
+/// `always_on_top` toggled individually and in combination, and with a
+/// forced post-creation resize (below), none of which fixed it. With
+/// `decorations(false)` (the shipped config) DWM appears to substitute a
+/// frozen one-time snapshot of whatever was on screen at creation time
+/// (moving other windows afterward does not change what the overlay shows).
+/// With `decorations(true)` the window is verifiably live (real title bar,
+/// not hung) but the page itself still renders as plain white — so the
+/// root cause is not the window-chrome flags, it is that `overlay.html`'s
+/// own content never successfully paints in this second webview, for a
+/// reason not yet identified (devtools inspection was inconclusive — its
+/// own UI rendered unreliably in this same window). See the notes
+/// before attempting another fix here.
 pub fn open(app_handle: &AppHandle) -> Result<(), String> {
     if let Some(existing) = app_handle.get_webview_window(OVERLAY_LABEL) {
         // Reuse the existing overlay instead of creating a second instance;
@@ -42,7 +58,24 @@ pub fn open(app_handle: &AppHandle) -> Result<(), String> {
             .position(80.0, 80.0)
             .visible(true)
             .build()
-            .map(|_| ())
+            .map(|window| {
+                // WebView2 on Windows sometimes never establishes render
+                // bounds for a freshly-created webview until the host window
+                // receives a resize event, leaving it blank/"(Not
+                // Responding)" indefinitely. Forcing a trivial resize right
+                // after creation is the standard workaround for this exact
+                // symptom (tauri-apps/tauri#8632, #12975).
+                if let Ok(size) = window.inner_size() {
+                    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+                        width: size.width + 1,
+                        height: size.height,
+                    }));
+                    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize {
+                        width: size.width,
+                        height: size.height,
+                    }));
+                }
+            })
             .map_err(|e| e.to_string());
             let _ = tx.send(result);
         })

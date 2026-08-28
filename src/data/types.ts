@@ -44,7 +44,6 @@ export interface Player {
 }
 
 export interface DashboardSummary {
-  sessionsToday: number;
   handsPlayed: number;
   playersTracked: number;
   currentHudProfile: string;

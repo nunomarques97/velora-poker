@@ -1,9 +1,4 @@
-import type {
-  DashboardSummary,
-  MockHudProfile,
-  Player,
-  Session,
-} from "./types";
+import type { MockHudProfile, Player, Session } from "./types";
 
 export const players: Player[] = [
   {
@@ -109,13 +104,6 @@ export const players: Player[] = [
     note: "Nitty and disciplined. Waits for strong spots before committing chips.",
   },
 ];
-
-export const dashboardSummary: DashboardSummary = {
-  sessionsToday: 3,
-  handsPlayed: 4812,
-  playersTracked: 187,
-  currentHudProfile: "Default 6-max",
-};
 
 export const sessions: Session[] = [
   {

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   AppSettings,
+  DashboardSummary,
   DetectedDir,
   DirValidation,
   HudPosition,
@@ -50,6 +51,15 @@ export async function setPlayerColorOverride(
 export async function clearPlayerColorOverride(playerId: string): Promise<Player> {
   assertTauriAvailable();
   return invoke<Player>("clear_player_color_override", { playerId });
+}
+
+// ---------------------------------------------------------------------
+// Dashboard
+// ---------------------------------------------------------------------
+
+export async function getDashboardSummary(): Promise<DashboardSummary> {
+  assertTauriAvailable();
+  return invoke<DashboardSummary>("get_dashboard_summary");
 }
 
 // ---------------------------------------------------------------------
