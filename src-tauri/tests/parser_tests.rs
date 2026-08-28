@@ -128,3 +128,84 @@ fn rejects_unrecognized_tournament_header_format() {
         other => panic!("expected UnsupportedFormat, got {other:?}"),
     }
 }
+
+/// A financially self-consistent cash hand (net results across all three
+/// players sum to exactly `-rake`) used to verify `net_result` math directly,
+/// independent of the other fixtures above (which were authored for
+/// action/street parsing and are not rake-accurate).
+const NET_RESULT_CASH_HAND: &str = r#"PokerStars Hand #300000000001: Hold'em No Limit ($0.25/$0.50 USD) - 2026/08/25 21:00:00 ET
+Table 'SessionTable' 3-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Villain ($50.00 in chips)
+Seat 3: Robot ($50.00 in chips)
+Villain: posts small blind $0.25
+Robot: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Ah Ad]
+Hero: raises $1.50 to $2
+Villain: folds
+Robot: folds
+Uncalled bet ($1.50) returned to Hero
+Hero collected $1.25 from pot
+*** SUMMARY ***
+Total pot $1.25 | Rake $0
+Seat 1: Hero (button) collected ($1.25)
+Seat 2: Villain (small blind) folded before Flop
+Seat 3: Robot (big blind) folded before Flop
+"#;
+
+#[test]
+fn computes_net_result_for_cash_hands_from_contributed_and_collected_amounts() {
+    let parser = PokerStarsParser;
+    let hand = parser.parse(NET_RESULT_CASH_HAND)[0]
+        .as_ref()
+        .expect("hand should parse")
+        .clone();
+
+    let hero = hand.results.get("Hero").expect("hero result");
+    let villain = hand.results.get("Villain").expect("villain result");
+    let robot = hand.results.get("Robot").expect("robot result");
+
+    assert_eq!(hero.net_result, Some(0.75));
+    assert_eq!(villain.net_result, Some(-0.25));
+    assert_eq!(robot.net_result, Some(-0.50));
+
+    let total: f64 = [hero, villain, robot]
+        .iter()
+        .map(|r| r.net_result.unwrap())
+        .sum();
+    assert!((total - 0.0).abs() < 1e-9, "zero-rake hand must net to zero across all players, got {total}");
+}
+
+#[test]
+fn never_computes_net_result_for_tournament_hands() {
+    let tournament_hand = r#"PokerStars Hand #300000000099: Tournament #900000001, $10+$1 Hold'em No Limit - Level I (10/20) - 2026/08/25 22:00:00 ET
+Table '900000001 1' 6-max Seat #1 is the button
+Seat 1: Hero (1500 in chips)
+Seat 2: Villain (1500 in chips)
+Villain: posts small blind 10
+Hero: posts big blind 20
+*** HOLE CARDS ***
+Dealt to Hero [Ah Ad]
+Villain: folds
+Uncalled bet (0) returned to Hero
+Hero collected 20 from pot
+*** SUMMARY ***
+Total pot 20 | Rake 0
+Seat 1: Hero (big blind) collected (20)
+Seat 2: Villain (small blind) folded before Flop
+"#;
+
+    let parser = PokerStarsParser;
+    let hand = parser.parse(tournament_hand)[0]
+        .as_ref()
+        .expect("hand should parse")
+        .clone();
+
+    for (name, result) in &hand.results {
+        assert_eq!(
+            result.net_result, None,
+            "{name} must have no net_result on a tournament hand, even though they won chips"
+        );
+    }
+}

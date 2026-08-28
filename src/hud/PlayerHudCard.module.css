@@ -3,8 +3,9 @@
   position: relative;
   display: flex;
   align-items: center;
-  height: 76px;
+  min-height: 76px;
   width: max-content;
+  max-width: 100%;
   background: #12151c;
   border: 1.5px solid var(--player-color);
   border-radius: 38px 14px 14px 38px;
@@ -15,6 +16,7 @@
   padding: 4px 16px 4px 4px;
   gap: 12px;
   user-select: none;
+  overflow: hidden;
   transition: box-shadow 160ms ease;
 }
 
@@ -65,6 +67,12 @@
   bottom: 6px;
   left: 50%;
   transform: translateX(-50%);
+  width: 42px;
+  max-width: calc(100% - 10px);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: center;
   font-size: 9px;
   font-weight: 600;
   color: #838da3;
@@ -102,6 +110,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 128px;
+  min-width: 0;
 }
 
 .classificationLabel {
@@ -191,16 +200,22 @@
 }
 
 .dots {
+  position: absolute;
+  left: -2px;
+  bottom: -2px;
   display: flex;
-  gap: 4px;
-  margin-top: 5px;
+  gap: 3px;
+  padding: 2px 3px;
+  border-radius: 6px;
+  background: rgba(8, 10, 14, 0.55);
+  z-index: 3;
 }
 
 .dot {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.28);
   border: none;
   padding: 0;
   cursor: pointer;
@@ -208,13 +223,13 @@
 }
 
 .dot:hover {
-  background: color-mix(in srgb, var(--player-color) 60%, rgba(255, 255, 255, 0.16));
+  background: color-mix(in srgb, var(--player-color) 60%, rgba(255, 255, 255, 0.28));
 }
 
 .dotActive {
   background: var(--player-color);
   transform: scale(1.3);
-  box-shadow: 0 0 6px 0 color-mix(in srgb, var(--player-color) 70%, transparent);
+  box-shadow: 0 0 5px 0 color-mix(in srgb, var(--player-color) 70%, transparent);
 }
 
 /* --- Velora Classic: same structure, calmer/flatter treatment --- */
@@ -236,7 +251,7 @@
 /* --- Minimal: small, flat, no glow, no classification text --- */
 
 .minimal {
-  height: 52px;
+  min-height: 52px;
   border-radius: 26px 10px 10px 26px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   padding: 3px 12px 3px 3px;
@@ -290,8 +305,4 @@
 
 .minimal .statLabel {
   font-size: 7px;
-}
-
-.minimal .dots {
-  margin-top: 3px;
 }

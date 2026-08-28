@@ -67,6 +67,13 @@ pub struct ParsedSeat {
 pub struct ParsedPlayerResult {
     pub went_to_showdown: bool,
     pub won_at_showdown: bool,
+    /// Net money result for this player in this hand (amount collected from
+    /// the pot plus any uncalled bet returned, minus everything they put in).
+    /// Only ever populated for cash-game hands — tournament hand-history text
+    /// has no real-money figures to compute this from (chips aren't money),
+    /// so this stays `None` for every tournament hand rather than reporting a
+    /// fabricated or chip-denominated value.
+    pub net_result: Option<f64>,
 }
 
 /// Cash-game stakes and tournament levels have different semantics (real/play

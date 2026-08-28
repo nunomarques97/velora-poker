@@ -1,4 +1,4 @@
-import type { MockHudProfile, Player, Session } from "./types";
+import type { MockHudProfile, Player } from "./types";
 
 export const players: Player[] = [
   {
@@ -102,59 +102,6 @@ export const players: Player[] = [
       wsd: 57.8,
     },
     note: "Nitty and disciplined. Waits for strong spots before committing chips.",
-  },
-];
-
-export const sessions: Session[] = [
-  {
-    id: "s1",
-    date: "2026-08-24",
-    stakes: "NL50",
-    tables: 4,
-    hands: 1862,
-    duration: "2h 14m",
-    result: "+$142.30",
-    positive: true,
-  },
-  {
-    id: "s2",
-    date: "2026-08-23",
-    stakes: "NL50",
-    tables: 4,
-    hands: 2140,
-    duration: "2h 45m",
-    result: "-$38.60",
-    positive: false,
-  },
-  {
-    id: "s3",
-    date: "2026-08-23",
-    stakes: "NL25",
-    tables: 3,
-    hands: 1305,
-    duration: "1h 32m",
-    result: "+$61.15",
-    positive: true,
-  },
-  {
-    id: "s4",
-    date: "2026-08-22",
-    stakes: "NL50",
-    tables: 4,
-    hands: 1988,
-    duration: "2h 08m",
-    result: "+$204.80",
-    positive: true,
-  },
-  {
-    id: "s5",
-    date: "2026-08-21",
-    stakes: "NL50",
-    tables: 4,
-    hands: 1721,
-    duration: "1h 57m",
-    result: "-$92.40",
-    positive: false,
   },
 ];
 

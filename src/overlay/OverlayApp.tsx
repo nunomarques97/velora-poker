@@ -3,8 +3,8 @@ import type { HudProfile, Player } from "../data/types";
 import {
   closeOverlay,
   getActiveHudProfile,
+  getActiveTablePlayers,
   getHudPositions,
-  getPlayers,
   onHandsImported,
   saveHudPosition,
   setOverlayClickThrough,
@@ -32,7 +32,7 @@ export function OverlayApp() {
   const liveDragPosition = useRef<{ x: number; y: number } | null>(null);
 
   const refresh = useCallback(() => {
-    Promise.all([getPlayers(), getActiveHudProfile(), getHudPositions()])
+    Promise.all([getActiveTablePlayers(), getActiveHudProfile(), getHudPositions()])
       .then(([allPlayers, activeProfile, savedPositions]) => {
         setPlayers(allPlayers);
         setProfile(activeProfile);

@@ -7,7 +7,7 @@
 
 .headerRow {
   display: grid;
-  grid-template-columns: 1fr 0.8fr 0.6fr 0.8fr 0.9fr 0.9fr;
+  grid-template-columns: 1fr 1fr 1fr 0.6fr 0.8fr 0.8fr 0.9fr;
   padding: 12px 20px;
   font-size: 11px;
   text-transform: uppercase;
@@ -18,7 +18,7 @@
 
 .row {
   display: grid;
-  grid-template-columns: 1fr 0.8fr 0.6fr 0.8fr 0.9fr 0.9fr;
+  grid-template-columns: 1fr 1fr 1fr 0.6fr 0.8fr 0.8fr 0.9fr;
   align-items: center;
   padding: 14px 20px;
   border-bottom: 1px solid var(--border-subtle);

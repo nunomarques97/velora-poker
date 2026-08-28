@@ -30,6 +30,22 @@ export function PlayerHudCard({ player, profile, onOpenDetail, dragHandleProps }
           <div className={styles.ringSegments} />
           <div className={styles.avatar}>{initials}</div>
           <span className={styles.handsInRing}>{player.hands}</span>
+          {pages.length > 1 && (
+            <div className={styles.dots} onMouseDown={(e) => e.stopPropagation()}>
+              {pages.map((page, idx) => (
+                <button
+                  key={page.id}
+                  type="button"
+                  className={`${styles.dot} ${idx === pageIndex ? styles.dotActive : ""}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPageIndex(idx);
+                  }}
+                  aria-label={`Show ${page.label} stats`}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -72,23 +88,6 @@ export function PlayerHudCard({ player, profile, onOpenDetail, dragHandleProps }
                 </span>
                 <span className={styles.statLabel}>{STAT_LABELS[key]}</span>
               </div>
-            ))}
-          </div>
-        )}
-
-        {pages.length > 1 && (
-          <div className={styles.dots}>
-            {pages.map((page, idx) => (
-              <button
-                key={page.id}
-                type="button"
-                className={`${styles.dot} ${idx === pageIndex ? styles.dotActive : ""}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPageIndex(idx);
-                }}
-                aria-label={`Show ${page.label} stats`}
-              />
             ))}
           </div>
         )}

@@ -9,6 +9,7 @@ import type {
   HudProfile,
   ImportStatus,
   Player,
+  Session,
 } from "./types";
 
 export class DesktopAppRequiredError extends Error {
@@ -39,6 +40,12 @@ export async function getPlayers(): Promise<Player[]> {
   return invoke<Player[]>("get_players");
 }
 
+/** Players seated in the most recently imported hand (the active table) — what the live overlay shows. */
+export async function getActiveTablePlayers(): Promise<Player[]> {
+  assertTauriAvailable();
+  return invoke<Player[]>("get_active_table_players");
+}
+
 export async function setPlayerColorOverride(
   playerId: string,
   color: string,
@@ -60,6 +67,16 @@ export async function clearPlayerColorOverride(playerId: string): Promise<Player
 export async function getDashboardSummary(): Promise<DashboardSummary> {
   assertTauriAvailable();
   return invoke<DashboardSummary>("get_dashboard_summary");
+}
+
+// ---------------------------------------------------------------------
+// Sessions
+// ---------------------------------------------------------------------
+
+/** Every tracked session, most recent first. */
+export async function getSessions(): Promise<Session[]> {
+  assertTauriAvailable();
+  return invoke<Session[]>("get_sessions");
 }
 
 // ---------------------------------------------------------------------

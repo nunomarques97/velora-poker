@@ -6,6 +6,7 @@ use crate::db;
 use crate::hud::{self, HudProfile};
 use crate::import;
 use crate::overlay;
+use crate::sessions::{self, SessionSummary, SessionsTodaySummary};
 use crate::settings::{self, DetectedDir, DirValidation};
 use crate::state::AppState;
 use crate::stats::{self, PlayerStats};
@@ -85,6 +86,23 @@ pub fn get_players(state: State<AppState>) -> Result<Vec<PlayerPayload>, String>
     Ok(players)
 }
 
+/// Players seated in the most recently imported hand — what the live
+/// overlay should render, as opposed to `get_players`' full all-time roster
+/// (used by the Players list and HUD profile preview/management views).
+#[tauri::command]
+pub fn get_active_table_players(state: State<AppState>) -> Result<Vec<PlayerPayload>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let rows = db::list_active_table_players(&conn).map_err(|e| e.to_string())?;
+    let rules = classification::list_rules(&conn).map_err(|e| e.to_string())?;
+
+    let mut players = Vec::with_capacity(rows.len());
+    for row in rows {
+        players.push(build_player_payload(&conn, &rules, row.id, row.name, row.hands)?);
+    }
+
+    Ok(players)
+}
+
 #[tauri::command]
 pub fn set_player_color_override(
     state: State<AppState>,
@@ -144,6 +162,9 @@ pub struct DashboardSummaryPayload {
     pub hands_played: i64,
     pub players_tracked: i64,
     pub current_hud_profile: String,
+    /// `None` when no session has been played today — the Dashboard hides
+    /// the "Sessions Today" card in that case rather than showing zeros.
+    pub sessions_today: Option<SessionsTodaySummary>,
 }
 
 #[tauri::command]
@@ -152,12 +173,25 @@ pub fn get_dashboard_summary(state: State<AppState>) -> Result<DashboardSummaryP
     let hands_played = db::count_hands(&conn).map_err(|e| e.to_string())?;
     let players_tracked = db::list_players(&conn).map_err(|e| e.to_string())?.len() as i64;
     let current_hud_profile = hud::get_active_profile(&conn).map_err(|e| e.to_string())?.name;
+    let sessions_today = sessions::sessions_today(&conn, chrono::Local::now().date_naive())
+        .map_err(|e| e.to_string())?;
 
     Ok(DashboardSummaryPayload {
         hands_played,
         players_tracked,
         current_hud_profile,
+        sessions_today,
     })
+}
+
+// ---------------------------------------------------------------------
+// Sessions
+// ---------------------------------------------------------------------
+
+#[tauri::command]
+pub fn get_sessions(state: State<AppState>) -> Result<Vec<SessionSummary>, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    sessions::list_sessions(&conn).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------

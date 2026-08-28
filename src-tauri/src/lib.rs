@@ -9,9 +9,10 @@ pub mod db;
 pub mod hud;
 pub mod import;
 pub mod parser;
+pub mod sessions;
 pub mod stats;
 
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 use state::AppState;
 
@@ -22,6 +23,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::get_players,
+            commands::get_active_table_players,
             commands::set_player_color_override,
             commands::clear_player_color_override,
             commands::get_dashboard_summary,
@@ -43,6 +45,7 @@ pub fn run() {
             commands::set_overlay_click_through,
             commands::save_hud_position,
             commands::get_hud_positions,
+            commands::get_sessions,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -65,39 +68,61 @@ pub fn run() {
             if let Some(dir) = configured_dir {
                 let dir_path = std::path::PathBuf::from(&dir);
                 if dir_path.is_dir() {
-                    let state = app_handle.state::<AppState>();
+                    // this backlog import used to run
+                    // right here, synchronously, on the same thread that's
+                    // still inside `setup()` — for a hand-history folder
+                    // built up over real play that can take the better part
+                    // of a minute, during which the whole app is unresponsive
+                    // (the main thread never gets back to pumping window
+                    // messages) and every IPC command blocks on `state.conn`'s
+                    // mutex, held for the entire scan. Moved to a background
+                    // thread so window creation and the event loop are never
+                    // blocked. The frontend's `players` state starts empty
+                    // and renders no cards until this thread's
+                    // "hands-imported" emit lands — never a stale or
+                    // partially-computed stat value in the meantime.
+                    let thread_handle = app_handle.clone();
+                    std::thread::spawn(move || {
+                        let state = thread_handle.state::<AppState>();
 
-                    {
-                        let mut conn = state.conn.lock().expect("db lock poisoned");
-                        match import::import_directory(&mut conn, &dir_path) {
-                            Ok(summary) if summary.hands_imported > 0 => {
-                                drop(conn);
-                                state
-                                    .import
-                                    .lock()
-                                    .expect("import state lock poisoned")
-                                    .last_import_at = Some(db::now_iso());
+                        let summary = {
+                            let mut conn = match state.conn.lock() {
+                                Ok(conn) => conn,
+                                Err(_) => return,
+                            };
+                            match import::import_directory(&mut conn, &dir_path) {
+                                Ok(summary) => summary,
+                                Err(err) => {
+                                    eprintln!("initial hand history import failed: {err}");
+                                    if let Ok(mut import_state) = state.import.lock() {
+                                        import_state.parser_status = format!("error: {err}");
+                                    }
+                                    return;
+                                }
                             }
-                            Ok(_) => {}
+                        };
+
+                        if summary.hands_imported > 0 {
+                            if let Ok(mut import_state) = state.import.lock() {
+                                import_state.last_import_at = Some(db::now_iso());
+                            }
+                            let _ = thread_handle.emit("hands-imported", summary.hands_imported);
+                        }
+
+                        match watcher::start_watching(thread_handle.clone(), dir_path) {
+                            Ok(w) => {
+                                if let Ok(mut watcher_slot) = state.watcher.lock() {
+                                    *watcher_slot = Some(w);
+                                }
+                            }
                             Err(err) => {
-                                eprintln!("initial hand history import failed: {err}");
+                                eprintln!("failed to start hand history watcher: {err}");
+                                if let Ok(mut import_state) = state.import.lock() {
+                                    import_state.parser_status = format!("error: {err}");
+                                }
                             }
                         }
-                    }
-
-                    match watcher::start_watching(app_handle.clone(), dir_path) {
-                        Ok(w) => {
-                            *state.watcher.lock().expect("watcher lock poisoned") = Some(w);
-                        }
-                        Err(err) => {
-                            eprintln!("failed to start hand history watcher: {err}");
-                            state
-                                .import
-                                .lock()
-                                .expect("import state lock poisoned")
-                                .parser_status = format!("error: {err}");
-                        }
-                    }
+                    });
                 }
             }
 

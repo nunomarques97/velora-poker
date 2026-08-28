@@ -124,6 +124,7 @@ fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         CREATE INDEX IF NOT EXISTS idx_player_hands_hand ON player_hands(hand_id);
         CREATE INDEX IF NOT EXISTS idx_actions_hand ON actions(hand_id);
         CREATE INDEX IF NOT EXISTS idx_actions_player ON actions(player_id);
+        CREATE INDEX IF NOT EXISTS idx_hands_played_at ON hands(played_at DESC, id DESC);
         "#,
     )
 }
@@ -212,6 +213,41 @@ pub fn list_players(conn: &Connection) -> rusqlite::Result<Vec<PlayerRow>> {
         "SELECT p.id, p.name, COUNT(ph.id) as hands
          FROM players p
          JOIN player_hands ph ON ph.player_id = p.id
+         GROUP BY p.id
+         ORDER BY hands DESC, p.name ASC",
+    )?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(PlayerRow {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                hands: row.get(2)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// Players seated in the most recently *played* hand — i.e. the active
+/// table, not the whole all-time roster. Ordered by `played_at` (falling
+/// back to `id` only to break exact ties), not insertion order: a cold-start
+/// backlog import walks the filesystem in OS directory order, not
+/// chronological order, so the highest-`id` hand right after that import is
+/// not reliably the most recently played one (see — this is what
+/// let stale/mismatched rosters through briefly on cold start). The subquery
+/// resolves the latest hand via `idx_hands_played_at` and only then joins
+/// full hand counts for that handful of players, so this stays cheap even
+/// with a large all-time `players`/`player_hands` table (import history
+/// unrelated to the current table never enters the scan).
+pub fn list_active_table_players(conn: &Connection) -> rusqlite::Result<Vec<PlayerRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT p.id, p.name, COUNT(ph.id) as hands
+         FROM players p
+         JOIN player_hands ph ON ph.player_id = p.id
+         WHERE p.id IN (
+             SELECT player_id FROM player_hands
+             WHERE hand_id = (SELECT id FROM hands ORDER BY played_at DESC, id DESC LIMIT 1)
+         )
          GROUP BY p.id
          ORDER BY hands DESC, p.name ASC",
     )?;

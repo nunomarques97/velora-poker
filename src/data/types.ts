@@ -43,21 +43,38 @@ export interface Player {
   snapshot?: PlayerSnapshot | null;
 }
 
+export interface SessionsTodaySummary {
+  sessionCount: number;
+  totalDurationSecs: number;
+  totalHands: number;
+  /** `null` unless at least one cash session played today has a known net result. */
+  netResultCash: number | null;
+  currency: string | null;
+}
+
 export interface DashboardSummary {
   handsPlayed: number;
   playersTracked: number;
   currentHudProfile: string;
+  /** `null` when no session has been played today. */
+  sessionsToday: SessionsTodaySummary | null;
 }
 
 export interface Session {
-  id: string;
-  date: string;
-  stakes: string;
-  tables: number;
-  hands: number;
-  duration: string;
-  result: string;
-  positive: boolean;
+  startAt: string;
+  endAt: string;
+  durationSecs: number;
+  handCount: number;
+  tableCount: number;
+  hasCash: boolean;
+  hasTournament: boolean;
+  /**
+   * Net cash result for this session, or `null` when unknown — always
+   * `null` for a tournament-only session, since PokerStars hand-history text
+   * has no buy-in/finish/payout to compute one from.
+   */
+  netResultCash: number | null;
+  currency: string | null;
 }
 
 export interface MockHudProfile {

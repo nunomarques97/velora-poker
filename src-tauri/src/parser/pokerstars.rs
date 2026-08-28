@@ -36,24 +36,36 @@ impl HandHistoryParser for PokerStarsParser {
 }
 
 /// Splits a raw hand history file into individual hand text blocks.
+///
+/// Strips a leading UTF-8 BOM (PokerStars writes one on some installs/OS
+/// locales) so the anchored header regex still matches the first hand, and
+/// drops any leading/trailing text that isn't itself a hand block (e.g. the
+/// `*** # N ***` separators some exported multi-hand transcripts prefix each
+/// hand with) instead of surfacing it as a bogus parse failure.
 pub fn split_hands(text: &str) -> Vec<String> {
+    let text = text.strip_prefix('\u{FEFF}').unwrap_or(text);
     let mut hands = Vec::new();
     let mut current = String::new();
 
     for line in text.lines() {
         if line.starts_with("PokerStars Hand #") && !current.trim().is_empty() {
-            hands.push(current.trim().to_string());
+            push_hand_block(&mut hands, &current);
             current.clear();
         }
         current.push_str(line);
         current.push('\n');
     }
 
-    if !current.trim().is_empty() {
-        hands.push(current.trim().to_string());
-    }
+    push_hand_block(&mut hands, &current);
 
     hands
+}
+
+fn push_hand_block(hands: &mut Vec<String>, block: &str) {
+    let trimmed = block.trim();
+    if trimmed.starts_with("PokerStars Hand #") {
+        hands.push(trimmed.to_string());
+    }
 }
 
 fn header_regex() -> &'static Regex {
@@ -297,6 +309,89 @@ fn strip_position_tag(desc: &str) -> &str {
     desc
 }
 
+/// Matches a `"<Name> collected <amount> from pot"` (or "main pot" / "side
+/// pot") line — the authoritative record of money a player won, whether by
+/// showdown or by taking down an uncontested pot. These lines appear in the
+/// hand body (not the `*** SUMMARY ***` section) and carry no leading colon,
+/// so they never collide with the `NAME: action` action-line parsing.
+fn parse_collected_line(line: &str, known_names: &[String]) -> Option<(String, f64)> {
+    let (name, rest) = strip_known_name(line, known_names)?;
+    let rest = rest.strip_prefix("collected ")?.trim();
+    let amount_str = rest.split(" from ").next()?;
+    let amount = parse_money(amount_str)?;
+    Some((name, amount))
+}
+
+/// Matches `"Uncalled bet (<amount>) returned to <Name>"` — money a player
+/// wagered that nobody could call, handed straight back to them without ever
+/// entering the pot.
+fn parse_uncalled_bet_line(line: &str) -> Option<(String, f64)> {
+    let rest = line.strip_prefix("Uncalled bet (")?;
+    let (amount_str, rest) = rest.split_once(')')?;
+    let amount = parse_money(amount_str)?;
+    let name = rest.trim().strip_prefix("returned to ")?.trim().to_string();
+    Some((name, amount))
+}
+
+fn round_cents(value: f64) -> f64 {
+    (value * 100.0).round() / 100.0
+}
+
+/// Reconstructs how much money each player put into the pot across the whole
+/// hand from their actions alone. Blinds/antes/bets/calls carry the literal
+/// increment PokerStars logs; a raise's logged amount is the *absolute*
+/// street total after raising ("raises X to Y" — Y, not the increment), so
+/// raises are resolved against a running per-street commitment that resets at
+/// every street change instead of being summed directly.
+fn compute_contributed(actions: &[ParsedAction]) -> HashMap<String, f64> {
+    let mut contributed: HashMap<String, f64> = HashMap::new();
+    let mut street_commitment: HashMap<String, f64> = HashMap::new();
+    let mut current_street: Option<Street> = None;
+
+    for action in actions {
+        if current_street != Some(action.street) {
+            street_commitment.clear();
+            current_street = Some(action.street);
+        }
+
+        match action.action_type {
+            ActionType::PostSmallBlind | ActionType::PostBigBlind => {
+                if let Some(amount) = action.amount {
+                    *contributed.entry(action.player_name.clone()).or_insert(0.0) += amount;
+                    street_commitment.insert(action.player_name.clone(), amount);
+                }
+            }
+            ActionType::PostAnte => {
+                if let Some(amount) = action.amount {
+                    *contributed.entry(action.player_name.clone()).or_insert(0.0) += amount;
+                }
+            }
+            ActionType::Bet | ActionType::Call => {
+                if let Some(amount) = action.amount {
+                    *contributed.entry(action.player_name.clone()).or_insert(0.0) += amount;
+                    *street_commitment
+                        .entry(action.player_name.clone())
+                        .or_insert(0.0) += amount;
+                }
+            }
+            ActionType::Raise => {
+                if let Some(to_amount) = action.amount {
+                    let prior = street_commitment
+                        .get(&action.player_name)
+                        .copied()
+                        .unwrap_or(0.0);
+                    let increment = (to_amount - prior).max(0.0);
+                    *contributed.entry(action.player_name.clone()).or_insert(0.0) += increment;
+                    street_commitment.insert(action.player_name.clone(), to_amount);
+                }
+            }
+            ActionType::Fold | ActionType::Check => {}
+        }
+    }
+
+    contributed
+}
+
 pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
     let block = block.trim();
     if block.is_empty() {
@@ -321,6 +416,8 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
     let mut in_summary = false;
     let mut order: i64 = 0;
     let mut results: HashMap<String, ParsedPlayerResult> = HashMap::new();
+    let mut collected: HashMap<String, f64> = HashMap::new();
+    let mut uncalled_returned: HashMap<String, f64> = HashMap::new();
 
     for line in lines {
         let line = line.trim_end();
@@ -387,6 +484,7 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
                         ParsedPlayerResult {
                             went_to_showdown,
                             won_at_showdown,
+                            net_result: None,
                         },
                     );
                 }
@@ -401,6 +499,18 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
         {
             hero_name = Some(name);
             continue;
+        }
+
+        {
+            let known_names: Vec<String> = seats.iter().map(|s| s.player_name.clone()).collect();
+            if let Some((name, amount)) = parse_uncalled_bet_line(line) {
+                *uncalled_returned.entry(name).or_insert(0.0) += amount;
+                continue;
+            }
+            if let Some((name, amount)) = parse_collected_line(line, &known_names) {
+                *collected.entry(name).or_insert(0.0) += amount;
+                continue;
+            }
         }
 
         if let Some(street) = current_street {
@@ -419,6 +529,29 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
                     order += 1;
                 }
             }
+        }
+    }
+
+    // Net money result is only meaningful for cash games: tournament chips
+    // aren't money, and PokerStars hand-history text carries no buy-in/payout
+    // to convert them with, so tournament hands never get a `net_result`
+    // (see `ParsedPlayerResult::net_result` doc).
+    if header.format == HandFormat::Cash {
+        let contributed = compute_contributed(&actions);
+        let mut names: std::collections::HashSet<String> = std::collections::HashSet::new();
+        names.extend(contributed.keys().cloned());
+        names.extend(collected.keys().cloned());
+        names.extend(uncalled_returned.keys().cloned());
+
+        for name in names {
+            let won = collected.get(&name).copied().unwrap_or(0.0);
+            let returned = uncalled_returned.get(&name).copied().unwrap_or(0.0);
+            let spent = contributed.get(&name).copied().unwrap_or(0.0);
+            let net = round_cents(won + returned - spent);
+            results
+                .entry(name)
+                .or_insert_with(ParsedPlayerResult::default)
+                .net_result = Some(net);
         }
     }
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { StatCard } from "../components/StatCard/StatCard";
 import { DesktopAppRequiredError, getDashboardSummary } from "../data/api";
 import type { DashboardSummary } from "../data/types";
+import { formatCurrencyResult, formatDuration } from "../utils/format";
 import styles from "./DashboardView.module.css";
 
 type SummaryState =
@@ -52,6 +53,24 @@ export function DashboardView() {
           label="Current HUD Profile"
           value={state.status === "ready" ? state.data.currentHudProfile : "–"}
         />
+        {state.status === "ready" && state.data.sessionsToday && (
+          <StatCard
+            label="Sessions Today"
+            value={state.data.sessionsToday.sessionCount.toLocaleString()}
+            sub={
+              <>
+                {formatDuration(state.data.sessionsToday.totalDurationSecs)} ·{" "}
+                {state.data.sessionsToday.totalHands.toLocaleString()} hands
+                {state.data.sessionsToday.netResultCash !== null &&
+                  state.data.sessionsToday.currency !== null &&
+                  ` · ${formatCurrencyResult(
+                    state.data.sessionsToday.netResultCash,
+                    state.data.sessionsToday.currency,
+                  )}`}
+              </>
+            }
+          />
+        )}
       </div>
     </div>
   );

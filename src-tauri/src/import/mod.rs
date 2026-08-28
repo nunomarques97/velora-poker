@@ -137,8 +137,8 @@ fn import_hand(conn: &mut Connection, hand: &ParsedHand) -> Result<bool, rusqlit
             .unwrap_or_default();
 
         tx.execute(
-            "INSERT INTO player_hands (hand_id, player_id, seat, starting_stack, is_hero, went_to_showdown, won_at_showdown)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO player_hands (hand_id, player_id, seat, starting_stack, is_hero, went_to_showdown, won_at_showdown, net_result)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 hand_row_id,
                 player_id,
@@ -147,6 +147,7 @@ fn import_hand(conn: &mut Connection, hand: &ParsedHand) -> Result<bool, rusqlit
                 is_hero as i64,
                 result.went_to_showdown as i64,
                 result.won_at_showdown as i64,
+                result.net_result,
             ],
         )?;
     }
