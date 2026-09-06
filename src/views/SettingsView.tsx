@@ -1,21 +1,21 @@
 import { useEffect, useState } from "react";
 import type { AppSettings, HudProfile, ImportStatus } from "../data/types";
+import type { TableDetectionStatus } from "../data/api";
 import {
   DesktopAppRequiredError,
   getActiveHudProfile,
   getAppSettings,
+  getDiagnosticsReport,
   getImportStatus,
+  getTableDetectionStatus,
   resetOnboarding,
+  setAutoCenterEnabled,
   setHandHistoryDir,
   setHudProfileMinHands,
 } from "../data/api";
 import styles from "./SettingsView.module.css";
 
 const SETTINGS_ITEMS = [
-  {
-    label: "Table Detection",
-    description: "Automatically detect open poker tables.",
-  },
   {
     label: "Account",
     description: "Manage your Velora account and subscription.",
@@ -56,6 +56,13 @@ export function SettingsView() {
   const [hudProfile, setHudProfile] = useState<HudProfile | null>(null);
   const [minHandsInput, setMinHandsInput] = useState("25");
   const [resetting, setResetting] = useState(false);
+  const [tableDetected, setTableDetected] = useState(false);
+  const [trackingDebug, setTrackingDebug] = useState<TableDetectionStatus | null>(null);
+  const [savingAutoCenter, setSavingAutoCenter] = useState(false);
+
+  const [copyingDiagnostics, setCopyingDiagnostics] = useState(false);
+  const [diagnosticsStatus, setDiagnosticsStatus] = useState<string | null>(null);
+  const [diagnosticsText, setDiagnosticsText] = useState<string | null>(null);
 
   function load() {
     getImportStatus()
@@ -87,6 +94,36 @@ export function SettingsView() {
     load();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    function pollDetection() {
+      getTableDetectionStatus()
+        .then((status) => {
+          if (!cancelled) {
+            setTableDetected(status.detected);
+            setTrackingDebug(status);
+          }
+        })
+        .catch(() => undefined);
+    }
+    pollDetection();
+    const interval = window.setInterval(pollDetection, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  async function handleAutoCenterToggle(checked: boolean) {
+    setSavingAutoCenter(true);
+    try {
+      await setAutoCenterEnabled(checked);
+      setAppSettings((prev) => (prev ? { ...prev, autoCenterEnabled: checked } : prev));
+    } finally {
+      setSavingAutoCenter(false);
+    }
+  }
+
   async function handleSave() {
     setSaving(true);
     setSaveError(null);
@@ -107,6 +144,28 @@ export function SettingsView() {
     setMinHandsInput(String(value));
     const updated = await setHudProfileMinHands(hudProfile.id, value);
     setHudProfile(updated);
+  }
+
+  async function handleCopyDiagnostics() {
+    setCopyingDiagnostics(true);
+    setDiagnosticsStatus(null);
+    setDiagnosticsText(null);
+    try {
+      const report = await getDiagnosticsReport();
+      try {
+        await navigator.clipboard.writeText(report);
+        setDiagnosticsStatus("Copied to clipboard — paste it wherever you're reporting the issue.");
+      } catch {
+        // Clipboard access can be blocked (focus/permissions); fall back to
+        // showing the text so it can still be copied manually.
+        setDiagnosticsText(report);
+        setDiagnosticsStatus("Couldn't access the clipboard — select the text below and copy it.");
+      }
+    } catch (err) {
+      setDiagnosticsStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCopyingDiagnostics(false);
+    }
   }
 
   async function handleResetSetup() {
@@ -242,6 +301,72 @@ export function SettingsView() {
           </>
         ) : (
           <div className={styles.stateBox}>Loading&hellip;</div>
+        )}
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>Table Detection</div>
+        <div className={styles.statusGrid}>
+          <div className={styles.statusCell}>
+            <span className={styles.statusLabel}>PokerStars Table Window</span>
+            <span className={styles.statusValue}>
+              {tableDetected ? "Detected — overlay is following it" : "Not detected"}
+            </span>
+          </div>
+        </div>
+        <label className={styles.minHandsRow}>
+          <span>
+            PokerStars &quot;Auto-Center&quot; is enabled
+            <div className={styles.hudHint} style={{ marginTop: 4 }}>
+              Required for automatic seat mapping (cards placed on the right seat with no
+              dragging). Without it, cards fall back to manual per-player placement — window
+              tracking still applies either way.
+            </div>
+          </span>
+          <input
+            type="checkbox"
+            checked={appSettings?.autoCenterEnabled ?? false}
+            disabled={!appSettings || savingAutoCenter}
+            onChange={(e) => handleAutoCenterToggle(e.target.checked)}
+          />
+        </label>
+        {trackingDebug && (
+          <div className={styles.hudHint} style={{ marginTop: 8 }}>
+            Window-following debug — hooks installed: {trackingDebug.hooksInstalled}/2, event
+            callbacks: {trackingDebug.eventCallbacksTotal} total /{" "}
+            {trackingDebug.eventCallbacksMatched} matched, poll ticks:{" "}
+            {trackingDebug.pollTicks}, integrity level — Velora:{" "}
+            {trackingDebug.appIntegrityLevel ?? "unknown"}, table:{" "}
+            {trackingDebug.tableIntegrityLevel ?? "not tracked"}
+          </div>
+        )}
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>Diagnostics</div>
+        <p className={styles.hudHint} style={{ marginTop: 0 }}>
+          If the HUD ever looks wrong during play (cards for the wrong table, stats that don&apos;t
+          update, anything that &quot;feels off&quot;), click Copy Diagnostics and paste the result
+          back — no need to describe what happened.
+        </p>
+        <div className={styles.diagnosticsRow}>
+          <button
+            type="button"
+            className={styles.resetSetupButton}
+            onClick={handleCopyDiagnostics}
+            disabled={copyingDiagnostics}
+          >
+            {copyingDiagnostics ? "Gathering…" : "Copy Diagnostics"}
+          </button>
+          {diagnosticsStatus && <span className={styles.diagnosticsStatus}>{diagnosticsStatus}</span>}
+        </div>
+        {diagnosticsText && (
+          <textarea
+            className={styles.diagnosticsTextarea}
+            readOnly
+            value={diagnosticsText}
+            onFocus={(e) => e.currentTarget.select()}
+          />
         )}
       </div>
 

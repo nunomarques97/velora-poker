@@ -103,6 +103,12 @@ fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             updated_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS player_notes (
+            player_id INTEGER PRIMARY KEY REFERENCES players(id) ON DELETE CASCADE,
+            note TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS hud_profiles (
             id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
@@ -118,6 +124,15 @@ fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             x REAL NOT NULL,
             y REAL NOT NULL,
             updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS seat_templates (
+            max_players INTEGER NOT NULL,
+            seat INTEGER NOT NULL,
+            x REAL NOT NULL,
+            y REAL NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (max_players, seat)
         );
 
         CREATE INDEX IF NOT EXISTS idx_player_hands_player ON player_hands(player_id);
@@ -138,6 +153,28 @@ fn migrate_schema(conn: &Connection) -> rusqlite::Result<()> {
     add_column_if_missing(conn, "hands", "tournament_id", "TEXT")?;
     add_column_if_missing(conn, "hands", "buy_in", "TEXT")?;
     add_column_if_missing(conn, "hands", "level", "TEXT")?;
+    migrate_hud_positions_to_relative(conn)?;
+    Ok(())
+}
+
+/// Phase E (table auto-detection): `hud_positions.x`/`y` changed
+/// meaning from absolute screen pixels to fractions (0..1) of the overlay
+/// window, which now tracks the PokerStars table window instead of sitting
+/// at a fixed screen location. Any row saved before this migration holds a
+/// pixel-scale value (typically in the hundreds) that is meaningless
+/// reinterpreted as a fraction, so this one-time, idempotent step clears the
+/// table exactly once — the user just re-drags cards under the new
+/// tracking behavior, which is a one-time cost, not a recurring one. Guarded
+/// by a settings flag so it never re-fires (and never touches positions
+/// saved after the migration, which are already relative).
+const HUD_POSITIONS_RELATIVE_MIGRATION_FLAG: &str = "hud_positions_migrated_to_relative";
+
+fn migrate_hud_positions_to_relative(conn: &Connection) -> rusqlite::Result<()> {
+    if get_setting(conn, HUD_POSITIONS_RELATIVE_MIGRATION_FLAG)?.is_some() {
+        return Ok(());
+    }
+    conn.execute("DELETE FROM hud_positions", [])?;
+    set_setting(conn, HUD_POSITIONS_RELATIVE_MIGRATION_FLAG, "true")?;
     Ok(())
 }
 
@@ -263,6 +300,153 @@ pub fn list_active_table_players(conn: &Connection) -> rusqlite::Result<Vec<Play
     Ok(rows)
 }
 
+/// This player's seat number in whichever hand is currently the "active
+/// table" (the same latest-hand subquery `list_active_table_players` uses).
+pub struct ActiveTablePlayerRow {
+    pub id: i64,
+    pub name: String,
+    pub hands: i64,
+    pub seat: Option<i64>,
+}
+
+/// Same player set as `list_active_table_players`, plus each player's seat
+/// in the current hand — needed to look up their seat-mapping template
+/// (Phase E). A separate query rather than widening `PlayerRow`
+/// everywhere: "seat" is only meaningful in the active-table context, not
+/// the all-time roster `list_players` serves.
+///
+/// `table_name`:  multi-table fix. `None` keeps the pre- behavior
+/// (latest hand *anywhere*) — used when no table window is currently
+/// tracked (cold start, non-Windows, or the title didn't parse), so the
+/// existing single-table experience is unchanged in that case. `Some(name)`
+/// scopes "the active table" to the latest hand played specifically *at
+/// that table*, so a hand completing on a different simultaneously-open
+/// table (multi-tabling) can no longer flip which players' cards the
+/// overlay renders out from under whichever table it's actually
+/// positioned over — see the notes  for the confirmed root
+/// cause. `(?1 IS NULL OR hands.table_name = ?1)` lets one query serve both
+/// cases without duplicating the SQL.
+pub fn list_active_table_players_with_seats(
+    conn: &Connection,
+    table_name: Option<&str>,
+) -> rusqlite::Result<Vec<ActiveTablePlayerRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT p.id, p.name, COUNT(ph.id) as hands, latest.seat
+         FROM players p
+         JOIN player_hands ph ON ph.player_id = p.id
+         JOIN player_hands latest ON latest.player_id = p.id
+             AND latest.hand_id = (
+                 SELECT id FROM hands
+                 WHERE (?1 IS NULL OR table_name = ?1)
+                 ORDER BY played_at DESC, id DESC LIMIT 1
+             )
+         WHERE p.id IN (
+             SELECT player_id FROM player_hands
+             WHERE hand_id = (
+                 SELECT id FROM hands
+                 WHERE (?1 IS NULL OR table_name = ?1)
+                 ORDER BY played_at DESC, id DESC LIMIT 1
+             )
+         )
+         GROUP BY p.id
+         ORDER BY hands DESC, p.name ASC",
+    )?;
+    let rows = stmt
+        .query_map(params![table_name], |row| {
+            Ok(ActiveTablePlayerRow {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                hands: row.get(2)?,
+                seat: row.get(3)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// `max_seats` of the current active table (same latest-hand definition and
+/// `table_name` scoping as `list_active_table_players_with_seats` —).
+pub fn active_table_max_players(
+    conn: &Connection,
+    table_name: Option<&str>,
+) -> rusqlite::Result<Option<i64>> {
+    conn.query_row(
+        "SELECT max_seats FROM hands
+         WHERE (?1 IS NULL OR table_name = ?1)
+         ORDER BY played_at DESC, id DESC LIMIT 1",
+        params![table_name],
+        |row| row.get(0),
+    )
+    .optional()
+}
+
+/// One row of the  diagnostics report's "recently imported hands" list —
+/// each hand's own identity plus which table it belongs to, so a user
+/// pasting the report shows whether recent hands are landing on the table
+/// the overlay is scoped to or a different one (multi-tabling).
+pub struct RecentHandRow {
+    pub hand_id: String,
+    pub table_name: Option<String>,
+    pub tournament_id: Option<String>,
+    pub format: String,
+    pub played_at: Option<String>,
+}
+
+pub fn recent_hands(conn: &Connection, limit: i64) -> rusqlite::Result<Vec<RecentHandRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT hand_id, table_name, tournament_id, format, played_at
+         FROM hands
+         ORDER BY played_at DESC, id DESC
+         LIMIT ?1",
+    )?;
+    let rows = stmt
+        .query_map(params![limit], |row| {
+            Ok(RecentHandRow {
+                hand_id: row.get(0)?,
+                table_name: row.get(1)?,
+                tournament_id: row.get(2)?,
+                format: row.get(3)?,
+                played_at: row.get(4)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// The active-table hand's own identity ( diagnostics) — same scoping
+/// rule as `list_active_table_players_with_seats`, but returning the hand
+/// itself rather than its players, so the report can show exactly which
+/// hand/table/tournament Velora currently considers "active" and let the
+/// user compare that against what he's actually looking at.
+pub struct ActiveHandInfo {
+    pub hand_id: String,
+    pub table_name: Option<String>,
+    pub tournament_id: Option<String>,
+    pub played_at: Option<String>,
+}
+
+pub fn active_hand_info(
+    conn: &Connection,
+    table_name: Option<&str>,
+) -> rusqlite::Result<Option<ActiveHandInfo>> {
+    conn.query_row(
+        "SELECT hand_id, table_name, tournament_id, played_at
+         FROM hands
+         WHERE (?1 IS NULL OR table_name = ?1)
+         ORDER BY played_at DESC, id DESC LIMIT 1",
+        params![table_name],
+        |row| {
+            Ok(ActiveHandInfo {
+                hand_id: row.get(0)?,
+                table_name: row.get(1)?,
+                tournament_id: row.get(2)?,
+                played_at: row.get(3)?,
+            })
+        },
+    )
+    .optional()
+}
+
 pub fn count_hands(conn: &Connection) -> rusqlite::Result<i64> {
     conn.query_row("SELECT COUNT(*) FROM hands", [], |row| row.get(0))
 }
@@ -329,6 +513,40 @@ pub fn set_player_color_override(
     Ok(())
 }
 
+/// One free-text note per player (Phase E). Stored in its own table
+/// rather than as a `players` column so the note is optional data hanging off
+/// a player, exactly like `player_color_overrides` — a player with no note has
+/// no row at all, and `ON DELETE CASCADE` cleans up with the player.
+pub fn get_player_note(conn: &Connection, player_id: i64) -> rusqlite::Result<Option<String>> {
+    conn.query_row(
+        "SELECT note FROM player_notes WHERE player_id = ?1",
+        params![player_id],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()
+}
+
+/// Upserts a player's note, overwriting any previous one (v1 is one note per
+/// player, no history — see the spec's out-of-scope list). A blank note
+/// deletes the row instead of storing an empty string, so "cleared" and
+/// "never written" are the same state everywhere downstream.
+pub fn set_player_note(conn: &Connection, player_id: i64, note: &str) -> rusqlite::Result<()> {
+    let trimmed = note.trim();
+    if trimmed.is_empty() {
+        conn.execute(
+            "DELETE FROM player_notes WHERE player_id = ?1",
+            params![player_id],
+        )?;
+        return Ok(());
+    }
+    conn.execute(
+        "INSERT INTO player_notes (player_id, note, updated_at) VALUES (?1, ?2, ?3)
+         ON CONFLICT(player_id) DO UPDATE SET note = excluded.note, updated_at = excluded.updated_at",
+        params![player_id, trimmed, now_iso()],
+    )?;
+    Ok(())
+}
+
 pub fn clear_player_color_override(conn: &Connection, player_id: i64) -> rusqlite::Result<()> {
     conn.execute(
         "DELETE FROM player_color_overrides WHERE player_id = ?1",
@@ -353,4 +571,202 @@ pub fn set_hud_position(conn: &Connection, player_id: i64, x: f64, y: f64) -> ru
         params![player_id, x, y, now_iso()],
     )?;
     Ok(())
+}
+
+pub struct SeatTemplateRow {
+    pub seat: i64,
+    pub x: f64,
+    pub y: f64,
+}
+
+/// One calibrated card position for a given seat, keyed by table size
+/// (Phase E seat mapping) — set once per max-players count and reused
+/// automatically on every future table of that size.
+pub fn get_seat_template(
+    conn: &Connection,
+    max_players: i64,
+    seat: i64,
+) -> rusqlite::Result<Option<(f64, f64)>> {
+    conn.query_row(
+        "SELECT x, y FROM seat_templates WHERE max_players = ?1 AND seat = ?2",
+        params![max_players, seat],
+        |row| Ok((row.get::<_, f64>(0)?, row.get::<_, f64>(1)?)),
+    )
+    .optional()
+}
+
+pub fn list_seat_templates(
+    conn: &Connection,
+    max_players: i64,
+) -> rusqlite::Result<Vec<SeatTemplateRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT seat, x, y FROM seat_templates WHERE max_players = ?1 ORDER BY seat ASC",
+    )?;
+    let rows = stmt
+        .query_map(params![max_players], |row| {
+            Ok(SeatTemplateRow {
+                seat: row.get(0)?,
+                x: row.get(1)?,
+                y: row.get(2)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+pub fn set_seat_template(
+    conn: &Connection,
+    max_players: i64,
+    seat: i64,
+    x: f64,
+    y: f64,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT INTO seat_templates (max_players, seat, x, y, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(max_players, seat) DO UPDATE SET x = excluded.x, y = excluded.y, updated_at = excluded.updated_at",
+        params![max_players, seat, x, y, now_iso()],
+    )?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_conn() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        init_schema(&conn).unwrap();
+        conn
+    }
+
+    #[test]
+    fn seat_template_lookup_is_keyed_by_max_players_and_seat() {
+        let conn = test_conn();
+
+        assert_eq!(get_seat_template(&conn, 6, 1).unwrap(), None);
+
+        set_seat_template(&conn, 6, 1, 0.5, 0.9).unwrap();
+        set_seat_template(&conn, 9, 1, 0.5, 0.95).unwrap();
+
+        assert_eq!(get_seat_template(&conn, 6, 1).unwrap(), Some((0.5, 0.9)));
+        assert_eq!(get_seat_template(&conn, 9, 1).unwrap(), Some((0.5, 0.95)));
+        // A different seat at the same table size has no template yet.
+        assert_eq!(get_seat_template(&conn, 6, 2).unwrap(), None);
+        // A max-players count with no calibration at all returns nothing.
+        assert_eq!(get_seat_template(&conn, 2, 1).unwrap(), None);
+    }
+
+    #[test]
+    fn seat_template_upsert_overwrites_in_place() {
+        let conn = test_conn();
+        set_seat_template(&conn, 6, 3, 0.1, 0.2).unwrap();
+        set_seat_template(&conn, 6, 3, 0.4, 0.6).unwrap();
+        assert_eq!(get_seat_template(&conn, 6, 3).unwrap(), Some((0.4, 0.6)));
+    }
+
+    #[test]
+    fn list_seat_templates_scopes_to_one_max_players_size() {
+        let conn = test_conn();
+        set_seat_template(&conn, 6, 1, 0.1, 0.1).unwrap();
+        set_seat_template(&conn, 6, 2, 0.2, 0.2).unwrap();
+        set_seat_template(&conn, 9, 1, 0.9, 0.9).unwrap();
+
+        let six_max = list_seat_templates(&conn, 6).unwrap();
+        assert_eq!(six_max.len(), 2);
+        assert_eq!(six_max[0].seat, 1);
+        assert_eq!(six_max[1].seat, 2);
+
+        let nine_max = list_seat_templates(&conn, 9).unwrap();
+        assert_eq!(nine_max.len(), 1);
+        assert_eq!(nine_max[0].seat, 1);
+    }
+
+    fn insert_player(conn: &Connection, name: &str) -> i64 {
+        get_or_create_player(conn, "pokerstars", name).unwrap()
+    }
+
+    #[test]
+    fn player_note_round_trips_and_overwrites_in_place() {
+        let conn = test_conn();
+        let id = insert_player(&conn, "Villain");
+
+        assert_eq!(get_player_note(&conn, id).unwrap(), None);
+
+        set_player_note(&conn, id, "always overbets river").unwrap();
+        assert_eq!(
+            get_player_note(&conn, id).unwrap().as_deref(),
+            Some("always overbets river")
+        );
+
+        // v1 keeps exactly one note per player — a second write replaces it
+        // rather than accumulating history.
+        set_player_note(&conn, id, "folds turn to any raise").unwrap();
+        assert_eq!(
+            get_player_note(&conn, id).unwrap().as_deref(),
+            Some("folds turn to any raise")
+        );
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM player_notes", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rows, 1);
+    }
+
+    #[test]
+    fn blank_player_note_clears_the_row_instead_of_storing_empty_text() {
+        let conn = test_conn();
+        let id = insert_player(&conn, "Villain");
+        set_player_note(&conn, id, "  spews on the button  ").unwrap();
+        // Surrounding whitespace is trimmed before storage.
+        assert_eq!(
+            get_player_note(&conn, id).unwrap().as_deref(),
+            Some("spews on the button")
+        );
+
+        set_player_note(&conn, id, "   ").unwrap();
+        assert_eq!(get_player_note(&conn, id).unwrap(), None);
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM player_notes", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rows, 0);
+    }
+
+    #[test]
+    fn player_notes_are_scoped_per_player() {
+        let conn = test_conn();
+        let a = insert_player(&conn, "Villain");
+        let b = insert_player(&conn, "Robot");
+        set_player_note(&conn, a, "note A").unwrap();
+
+        assert_eq!(get_player_note(&conn, a).unwrap().as_deref(), Some("note A"));
+        assert_eq!(get_player_note(&conn, b).unwrap(), None);
+    }
+
+    #[test]
+    fn hud_positions_relative_migration_clears_stale_absolute_values_once() {
+        let conn = test_conn();
+        conn.execute(
+            "INSERT INTO players (site, name, created_at) VALUES ('pokerstars', 'p1', ?1)",
+            params![now_iso()],
+        )
+        .unwrap();
+        // Simulate a pre-migration row holding an absolute pixel value.
+        conn.execute(
+            "INSERT INTO hud_positions (player_id, x, y, updated_at) VALUES (1, 420.0, 260.0, ?1)",
+            params![now_iso()],
+        )
+        .unwrap();
+
+        migrate_hud_positions_to_relative(&conn).unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM hud_positions", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
+
+        // Re-running (e.g. next app startup) must not touch positions saved
+        // afterward under the new relative scheme.
+        set_hud_position(&conn, 1, 0.33, 0.5).unwrap();
+        migrate_hud_positions_to_relative(&conn).unwrap();
+        let (x, y) = get_hud_position(&conn, 1).unwrap().unwrap();
+        assert_eq!((x, y), (0.33, 0.5));
+    }
 }

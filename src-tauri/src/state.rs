@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::sync::Mutex;
 
 use rusqlite::Connection;
@@ -14,10 +15,26 @@ pub struct ImportState {
     pub parser_status: String,
 }
 
+/// One entry in the  diagnostics refresh log — every time the overlay
+/// (or anything else) asked for the active table's players, what table it
+/// resolved to, and how many players came back. Kept so a user's "Copy
+/// Diagnostics" dump shows exactly what the overlay has been rendering and
+/// when, without needing him to characterize the bug himself.
+#[derive(Debug, Clone)]
+pub struct RefreshLogEntry {
+    pub at: String,
+    pub table_name: Option<String>,
+    pub hand_id: Option<String>,
+    pub player_count: usize,
+}
+
+pub const REFRESH_LOG_CAP: usize = 20;
+
 pub struct AppState {
     pub conn: Mutex<Connection>,
     pub import: Mutex<ImportState>,
     pub watcher: Mutex<Option<notify::RecommendedWatcher>>,
+    pub refresh_log: Mutex<VecDeque<RefreshLogEntry>>,
 }
 
 impl AppState {
@@ -44,6 +61,7 @@ impl AppState {
             conn: Mutex::new(conn),
             import: Mutex::new(import),
             watcher: Mutex::new(None),
+            refresh_log: Mutex::new(VecDeque::new()),
         })
     }
 }

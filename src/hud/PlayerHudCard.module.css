@@ -20,9 +20,20 @@
   transition: box-shadow 160ms ease;
 }
 
-.dragHandle {
+/* Overlay-only: the entire card is the drag surface (a known issue — the
+   old handle was just the avatar ring, which was hard to hit). */
+.draggable {
   cursor: grab;
-  flex-shrink: 0;
+}
+
+.draggable:active {
+  cursor: grabbing;
+}
+
+/* The stats area is a <button> for the main-app "open detail" affordance; in
+   the overlay there is no detail view, so it must not advertise a click. */
+.draggable .content {
+  cursor: inherit;
 }
 
 /* --- Ring / avatar --- */
@@ -185,10 +196,16 @@
   border-left: none;
 }
 
+/* Sample-size confidence shading: `--stat-confidence` is set per card
+   from the player's hand count vs. the active profile's min_hands. Values on a
+   thin sample read as less certain; labels stay at full strength so the card
+   is still scannable. Defaults to 1 wherever the variable isn't set. */
 .statValue {
   font-size: 15px;
   font-weight: 800;
   line-height: 1;
+  opacity: var(--stat-confidence, 1);
+  transition: opacity 200ms ease;
 }
 
 .statLabel {
@@ -199,15 +216,28 @@
   letter-spacing: 0.03em;
 }
 
+/*  anchors the pager in the ring's corner precisely so it adds zero card
+   height — everything below stays inside the existing footprint (absolutely
+   positioned, 4px dots), so none of this grows the card.
+   a known issue ("dots are hard to see") had two causes. Contrast: against
+   the bright segmented ring they washed out, so the backdrop is now near
+   opaque, every dot carries a dark 1px rim, and active/inactive differ in
+   lightness, hue and scale rather than by opacity alone. Geometry: at
+   `left/bottom: -2px` the pill sat in the card's rounded bottom-left corner —
+   *outside* the 38px border-radius, so `overflow: hidden` sheared the active
+   dot in half. Nudging it to `left: 4px; bottom: 0` clears the corner arc on
+   all three visual models (38px default, 14px classic, 26px minimal) while
+   staying on the badge, and still clears the hand-count label. */
 .dots {
   position: absolute;
-  left: -2px;
-  bottom: -2px;
+  left: 4px;
+  bottom: 0;
   display: flex;
-  gap: 3px;
-  padding: 2px 3px;
+  gap: 4px;
+  padding: 2px 4px;
   border-radius: 6px;
-  background: rgba(8, 10, 14, 0.55);
+  background: rgba(4, 6, 10, 0.88);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
   z-index: 3;
 }
 
@@ -215,7 +245,8 @@
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7);
   border: none;
   padding: 0;
   cursor: pointer;
@@ -223,13 +254,19 @@
 }
 
 .dot:hover {
-  background: color-mix(in srgb, var(--player-color) 60%, rgba(255, 255, 255, 0.28));
+  background: rgba(255, 255, 255, 0.8);
 }
 
 .dotActive {
   background: var(--player-color);
-  transform: scale(1.3);
-  box-shadow: 0 0 5px 0 color-mix(in srgb, var(--player-color) 70%, transparent);
+  transform: scale(1.5);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.8),
+    0 0 6px 1px color-mix(in srgb, var(--player-color) 85%, transparent);
+}
+
+.dotActive:hover {
+  background: var(--player-color);
 }
 
 /* --- Velora Classic: same structure, calmer/flatter treatment --- */

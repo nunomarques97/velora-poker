@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Player } from "../../data/types";
-import { clearPlayerColorOverride, setPlayerColorOverride } from "../../data/api";
+import { clearPlayerColorOverride, setPlayerColorOverride, setPlayerNote } from "../../data/api";
 import styles from "./PlayerProfileDrawer.module.css";
 import { CloseIcon } from "../icons";
 
@@ -23,6 +23,35 @@ export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: Player
   const { stats } = player;
   const [saving, setSaving] = useState(false);
   const classification = player.classification;
+
+  // Draft of the note being typed. Committed on blur — same auto-save shape as
+  // the `minHands` input in HudProfilesView, no explicit Save button.
+  const [noteDraft, setNoteDraft] = useState(player.note ?? "");
+  const [noteSaving, setNoteSaving] = useState(false);
+  // The drawer stays mounted when the selected player changes, so an
+  // in-progress draft would otherwise leak onto the next player. Resetting
+  // during render (rather than in an effect) avoids a frame showing the wrong
+  // player's note.
+  const [noteOwnerId, setNoteOwnerId] = useState(player.id);
+  if (noteOwnerId !== player.id) {
+    setNoteOwnerId(player.id);
+    setNoteDraft(player.note ?? "");
+  }
+
+  async function handleNoteBlur() {
+    const next = noteDraft.trim();
+    if (next === (player.note ?? "")) return;
+    setNoteSaving(true);
+    try {
+      const updated = await setPlayerNote(player.id, next);
+      setNoteDraft(updated.note ?? "");
+      onPlayerUpdated?.(updated);
+    } catch {
+      // Non-fatal — the draft stays in the box so nothing typed is lost.
+    } finally {
+      setNoteSaving(false);
+    }
+  }
 
   async function applyOverride(color: string, label: string) {
     setSaving(true);
@@ -98,7 +127,20 @@ export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: Player
           </div>
         </div>
 
-        {player.note && <p className={styles.note}>{player.note}</p>}
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>Notes</div>
+          <textarea
+            className={styles.noteInput}
+            value={noteDraft}
+            onChange={(e) => setNoteDraft(e.target.value)}
+            onBlur={handleNoteBlur}
+            disabled={noteSaving}
+            rows={4}
+            placeholder="Tells, tendencies, anything worth remembering about this player…"
+            aria-label={`Notes about ${player.name}`}
+          />
+          <div className={styles.noteHint}>Saves automatically when you click away.</div>
+        </div>
 
         <div className={styles.section}>
           <div className={styles.sectionTitle}>Preflop</div>

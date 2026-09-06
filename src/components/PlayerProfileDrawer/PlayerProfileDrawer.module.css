@@ -195,15 +195,42 @@
   letter-spacing: 0.03em;
 }
 
-.note {
-  margin: 20px 24px 0;
-  padding: 12px 14px;
+/* Free-text player note. Same surface/border tokens as the other
+   inputs in the app (e.g. `.minHandsInput`), sized for a few lines of prose
+   and resizable vertically only, so it can't break the drawer's width. */
+.noteInput {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 76px;
+  resize: vertical;
+  padding: 10px 12px;
   background: var(--bg-surface-alt);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: inherit;
   font-size: 12.5px;
-  color: var(--text-secondary);
   line-height: 1.55;
+}
+
+.noteInput::placeholder {
+  color: var(--text-tertiary);
+}
+
+.noteInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.noteInput:disabled {
+  opacity: 0.6;
+}
+
+.noteHint {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 .section {

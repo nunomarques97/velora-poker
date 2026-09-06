@@ -10,6 +10,7 @@ export const POKERSTARS_TUTORIAL_STEPS: string[] = [
   "Make sure \"Save Hand History\" (or equivalent) is enabled.",
   "Note the folder shown as the hand history save location — Velora looks for this automatically, but you can always point it there manually.",
   "Play a hand (real money or play money) and Velora will detect the new file automatically once the folder is configured.",
+  "For automatic HUD seat placement, also enable \"Auto-Center Table\" in PokerStars' table display options, then confirm it in Velora's Settings — without it, HUD cards still track the table window but need manual per-player placement.",
 ];
 
 export const POKERSTARS_TUTORIAL_NOTE =

@@ -1,6 +1,15 @@
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 pub const OVERLAY_LABEL: &str = "overlay";
+
+/// Broadcast (payload: `bool` = "is now visible") whenever the overlay window
+/// is shown or hidden. Emitted from here, rather than from the command layer,
+/// so that *every* path which changes overlay visibility notifies every
+/// window. The main window's "Open/Close Overlay" button previously kept a
+/// local React flag that went stale the moment the overlay was closed from
+/// its own in-overlay "Close" button, so the label advertised the opposite of
+/// what the next click would do (Phase E polish, a known issue).
+pub const OVERLAY_VISIBILITY_EVENT: &str = "overlay-visibility-changed";
 
 /// Shows the native HUD overlay window: transparent, borderless,
 /// always-on-top, excluded from the taskbar. Its content is a separate
@@ -48,6 +57,7 @@ pub fn open(app_handle: &AppHandle) -> Result<(), String> {
 
     window.show().map_err(|e| e.to_string())?;
     window.set_focus().map_err(|e| e.to_string())?;
+    let _ = app_handle.emit(OVERLAY_VISIBILITY_EVENT, true);
     Ok(())
 }
 
@@ -55,6 +65,7 @@ pub fn close(app_handle: &AppHandle) -> Result<(), String> {
     if let Some(win) = app_handle.get_webview_window(OVERLAY_LABEL) {
         win.hide().map_err(|e| e.to_string())?;
     }
+    let _ = app_handle.emit(OVERLAY_VISIBILITY_EVENT, false);
     Ok(())
 }
 

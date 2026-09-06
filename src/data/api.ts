@@ -9,6 +9,7 @@ import type {
   HudProfile,
   ImportStatus,
   Player,
+  SeatTemplate,
   Session,
 } from "./types";
 
@@ -46,6 +47,12 @@ export async function getActiveTablePlayers(): Promise<Player[]> {
   return invoke<Player[]>("get_active_table_players");
 }
 
+/** The current active table's max-players count (2/6/9-max), or `null` before any hand is imported. */
+export async function getActiveTableMaxPlayers(): Promise<number | null> {
+  assertTauriAvailable();
+  return invoke<number | null>("get_active_table_max_players");
+}
+
 export async function setPlayerColorOverride(
   playerId: string,
   color: string,
@@ -58,6 +65,16 @@ export async function setPlayerColorOverride(
 export async function clearPlayerColorOverride(playerId: string): Promise<Player> {
   assertTauriAvailable();
   return invoke<Player>("clear_player_color_override", { playerId });
+}
+
+/**
+ * Saves this player's free-text note (Phase E), returning the refreshed
+ * player. One note per player, overwritten on each save; a blank note clears
+ * it. Whitespace is trimmed on the Rust side.
+ */
+export async function setPlayerNote(playerId: string, note: string): Promise<Player> {
+  assertTauriAvailable();
+  return invoke<Player>("set_player_note", { playerId, note });
 }
 
 // ---------------------------------------------------------------------
@@ -186,10 +203,81 @@ export async function getHudPositions(): Promise<HudPosition[]> {
 }
 
 // ---------------------------------------------------------------------
+// Seat-mapping templates (Phase E)
+// ---------------------------------------------------------------------
+
+export async function getSeatTemplates(maxPlayers: number): Promise<SeatTemplate[]> {
+  assertTauriAvailable();
+  return invoke<SeatTemplate[]>("get_seat_templates", { maxPlayers });
+}
+
+export async function saveSeatTemplate(
+  maxPlayers: number,
+  seat: number,
+  x: number,
+  y: number,
+): Promise<void> {
+  assertTauriAvailable();
+  return invoke("save_seat_template", { maxPlayers, seat, x, y });
+}
+
+export async function setAutoCenterEnabled(enabled: boolean): Promise<void> {
+  assertTauriAvailable();
+  return invoke("set_auto_center_enabled", { enabled });
+}
+
+export interface TableDetectionStatus {
+  detected: boolean;
+  /**  debug evidence — see the notes decision  for the window-following bug this was added to diagnose. */
+  hooksInstalled: number;
+  eventCallbacksTotal: number;
+  eventCallbacksMatched: number;
+  pollTicks: number;
+  appIntegrityLevel: string | null;
+  tableIntegrityLevel: string | null;
+}
+
+/** Whether the PokerStars table window is currently found and being tracked. */
+export async function getTableDetectionStatus(): Promise<TableDetectionStatus> {
+  assertTauriAvailable();
+  return invoke<TableDetectionStatus>("get_table_detection_status");
+}
+
+// ---------------------------------------------------------------------
+// Diagnostics
+// ---------------------------------------------------------------------
+
+/**
+ * Plain-text self-serve diagnostics dump — which table(s)/hand the overlay
+ * currently considers active and where that came from, recent overlay
+ * refresh/resync events, the last imported hands and their table
+ * identifiers, and current watcher/import status. Meant to be copied and
+ * pasted back to the maintainer when something "feels wrong" during play, without
+ * the user needing to characterize the bug himself.
+ */
+export async function getDiagnosticsReport(): Promise<string> {
+  assertTauriAvailable();
+  return invoke<string>("get_diagnostics_report");
+}
+
+// ---------------------------------------------------------------------
 // Live events
 // ---------------------------------------------------------------------
 
 /** Fires whenever the watcher or a manual folder change imports new hands. */
 export async function onHandsImported(callback: () => void): Promise<UnlistenFn> {
   return listen<number>("hands-imported", () => callback());
+}
+
+/**
+ * Fires whenever the overlay window is shown or hidden, from whichever window
+ * triggered it — including the overlay's own "Close" button. Emitted by
+ * `overlay::open`/`overlay::close` in Rust, so this is the single source of
+ * truth for overlay visibility and no window has to keep a flag in sync by
+ * hand (Phase E polish, a known issue).
+ */
+export async function onOverlayVisibilityChanged(
+  callback: (open: boolean) => void,
+): Promise<UnlistenFn> {
+  return listen<boolean>("overlay-visibility-changed", (event) => callback(event.payload));
 }

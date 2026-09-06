@@ -8,6 +8,7 @@ import {
   getPlayers,
   isOverlayOpen,
   onHandsImported,
+  onOverlayVisibilityChanged,
   openOverlay,
   setActiveHudProfile,
   setHudProfileMinHands,
@@ -62,8 +63,19 @@ export function HudProfilesView({ onSelectPlayer }: HudProfilesViewProps) {
         .catch(() => undefined);
     }).catch(() => undefined);
 
+    // Rust broadcasts every overlay show/hide, so this view stays correct even
+    // when the overlay is closed from its own in-overlay "Close" button, which
+    // this window has no other way to observe.
+    const unlistenOverlay = onOverlayVisibilityChanged((open) => {
+      setOverlayOpenState(open);
+      // Click-through is reset by the OS window going away; a re-opened
+      // overlay always starts unlocked.
+      if (!open) setLocked(false);
+    }).catch(() => undefined);
+
     return () => {
       unlisten.then((fn) => fn?.());
+      unlistenOverlay.then((fn) => fn?.());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -86,17 +98,15 @@ export function HudProfilesView({ onSelectPlayer }: HudProfilesViewProps) {
   }
 
   async function toggleOverlay() {
-    // Re-check live state instead of trusting local React state: the user
-    // may have closed the overlay from its own "Close" button, which this
-    // window has no way to observe otherwise.
-    const currentlyOpen = await isOverlayOpen();
-    if (currentlyOpen) {
+    // Re-check live state rather than trusting the rendered flag: cheap, and
+    // it keeps the click correct even if this window mounted after an overlay
+    // visibility event it never heard. `overlayOpen` itself is seeded once by
+    // `loadAll` and thereafter written only by the `onOverlayVisibilityChanged`
+    // subscription, so the label can't drift from what a click will really do.
+    if (await isOverlayOpen()) {
       await closeOverlay();
-      setOverlayOpenState(false);
-      setLocked(false);
     } else {
       await openOverlay();
-      setOverlayOpenState(true);
     }
   }
 

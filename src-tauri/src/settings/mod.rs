@@ -6,6 +6,14 @@ pub const SETTING_HAND_HISTORY_DIR: &str = "hand_history_dir";
 pub const SETTING_POKER_ROOM: &str = "poker_room";
 pub const SETTING_ONBOARDING_COMPLETE: &str = "onboarding_complete";
 pub const SETTING_OVERLAY_ENABLED: &str = "overlay_enabled";
+/// Whether the user has confirmed PokerStars' own "Auto-Center" table
+/// option is enabled — the seat-mapping template system (Phase E)
+/// requires it (hero always bottom-middle, other seats in a fixed rotation)
+/// and has no way to detect it itself, so this is a user-declared setting,
+/// documented as a prerequisite in Settings. Defaults to unset/false: without
+/// this confirmation, seat mapping falls back to today's manual per-card
+/// placement (still relative-to-table, so window-following still applies).
+pub const SETTING_AUTO_CENTER_ENABLED: &str = "auto_center_enabled";
 
 /// A candidate PokerStars hand-history folder found during auto-detection,
 /// ranked by how much real evidence it holds that it's the right one.

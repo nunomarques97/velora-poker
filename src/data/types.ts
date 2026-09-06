@@ -38,9 +38,12 @@ export interface Player {
   name: string;
   hands: number;
   stats: PlayerStats;
-  note?: string;
+  /** Free-text note the user wrote about this player, or `null` when none. Not shown on the HUD overlay. */
+  note?: string | null;
   classification?: ClassificationResult;
   snapshot?: PlayerSnapshot | null;
+  /** This player's seat at the currently active table. `null`/absent outside that context (e.g. the Players view). */
+  seat?: number | null;
 }
 
 export interface SessionsTodaySummary {
@@ -101,8 +104,20 @@ export interface HudProfile {
   isBuiltin: boolean;
 }
 
+/**
+ * Phase E: `x`/`y` are fractions (0..1) of the overlay window, not
+ * absolute screen pixels — the overlay window itself tracks the PokerStars
+ * table window, so a saved fraction stays correct as the table moves/resizes.
+ */
 export interface HudPosition {
   playerId: string;
+  x: number;
+  y: number;
+}
+
+/** One calibrated seat position for a given table size (2/6/9-max), reused automatically on every future table of that size. Same 0..1 fraction scheme as `HudPosition`. */
+export interface SeatTemplate {
+  seat: number;
   x: number;
   y: number;
 }
@@ -111,6 +126,8 @@ export interface AppSettings {
   onboardingComplete: boolean;
   pokerRoom: string | null;
   overlayEnabled: boolean;
+  /** user-declared confirmation that PokerStars' "Auto-Center" table option is on — required for automatic seat-mapping templates. */
+  autoCenterEnabled: boolean;
 }
 
 export interface DetectedDir {

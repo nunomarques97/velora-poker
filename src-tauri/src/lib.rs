@@ -11,6 +11,7 @@ pub mod import;
 pub mod parser;
 pub mod sessions;
 pub mod stats;
+pub mod table_track;
 
 use tauri::{Emitter, Manager};
 
@@ -26,6 +27,7 @@ pub fn run() {
             commands::get_active_table_players,
             commands::set_player_color_override,
             commands::clear_player_color_override,
+            commands::set_player_note,
             commands::get_dashboard_summary,
             commands::get_import_status,
             commands::set_hand_history_dir,
@@ -46,6 +48,12 @@ pub fn run() {
             commands::save_hud_position,
             commands::get_hud_positions,
             commands::get_sessions,
+            commands::get_active_table_max_players,
+            commands::set_auto_center_enabled,
+            commands::get_seat_templates,
+            commands::save_seat_template,
+            commands::get_table_detection_status,
+            commands::get_diagnostics_report,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -139,6 +147,15 @@ pub fn run() {
             // 0xcfffffff a few seconds after launch) — this static
             // declaration does not do that. It stays hidden until the user
             // clicks "Open Overlay"; see `overlay::open`.
+
+            // PHASE E (2026-08-28): table window-following. Installs a
+            // `SetWinEventHook` on the main thread — the same thread that
+            // runs Tauri's window message loop, which is what pumps the
+            // hook's `WINEVENT_OUTOFCONTEXT` callback — plus a low-frequency
+            // polling fallback that (re)acquires the PokerStars table window
+            // whenever it isn't currently tracked (app started before the
+            // table opened, or a new hand opened a table with a new HWND).
+            table_track::install_tracking(app_handle.clone());
 
             Ok(())
         })
