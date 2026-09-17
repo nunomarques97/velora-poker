@@ -53,6 +53,44 @@ type VersionState =
   | { status: "unavailable"; message: string }
   | { status: "error"; message: string };
 
+/**
+ *  (QA finding 1). Same union again (the notes), for the same reason the
+ * version one exists: a swallowed `get_app_settings` used to leave "Poker Room"
+ * in "Loading…" forever, and — worse — the HUD section read the resulting
+ * `null` as a value and stated "Off (kill switch)" for an overlay whose real
+ * state was simply unknown (PRODUCT-PROFILE priority 1: never show a wrong
+ * state).
+ */
+type AppSettingsState =
+  | { status: "loading" }
+  | { status: "ready"; data: AppSettings }
+  | { status: "unavailable"; message: string }
+  | { status: "error"; message: string };
+
+/** . Drives the "HUD" section; see `AppSettingsState`. */
+type HudProfileState =
+  | { status: "loading" }
+  | { status: "ready"; data: HudProfile }
+  | { status: "unavailable"; message: string }
+  | { status: "error"; message: string };
+
+/**
+ * The overlay kill switch as a line of text, honest about not knowing. The
+ * default branch deliberately does not fall back to "Off": a failed read is
+ * not an off switch, and the reason is spelled out by the "Poker Room"
+ * section right above this one (the notes).
+ */
+function overlayStateLabel(settings: AppSettingsState): string {
+  switch (settings.status) {
+    case "ready":
+      return settings.data.overlayEnabled ? "On for every table" : "Off (kill switch)";
+    case "loading":
+      return "Loading…";
+    default:
+      return "Unknown — this setting could not be read";
+  }
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return "Never";
   const date = new Date(iso);
@@ -119,9 +157,11 @@ export function SettingsView() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
-  const [hudProfile, setHudProfile] = useState<HudProfile | null>(null);
+  const [appSettings, setAppSettings] = useState<AppSettingsState>({ status: "loading" });
+  const [hudProfile, setHudProfile] = useState<HudProfileState>({ status: "loading" });
   const [minHandsInput, setMinHandsInput] = useState("25");
+  const [minHandsError, setMinHandsError] = useState<string | null>(null);
+  const [autoCenterError, setAutoCenterError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
   const [tableDetected, setTableDetected] = useState(false);
   // how many real PokerStars tables are open. Each one has its own HUD,
@@ -163,15 +203,27 @@ export function SettingsView() {
       });
 
     getAppSettings()
-      .then(setAppSettings)
-      .catch(() => undefined);
+      .then((data) => setAppSettings({ status: "ready", data }))
+      .catch((err: unknown) => {
+        if (err instanceof DesktopAppRequiredError) {
+          setAppSettings({ status: "unavailable", message: err.message });
+        } else {
+          setAppSettings({ status: "error", message: String(err) });
+        }
+      });
 
     getActiveHudProfile()
-      .then((p) => {
-        setHudProfile(p);
-        setMinHandsInput(String(p.minHands));
+      .then((data) => {
+        setHudProfile({ status: "ready", data });
+        setMinHandsInput(String(data.minHands));
       })
-      .catch(() => undefined);
+      .catch((err: unknown) => {
+        if (err instanceof DesktopAppRequiredError) {
+          setHudProfile({ status: "unavailable", message: err.message });
+        } else {
+          setHudProfile({ status: "error", message: String(err) });
+        }
+      });
 
     getClassificationRules()
       .then(setRules)
@@ -214,9 +266,18 @@ export function SettingsView() {
 
   async function handleAutoCenterToggle(checked: boolean) {
     setSavingAutoCenter(true);
+    setAutoCenterError(null);
     try {
       await setAutoCenterEnabled(checked);
-      setAppSettings((prev) => (prev ? { ...prev, autoCenterEnabled: checked } : prev));
+      // Only a *ready* state can be updated in place: patching a failed read
+      // would invent a settings object out of one checkbox.
+      setAppSettings((prev) =>
+        prev.status === "ready"
+          ? { status: "ready", data: { ...prev.data, autoCenterEnabled: checked } }
+          : prev,
+      );
+    } catch (err) {
+      setAutoCenterError(err instanceof Error ? err.message : String(err));
     } finally {
       setSavingAutoCenter(false);
     }
@@ -236,12 +297,24 @@ export function SettingsView() {
   }
 
   async function handleMinHandsBlur() {
-    if (!hudProfile) return;
+    // The field only renders in the ready state; the guard keeps the write
+    // impossible for any other one instead of writing against a guessed id.
+    if (hudProfile.status !== "ready") return;
+    const profile = hudProfile.data;
     const parsed = Number.parseInt(minHandsInput, 10);
-    const value = Number.isFinite(parsed) && parsed >= 0 ? parsed : hudProfile.minHands;
+    const value = Number.isFinite(parsed) && parsed >= 0 ? parsed : profile.minHands;
     setMinHandsInput(String(value));
-    const updated = await setHudProfileMinHands(hudProfile.id, value);
-    setHudProfile(updated);
+    setMinHandsError(null);
+    try {
+      const updated = await setHudProfileMinHands(profile.id, value);
+      setHudProfile({ status: "ready", data: updated });
+      setMinHandsInput(String(updated.minHands));
+    } catch (err) {
+      // The saved value is whatever the profile still holds; showing the typed
+      // number as if it had been saved would be the same lie in miniature.
+      setMinHandsInput(String(profile.minHands));
+      setMinHandsError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   async function handleCopyDiagnostics() {
@@ -311,11 +384,22 @@ export function SettingsView() {
 
       <div className={styles.section}>
         <div className={styles.sectionTitle}>Poker Room</div>
-        {appSettings ? (
+        {appSettings.status === "loading" && <div className={styles.stateBox}>Loading&hellip;</div>}
+        {appSettings.status === "unavailable" && (
+          <div className={styles.stateBox}>{appSettings.message}</div>
+        )}
+        {appSettings.status === "error" && (
+          <div className={styles.stateBox}>
+            Failed to load your settings: {appSettings.message}. Importing and your HUDs carry on
+            with what was already saved; what is lost here is showing which room is configured and
+            starting Redo Setup. Reopen Settings to try again.
+          </div>
+        )}
+        {appSettings.status === "ready" && (
           <div className={styles.roomRow}>
             <div>
               <div className={styles.roomName}>
-                {appSettings.pokerRoom === "pokerstars" ? "PokerStars" : "Not configured"}
+                {appSettings.data.pokerRoom === "pokerstars" ? "PokerStars" : "Not configured"}
               </div>
               <div className={styles.roomHint}>Redo the onboarding flow to change rooms or HUD.</div>
             </div>
@@ -328,8 +412,6 @@ export function SettingsView() {
               {resetting ? "Resetting…" : "Redo Setup"}
             </button>
           </div>
-        ) : (
-          <div className={styles.stateBox}>Loading&hellip;</div>
         )}
       </div>
 
@@ -464,18 +546,28 @@ export function SettingsView() {
 
       <div className={styles.section}>
         <div className={styles.sectionTitle}>HUD</div>
-        {hudProfile ? (
+        {hudProfile.status === "loading" && <div className={styles.stateBox}>Loading&hellip;</div>}
+        {hudProfile.status === "unavailable" && (
+          <div className={styles.stateBox}>{hudProfile.message}</div>
+        )}
+        {hudProfile.status === "error" && (
+          <div className={styles.stateBox}>
+            Failed to load the active HUD model: {hudProfile.message}. Your HUDs keep running on the
+            model already saved; what is lost here is showing which one it is and changing its
+            sample size, so the field stays hidden instead of showing a number that may not be the
+            one in use. Reopen Settings to try again.
+          </div>
+        )}
+        {hudProfile.status === "ready" && (
           <>
             <div className={styles.statusGrid}>
               <div className={styles.statusCell}>
                 <span className={styles.statusLabel}>Active Model</span>
-                <span className={styles.statusValue}>{hudProfile.name}</span>
+                <span className={styles.statusValue}>{hudProfile.data.name}</span>
               </div>
               <div className={styles.statusCell}>
                 <span className={styles.statusLabel}>Overlay</span>
-                <span className={styles.statusValue}>
-                  {appSettings?.overlayEnabled ? "On for every table" : "Off (kill switch)"}
-                </span>
+                <span className={styles.statusValue}>{overlayStateLabel(appSettings)}</span>
               </div>
             </div>
             <label className={styles.minHandsRow}>
@@ -503,13 +595,17 @@ export function SettingsView() {
                 onBlur={handleMinHandsBlur}
               />
             </label>
+            {minHandsError && (
+              <div className={styles.errorText}>
+                Couldn&apos;t save the sample size: {minHandsError}. The field shows the value still
+                stored for this HUD model.
+              </div>
+            )}
             <p className={styles.hudHint}>
               Switch HUD models, turn HUDs on or off, and manage per-player color overrides from
               the HUD Profiles page. A HUD appears on every PokerStars table you open, by itself.
             </p>
           </>
-        ) : (
-          <div className={styles.stateBox}>Loading&hellip;</div>
         )}
       </div>
 
@@ -636,11 +732,23 @@ export function SettingsView() {
           </span>
           <input
             type="checkbox"
-            checked={appSettings?.autoCenterEnabled ?? false}
-            disabled={!appSettings || savingAutoCenter}
+            checked={appSettings.status === "ready" ? appSettings.data.autoCenterEnabled : false}
+            disabled={appSettings.status !== "ready" || savingAutoCenter}
             onChange={(e) => handleAutoCenterToggle(e.target.checked)}
           />
         </label>
+        {(appSettings.status === "error" || appSettings.status === "unavailable") && (
+          <div className={styles.errorText}>
+            Velora couldn&apos;t read your settings, so it can&apos;t say whether Auto-Center is on
+            — the box above is disabled and unticked because the answer is unknown, not because it
+            is off. The reason is in Poker Room, at the top of this page.
+          </div>
+        )}
+        {autoCenterError && (
+          <div className={styles.errorText}>
+            Couldn&apos;t save Auto-Center: {autoCenterError}. The box shows the value still stored.
+          </div>
+        )}
       </div>
 
       <div className={styles.section}>
