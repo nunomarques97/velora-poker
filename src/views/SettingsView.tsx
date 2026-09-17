@@ -142,13 +142,13 @@ function formatParserStatus(status: string): string {
  * the single line a tester reads to know which build is running.
  * `features` is empty on the distributed build (`auto-classification`/
  * `strategic-analysis` compiled out) — that emptiness is the whole signal,
- * not an error state, so it renders as "build padrão" rather than a blank.
+ * not an error state, so it renders as "standard build" rather than a blank.
  */
 function formatBuildLabel(version: AppVersion): string {
   if (version.features.length === 0) {
-    return `Velora ${version.version} - build padrão`;
+    return `Velora ${version.version} - standard build`;
   }
-  return `Velora ${version.version} - build pessoal (${version.features.join(", ")})`;
+  return `Velora ${version.version} - personal build (${version.features.join(", ")})`;
 }
 
 export function SettingsView() {
@@ -516,7 +516,7 @@ export function SettingsView() {
             </div>
 
             {ingestion.data.problems.length === 0 ? (
-              <div className={styles.ingestionOk}>Nenhuma mão ficou por ler.</div>
+              <div className={styles.ingestionOk}>No hand left unread.</div>
             ) : (
               <div className={styles.problemList}>
                 {ingestion.data.problems.map((problem) => (

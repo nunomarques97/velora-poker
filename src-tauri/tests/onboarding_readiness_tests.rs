@@ -54,7 +54,7 @@ fn non_english_client_fixture_is_english_false_with_a_reason() {
         !readiness.client_language.reason.is_empty(),
         "a false verdict must always explain why"
     );
-    assert!(readiness.client_language.reason.contains("inglês"));
+    assert!(readiness.client_language.reason.contains("English"));
 }
 
 /// An existing, empty folder: nothing to sample, so the language check must

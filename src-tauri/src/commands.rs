@@ -669,13 +669,13 @@ pub fn onboarding_readiness(
                 exists: false,
                 hand_file_count: 0,
                 parsed_hand_count: 0,
-                message: "Não encontrámos nenhuma pasta de hand histories automaticamente. \
-                          Escolhe a pasta onde o PokerStars guarda as mãos."
+                message: "We couldn't find a hand history folder automatically. \
+                          Choose the folder where PokerStars saves hands."
                     .to_string(),
             },
             client_language: unchecked_client_language(
-                "Sem pasta para verificar: a língua do cliente só se confirma depois de \
-                 encontrar a pasta de hand histories.",
+                "No folder to check yet: the client language is only confirmed once a \
+                 hand history folder is found.",
             ),
             auto_center,
         };
@@ -690,11 +690,11 @@ pub fn onboarding_readiness(
                 exists: false,
                 hand_file_count: 0,
                 parsed_hand_count: 0,
-                message: "Essa pasta não existe ou não está acessível.".to_string(),
+                message: "That folder does not exist or is not accessible.".to_string(),
             },
             client_language: unchecked_client_language(
-                "Sem pasta para verificar: a língua do cliente só se confirma depois de \
-                 encontrar a pasta de hand histories.",
+                "No folder to check yet: the client language is only confirmed once a \
+                 hand history folder is found.",
             ),
             auto_center,
         };
@@ -709,11 +709,11 @@ pub fn onboarding_readiness(
                 exists: true,
                 hand_file_count: validation.hand_file_count,
                 parsed_hand_count: 0,
-                message: "A pasta existe mas ainda não tem ficheiros de mãos (.txt)."
+                message: "The folder exists but doesn't have any hand files (.txt) yet."
                     .to_string(),
             },
             client_language: unchecked_client_language(
-                "Não há nenhum ficheiro de mãos na pasta para confirmar a língua do cliente.",
+                "There is no hand file in the folder to confirm the client language.",
             ),
             auto_center,
         };
@@ -728,15 +728,14 @@ pub fn onboarding_readiness(
                 exists: true,
                 hand_file_count: validation.hand_file_count,
                 parsed_hand_count: 0,
-                message: "A pasta existe mas o ficheiro mais recente não pôde ser lido."
+                message: "The folder exists but the most recent file couldn't be read."
                     .to_string(),
             },
             client_language: OnboardingClientLanguageReadiness {
                 checked: false,
                 is_english: false,
                 sample_file: Some(sample_str),
-                reason: "Não foi possível ler o ficheiro mais recente para confirmar a língua \
-                         do cliente."
+                reason: "Couldn't read the most recent file to confirm the client language."
                     .to_string(),
             },
             auto_center,
@@ -753,22 +752,22 @@ pub fn onboarding_readiness(
         hand_file_count: validation.hand_file_count,
         parsed_hand_count,
         message: if parsed_hand_count > 0 {
-            format!("Pasta pronta: {parsed_hand_count} mão(s) lidas no ficheiro mais recente.")
+            format!("Folder ready: {parsed_hand_count} hand(s) read from the most recent file.")
         } else {
-            "O ficheiro mais recente existe mas não foi possível ler nenhuma mão dele."
+            "The most recent file exists but no hand could be read from it."
                 .to_string()
         },
     };
 
     let reason = if is_english {
-        "O ficheiro mais recente tem ações em inglês: as mãos estão a ser lidas corretamente."
+        "The most recent file has actions in English: hands are being read correctly."
             .to_string()
     } else if parsed_hand_count == 0 {
-        "O ficheiro mais recente não foi reconhecido como um histórico de mãos do PokerStars."
+        "The most recent file wasn't recognized as a PokerStars hand history."
             .to_string()
     } else {
-        "O ficheiro mais recente não tem ações em inglês: o cliente PokerStars está noutra \
-         língua e as mãos serão lidas mal."
+        "The most recent file has no actions in English: the PokerStars client is in \
+         another language and hands will be read incorrectly."
             .to_string()
     };
 
@@ -1599,64 +1598,64 @@ pub struct IngestionHealthPayload {
 fn problem_explanation(code: &str) -> &'static str {
     match code {
         "missing_hand_id" => {
-            "Uma mão chegou sem identificador único: não dá para saber se já tinha sido \
-             contada, por isso ficou de fora das estatísticas."
+            "A hand arrived without a unique identifier: there was no way to tell if it had \
+             already been counted, so it was left out of the stats."
         }
         "missing_played_at" => {
-            "Uma mão chegou sem data/hora: ficou de fora das estatísticas porque não é \
-             possível situá-la na sessão."
+            "A hand arrived without a date/time: it was left out of the stats because it \
+             can't be placed in the session."
         }
         "no_dealt_in_players" => {
-            "Uma mão não trouxe nenhum jogador sentado à mesa: ficou de fora porque não há a \
-             quem atribuir as estatísticas dela."
+            "A hand didn't bring any player at the table: it was left out because there is \
+             no one to attribute its stats to."
         }
         "missing_max_seats" => {
-            "Uma mão chegou sem o tamanho da mesa: ficou de fora porque as posições dos \
-             jogadores não podiam ser calculadas com confiança."
+            "A hand arrived without the table size: it was left out because the players' \
+             positions couldn't be calculated with confidence."
         }
         "button_seat_out_of_range" => {
-            "Uma mão tinha o dealer button num lugar que não existe nessa mesa: ficou de fora \
-             para não estragar as posições de todos os jogadores dela."
+            "A hand had the dealer button in a spot that doesn't exist at that table: it was \
+             left out to avoid corrupting the positions of every player in it."
         }
         "seat_out_of_range" => {
-            "Uma mão tinha um jogador sentado num lugar que não existe nessa mesa: ficou de \
-             fora para não estragar as posições de todos os jogadores dela."
+            "A hand had a player in a spot that doesn't exist at that table: it was left out \
+             to avoid corrupting the positions of every player in it."
         }
         "more_players_than_seats" => {
-            "Uma mão tinha mais jogadores do que lugares na mesa: ficou de fora porque os \
-             dados não batiam certo."
+            "A hand had more players than spots at the table: it was left out because the \
+             data didn't add up."
         }
         "duplicate_seat_number" => {
-            "Uma mão tinha dois jogadores no mesmo lugar: ficou de fora porque não dava para \
-             saber a quem pertencia cada ação."
+            "A hand had two players in the same spot: it was left out because there was no \
+             way to tell who each action belonged to."
         }
         "duplicate_player_in_hand" => {
-            "Uma mão tinha o mesmo jogador listado duas vezes: ficou de fora para não contar \
-             as ações dele a dobrar."
+            "A hand had the same player listed twice: it was left out to avoid counting \
+             their actions twice."
         }
         "action_by_unseated_player" => {
-            "Uma mão tinha ações de alguém que não estava sentado à mesa: ficou de fora porque \
-             essas ações não podiam ser atribuídas com confiança."
+            "A hand had actions from someone who wasn't at the table: it was left out \
+             because those actions couldn't be attributed with confidence."
         }
         "action_order_inconsistent" => {
-            "Uma mão tinha as ações fora da ordem das ruas do jogo: ficou de fora porque a \
-             sequência da mão não era de confiar."
+            "A hand had actions out of the streets' order: it was left out because the \
+             hand's sequence couldn't be trusted."
         }
         "action_index_not_increasing" => {
-            "Uma mão tinha ações repetidas ou fora de ordem: ficou de fora porque a sequência \
-             da mão não era de confiar."
+            "A hand had repeated or out-of-order actions: it was left out because the hand's \
+             sequence couldn't be trusted."
         }
         "position_not_derived" => {
-            "Uma mão foi guardada, mas não foi possível calcular a posição de todos os \
-             jogadores: as estatísticas de posição dela podem estar incompletas."
+            "A hand was saved, but the position of every player couldn't be calculated: its \
+             position stats may be incomplete."
         }
         "no_actions" => {
-            "Uma mão foi guardada sem nenhuma ação registada: conta para o número de mãos, mas \
-             não contribui para as estatísticas de jogo."
+            "A hand was saved with no action recorded: it counts toward the hand count, but \
+             doesn't contribute to the game stats."
         }
         _ => {
-            "Uma mão teve um problema que esta versão ainda não sabe descrever em detalhe — foi \
-             contada e registada, nunca descartada em silêncio."
+            "A hand had a problem this version can't describe in detail yet — it was still \
+             counted and recorded, never silently discarded."
         }
     }
 }
