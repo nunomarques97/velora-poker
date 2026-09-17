@@ -8,6 +8,7 @@ import type {
   HudPosition,
   HudProfile,
   ImportStatus,
+  OnboardingReadinessPayload,
   Player,
   SeatTemplate,
   Session,
@@ -384,6 +385,17 @@ export async function saveSeatTemplate(
 export async function setAutoCenterEnabled(enabled: boolean): Promise<void> {
   assertTauriAvailable();
   return invoke("set_auto_center_enabled", { enabled });
+}
+
+/**
+ *  onboarding gate (): read-only, no settings write, no import, no
+ * watcher start — safe to call as often as the readiness step wants to
+ * re-check. `path` defaults to the same auto-detection Settings uses when
+ * omitted.
+ */
+export async function getOnboardingReadiness(path?: string | null): Promise<OnboardingReadinessPayload> {
+  assertTauriAvailable();
+  return invoke<OnboardingReadinessPayload>("get_onboarding_readiness", { path: path ?? null });
 }
 
 export interface TableDetectionStatus {

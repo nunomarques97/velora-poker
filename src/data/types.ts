@@ -218,3 +218,36 @@ export interface ImportStatus {
   lastImportAt: string | null;
   parserStatus: string;
 }
+
+/**
+ *  onboarding gate ( backend,  frontend). Mirrors
+ * `commands::OnboardingFolderReadiness` field-for-field — `parsedHandCount`
+ * is a real test-parse result, never the file count.
+ */
+export interface OnboardingFolderReadiness {
+  path: string | null;
+  exists: boolean;
+  handFileCount: number;
+  parsedHandCount: number;
+  message: string;
+}
+
+/** Mirrors `commands::OnboardingClientLanguageReadiness`. `checked: false` means no verdict was possible yet (no folder/file), never a guessed pass. */
+export interface OnboardingClientLanguageReadiness {
+  checked: boolean;
+  isEnglish: boolean;
+  sampleFile: string | null;
+  reason: string;
+}
+
+/** Mirrors `commands::OnboardingAutoCenterReadiness` — self-declared, PokerStars gives no way to detect this from the app. */
+export interface OnboardingAutoCenterReadiness {
+  enabled: boolean;
+}
+
+/** Mirrors `commands::OnboardingReadinessPayload`, the `get_onboarding_readiness` response. */
+export interface OnboardingReadinessPayload {
+  folder: OnboardingFolderReadiness;
+  clientLanguage: OnboardingClientLanguageReadiness;
+  autoCenter: OnboardingAutoCenterReadiness;
+}

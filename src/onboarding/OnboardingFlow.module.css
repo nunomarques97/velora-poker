@@ -11,7 +11,7 @@
 .card {
   width: 520px;
   max-width: 92vw;
-  max-height: 88vh;
+  max-height: 92vh;
   overflow-y: auto;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -119,7 +119,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 26px;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
 }
 
 .primaryButton {
@@ -283,4 +285,275 @@
   font-size: 13.5px;
   color: var(--text-secondary);
   margin-bottom: 8px;
+}
+
+/* ---  readiness gate (step 4) --- */
+
+.readinessIntro {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.readinessList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.readinessItem {
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  min-width: 0;
+}
+
+.readinessItemGreen {
+  border-color: var(--positive);
+  background: var(--positive-soft);
+}
+
+.readinessItemRed {
+  border-color: var(--negative);
+  background: var(--negative-soft);
+}
+
+.readinessItemSkipped {
+  border-color: var(--border-strong);
+  background: var(--bg-surface-alt);
+}
+
+/* Explicit neutral while the first check is in flight: not green, not red, not
+   skipped. Declared so the element never carries an "undefined" class token. */
+.readinessItemChecking {
+  border-color: var(--border-subtle);
+  background: var(--bg-surface-alt);
+}
+
+.readinessItemHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.readinessItemIcon {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+
+.readinessItemGreen .readinessItemIcon {
+  background: var(--positive);
+  color: #ffffff;
+}
+
+.readinessItemRed .readinessItemIcon {
+  background: var(--negative);
+  color: #ffffff;
+}
+
+.readinessItemSkipped .readinessItemIcon {
+  background: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.readinessItemTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.readinessItemStatusLabel {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.readinessItemGreen .readinessItemStatusLabel {
+  color: var(--positive);
+}
+
+.readinessItemRed .readinessItemStatusLabel {
+  color: var(--negative);
+}
+
+.readinessItemBody {
+  margin-top: 8px;
+  min-width: 0;
+}
+
+/* Action-failure pattern of the notes: inline, 12px, --negative. */
+.readinessErrorText {
+  font-size: 12px;
+  color: var(--negative);
+  line-height: 1.5;
+  margin-bottom: 10px;
+}
+
+.readinessDetailPath {
+  font-size: 12px;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.readinessDetailStat {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--text-primary);
+}
+
+.readinessDetailStatValue {
+  font-weight: 700;
+}
+
+.readinessDetailNote {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.skipRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.skipCost {
+  font-size: 12px;
+  color: var(--negative);
+  line-height: 1.4;
+}
+
+.skipButton {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--negative);
+  color: var(--negative);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.skipButton:hover {
+  background: var(--negative-soft);
+}
+
+.undoSkipButton {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.undoSkipButton:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.autoCenterConfirmButton {
+  margin-top: 8px;
+}
+
+.readinessActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.disabledReason {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* Final screen: what was skipped, and what it costs — never "You're ready."
+   over a check that never passed. */
+.skippedSummary {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.skippedSummaryLabel {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.skippedSummaryCost {
+  color: var(--negative);
+}
+
+/* the notes: the project's buttons carry no focus style (known debt) and a
+   new control has to bring its own. These are the controls of the readiness
+   step; the ring uses the existing --accent token, no new colour. */
+/* The main window's floor is 800×600 (src-tauri/tauri.conf.json:16-19), and the
+   readiness step is the tallest screen of the flow: at 900px and below its
+   footer landed half-cut on the card's edge (three items plus a failed check).
+   The card gives back vertical padding instead — same wide scale
+   (the notes), just its lower rungs. Last in the file on purpose: these
+   have to win over the base rules above. */
+@media (max-height: 900px) {
+  .card {
+    max-height: 96vh;
+    padding: 20px 24px 18px;
+  }
+
+  .brand {
+    margin-bottom: 12px;
+  }
+
+  .title {
+    margin-bottom: 14px;
+  }
+
+  .readinessIntro {
+    margin-bottom: 10px;
+  }
+
+  .footer {
+    margin-top: 16px;
+  }
+}
+
+.skipButton:focus-visible,
+.undoSkipButton:focus-visible,
+.primaryButton:focus-visible,
+.secondaryButton:focus-visible,
+.linkButton:focus-visible,
+.tutorialToggle:focus-visible,
+.roomButton:focus-visible,
+.hudButton:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
