@@ -329,7 +329,10 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
 
   return (
     <div className={styles.overlay}>
-      <div className={styles.card}>
+      {/*  on the readiness step the card becomes a column with a pinned
+          action row (see OnboardingFlow.module.css). Every other step keeps the
+          card's own scroll, untouched. */}
+      <div className={`${styles.card} ${step === 4 ? styles.cardPinnedFooter : ""}`}>
         <div className={styles.brand}>
           <div className={styles.mark}>V</div>
           <span>Welcome to Velora</span>
@@ -491,97 +494,99 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
 
         {step === 4 && (
           <div className={styles.stepBody}>
-            <h1 className={styles.title}>Let&apos;s make sure it works</h1>
-            <p className={styles.readinessIntro}>
-              Velora checks three things before it can trust what it shows you. Anything you skip
-              here has a real cost &mdash; it&apos;s written next to the button.
-            </p>
-
-            {readinessError && (
-              <p className={styles.readinessErrorText}>
-                Failed to check your setup: {readinessError}
+            <div className={styles.readinessScroll}>
+              <h1 className={styles.title}>Let&apos;s make sure it works</h1>
+              <p className={styles.readinessIntro}>
+                Velora checks three things before it can trust what it shows you. Anything you skip
+                here has a real cost &mdash; it&apos;s written next to the button.
               </p>
-            )}
 
-            <div className={styles.readinessList}>
-              <ReadinessItem
-                title="Hand history folder"
-                status={folderStatus}
-                skipCost={SKIP_COSTS.folder}
-                skipped={skipped.folder}
-                onSkip={() => setSkipped((s) => ({ ...s, folder: true }))}
-                onUndoSkip={() => setSkipped((s) => ({ ...s, folder: false }))}
-              >
-                {readiness ? (
-                  <>
-                    <div className={styles.readinessDetailPath}>
-                      {readiness.folder.path ?? "No folder found"}
-                    </div>
-                    <div className={styles.readinessDetailStat}>
-                      Hands read:{" "}
-                      <span className={`${styles.readinessDetailStatValue} tabular`}>
-                        {readiness.folder.parsedHandCount}
-                      </span>
-                    </div>
-                    <div className={styles.readinessDetailNote}>{readiness.folder.message}</div>
-                  </>
-                ) : (
-                  <div className={styles.readinessDetailNote}>{readinessUnavailableNote}</div>
-                )}
-              </ReadinessItem>
+              {readinessError && (
+                <p className={styles.readinessErrorText}>
+                  Failed to check your setup: {readinessError}
+                </p>
+              )}
 
-              <ReadinessItem
-                title="PokerStars client in English"
-                status={languageStatus}
-                skipCost={SKIP_COSTS.language}
-                skipped={skipped.language}
-                onSkip={() => setSkipped((s) => ({ ...s, language: true }))}
-                onUndoSkip={() => setSkipped((s) => ({ ...s, language: false }))}
-              >
-                {readiness ? (
-                  <>
-                    <div className={styles.readinessDetailNote}>{readiness.clientLanguage.reason}</div>
-                    {readiness.clientLanguage.sampleFile && (
+              <div className={styles.readinessList}>
+                <ReadinessItem
+                  title="Hand history folder"
+                  status={folderStatus}
+                  skipCost={SKIP_COSTS.folder}
+                  skipped={skipped.folder}
+                  onSkip={() => setSkipped((s) => ({ ...s, folder: true }))}
+                  onUndoSkip={() => setSkipped((s) => ({ ...s, folder: false }))}
+                >
+                  {readiness ? (
+                    <>
                       <div className={styles.readinessDetailPath}>
-                        Checked against: {readiness.clientLanguage.sampleFile}
+                        {readiness.folder.path ?? "No folder found"}
                       </div>
-                    )}
-                  </>
-                ) : (
-                  <div className={styles.readinessDetailNote}>{readinessUnavailableNote}</div>
-                )}
-              </ReadinessItem>
+                      <div className={styles.readinessDetailStat}>
+                        Hands read:{" "}
+                        <span className={`${styles.readinessDetailStatValue} tabular`}>
+                          {readiness.folder.parsedHandCount}
+                        </span>
+                      </div>
+                      <div className={styles.readinessDetailNote}>{readiness.folder.message}</div>
+                    </>
+                  ) : (
+                    <div className={styles.readinessDetailNote}>{readinessUnavailableNote}</div>
+                  )}
+                </ReadinessItem>
 
-              <ReadinessItem
-                title="Auto-Center"
-                status={autoCenterStatus}
-                skipCost={SKIP_COSTS.autoCenter}
-                skipped={skipped.autoCenter}
-                onSkip={() => setSkipped((s) => ({ ...s, autoCenter: true }))}
-                onUndoSkip={() => setSkipped((s) => ({ ...s, autoCenter: false }))}
-              >
-                {autoCenterOk ? (
-                  <div className={styles.readinessDetailNote}>Auto-Center is on.</div>
-                ) : autoCenterStatus === "checking" ? (
-                  <div className={styles.readinessDetailNote}>Checking&hellip;</div>
-                ) : (
-                  <>
-                    {AUTO_CENTER_STEPS.map((line) => (
-                      <div key={line} className={styles.readinessDetailNote}>
-                        {line}
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      className={`${styles.secondaryButton} ${styles.autoCenterConfirmButton}`}
-                      onClick={handleConfirmAutoCenter}
-                      disabled={confirmingAutoCenter}
-                    >
-                      {confirmingAutoCenter ? "Checking…" : "I've enabled it in PokerStars"}
-                    </button>
-                  </>
-                )}
-              </ReadinessItem>
+                <ReadinessItem
+                  title="PokerStars client in English"
+                  status={languageStatus}
+                  skipCost={SKIP_COSTS.language}
+                  skipped={skipped.language}
+                  onSkip={() => setSkipped((s) => ({ ...s, language: true }))}
+                  onUndoSkip={() => setSkipped((s) => ({ ...s, language: false }))}
+                >
+                  {readiness ? (
+                    <>
+                      <div className={styles.readinessDetailNote}>{readiness.clientLanguage.reason}</div>
+                      {readiness.clientLanguage.sampleFile && (
+                        <div className={styles.readinessDetailPath}>
+                          Checked against: {readiness.clientLanguage.sampleFile}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className={styles.readinessDetailNote}>{readinessUnavailableNote}</div>
+                  )}
+                </ReadinessItem>
+
+                <ReadinessItem
+                  title="Auto-Center"
+                  status={autoCenterStatus}
+                  skipCost={SKIP_COSTS.autoCenter}
+                  skipped={skipped.autoCenter}
+                  onSkip={() => setSkipped((s) => ({ ...s, autoCenter: true }))}
+                  onUndoSkip={() => setSkipped((s) => ({ ...s, autoCenter: false }))}
+                >
+                  {autoCenterOk ? (
+                    <div className={styles.readinessDetailNote}>Auto-Center is on.</div>
+                  ) : autoCenterStatus === "checking" ? (
+                    <div className={styles.readinessDetailNote}>Checking&hellip;</div>
+                  ) : (
+                    <>
+                      {AUTO_CENTER_STEPS.map((line) => (
+                        <div key={line} className={styles.readinessDetailNote}>
+                          {line}
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        className={`${styles.secondaryButton} ${styles.autoCenterConfirmButton}`}
+                        onClick={handleConfirmAutoCenter}
+                        disabled={confirmingAutoCenter}
+                      >
+                        {confirmingAutoCenter ? "Checking…" : "I've enabled it in PokerStars"}
+                      </button>
+                    </>
+                  )}
+                </ReadinessItem>
+              </div>
             </div>
 
             <div className={styles.footer}>
