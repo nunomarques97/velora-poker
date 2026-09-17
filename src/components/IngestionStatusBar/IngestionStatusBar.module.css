@@ -1,0 +1,42 @@
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 24px;
+  background: var(--negative-soft);
+  border-bottom: 1px solid var(--negative);
+  flex-shrink: 0;
+}
+
+.message {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.count {
+  font-weight: 600;
+  color: var(--negative);
+}
+
+.action {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--negative);
+  color: var(--negative);
+  border-radius: var(--radius-sm);
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.action:hover {
+  background: var(--negative);
+  color: #ffffff;
+}
+
+.action:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
