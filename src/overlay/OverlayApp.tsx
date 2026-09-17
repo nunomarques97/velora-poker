@@ -90,7 +90,52 @@ const TABLE_ID: number | null = (() => {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 })();
 
-function defaultPosition(index: number) {
+/**
+ * Same centred ellipse the backend seeds `seat_templates` with for every
+ * table size that has no hand-measured layout of its own (,
+ * `ellipse_seat_template` in `src-tauri/src/db/mod.rs:518-527`, read-only —
+ * never edit that file from here). Constants, angle convention and clamp
+ * copied verbatim so a card that has no calibrated template still opens on
+ * the ring instead of drifting from whatever the backend would have derived:
+ * offset 0 (hero) at the bottom-centre, subsequent offsets sweeping the same
+ * direction (left side next, then up and around to the right).
+ */
+const ELLIPSE_CENTER = { x: 0.364, y: 0.382 };
+const ELLIPSE_RADII = { x: 0.4, y: 0.282 };
+const ELLIPSE_START_DEG = 91.5;
+const ELLIPSE_MIN = 0.02;
+const ELLIPSE_MAX = 0.92;
+
+function ellipseSeatPosition(maxPlayersForSeat: number, seatOffset: number) {
+  const stepDeg = 360 / maxPlayersForSeat;
+  const theta = ((ELLIPSE_START_DEG + seatOffset * stepDeg) * Math.PI) / 180;
+  const x = ELLIPSE_CENTER.x + ELLIPSE_RADII.x * Math.cos(theta);
+  const y = ELLIPSE_CENTER.y + ELLIPSE_RADII.y * Math.sin(theta);
+  return {
+    x: Math.min(Math.max(x, ELLIPSE_MIN), ELLIPSE_MAX),
+    y: Math.min(Math.max(y, ELLIPSE_MIN), ELLIPSE_MAX),
+  };
+}
+
+/**
+ * The position a card opens at when nothing else has claimed one yet
+ * (, the notes a known issue / product-profile inacceptable #4).
+ * Not the whole precedence chain by itself — see the comment at this
+ * function's call sites for the full order — just the last two links:
+ * derive a ring position from `seatOffset` + `maxPlayersForSeat` when both
+ * are known, matching the backend's ellipse convention (); fall back to
+ * the stacked grid only when one of them is `null` (no hero seat resolved
+ * for this hand, or no table size read yet) — the one case a seat-based
+ * layout genuinely cannot answer.
+ */
+function defaultPosition(
+  index: number,
+  seatOffset: number | null | undefined,
+  maxPlayersForSeat: number | null | undefined,
+) {
+  if (seatOffset != null && maxPlayersForSeat != null && maxPlayersForSeat > 0) {
+    return ellipseSeatPosition(maxPlayersForSeat, seatOffset);
+  }
   const col = index % DEFAULT_COLS_PER_ROW;
   const row = Math.floor(index / DEFAULT_COLS_PER_ROW);
   return {
@@ -228,7 +273,21 @@ function TableOverlay({ tableId }: { tableId: number }) {
             // own card kept landing in the wrong one.
             const offsetKey = player.seatOffset != null ? String(player.seatOffset) : null;
             const fromTemplate = autoCenter && offsetKey ? seatMap[offsetKey] : undefined;
-            next[player.id] = fromTemplate ?? manual[player.id] ?? next[player.id] ?? defaultPosition(index);
+            // Precedence (/; a user's own drag always wins in the end —
+            // product-profile priority 8, reversibility — because a drag
+            // immediately writes `manual`/a seat template and both outrank
+            // this on the very next refresh):
+            //   1. `fromTemplate`   — Auto-Center seat template (calibrated or backend-derived)
+            //   2. `manual[...]`    — a position the user dragged and saved for this player
+            //   3. `next[...]`      — whatever this card is already showing on screen
+            //   4. ellipse (inside `defaultPosition`) — derived from seatOffset + maxPlayers,
+            //      same convention as the backend's `ellipse_seat_template` ()
+            //   5. grid (inside `defaultPosition`) — only when seatOffset or maxPlayers is null
+            next[player.id] =
+              fromTemplate ??
+              manual[player.id] ??
+              next[player.id] ??
+              defaultPosition(index, player.seatOffset, activeMaxPlayers);
           });
           return next;
         });
@@ -546,7 +605,7 @@ function TableOverlay({ tableId }: { tableId: number }) {
       {!hidden &&
         profile &&
         players.map((player, index) => {
-          const pos = positions[player.id] ?? defaultPosition(index);
+          const pos = positions[player.id] ?? defaultPosition(index, player.seatOffset, maxPlayers);
           return (
             <div
               key={player.id}
