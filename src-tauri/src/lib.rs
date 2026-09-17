@@ -119,6 +119,8 @@ pub fn run() {
             commands::get_table_detection_status,
             commands::get_diagnostics_report,
             commands::get_onboarding_readiness,
+            commands::get_ingestion_health,
+            commands::get_app_version,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();

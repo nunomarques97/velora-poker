@@ -663,21 +663,68 @@ pub fn record_import_problems(
     Ok(())
 }
 
-/// `(severity, code, count, most recent detail)` for every distinct finding,
-/// worst first. Drives the Settings → Diagnostics integrity section.
+/// `(severity, code, count, most recent detail, first detected_at, last
+/// detected_at)` for every distinct finding, worst first. Drives the
+/// Settings → Diagnostics integrity section and `commands::ingestion_health`
+/// (/) — `first_seen_at`/`last_seen_at` are `MIN`/`MAX(detected_at)` so a
+/// restart never loses when a code first/last showed up, unlike an in-memory
+/// counter.
 pub fn import_problem_summary(
     conn: &Connection,
-) -> rusqlite::Result<Vec<(String, String, i64, String)>> {
+) -> rusqlite::Result<Vec<(String, String, i64, String, String, String)>> {
     let mut stmt = conn.prepare(
-        "SELECT severity, code, COUNT(*) AS n, MAX(detail)
+        "SELECT severity, code, COUNT(*) AS n, MAX(detail), MIN(detected_at), MAX(detected_at)
            FROM import_problems
           GROUP BY severity, code
           ORDER BY CASE severity WHEN 'reject' THEN 0 ELSE 1 END, n DESC",
     )?;
     let rows = stmt.query_map([], |row| {
-        Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        Ok((
+            row.get(0)?,
+            row.get(1)?,
+            row.get(2)?,
+            row.get(3)?,
+            row.get(4)?,
+            row.get(5)?,
+        ))
     })?;
     rows.collect::<Result<Vec<_>, _>>()
+}
+
+/// How many *distinct hands* have at least one recorded finding of `severity`
+/// (`"reject"` or `"warn"`). Deliberately `COUNT(DISTINCT hand_id)`, not
+/// `COUNT(*)`: a hand can carry more than one problem row of the same
+/// severity, and `commands::ingestion_health`'s `handsRejected`/
+/// `handsWithWarnings` must count hands, not problem rows (, criterion 1
+/// — read from `import_problems`, never from an in-memory counter that a
+/// restart would lose).
+pub fn import_problem_hand_count(conn: &Connection, severity: &str) -> rusqlite::Result<i64> {
+    conn.query_row(
+        "SELECT COUNT(DISTINCT hand_id) FROM import_problems WHERE severity = ?1",
+        params![severity],
+        |row| row.get(0),
+    )
+}
+
+/// The most recent timestamp any import activity happened — either a hand
+/// landing in `hands` or a finding landing in `import_problems` (a rejected
+/// hand never reaches `hands`, so relying on `hands.imported_at` alone would
+/// make a session that only produced rejects look like it never ran).
+/// `None` when the database has never seen either.
+pub fn last_import_activity_at(conn: &Connection) -> rusqlite::Result<Option<String>> {
+    let from_hands: Option<String> =
+        conn.query_row("SELECT MAX(imported_at) FROM hands", [], |row| row.get(0))?;
+    let from_problems: Option<String> = conn.query_row(
+        "SELECT MAX(detected_at) FROM import_problems",
+        [],
+        |row| row.get(0),
+    )?;
+    Ok(match (from_hands, from_problems) {
+        (Some(a), Some(b)) => Some(if a >= b { a } else { b }),
+        (Some(a), None) => Some(a),
+        (None, Some(b)) => Some(b),
+        (None, None) => None,
+    })
 }
 
 /// Live integrity counters, recomputed from the data rather than remembered, so

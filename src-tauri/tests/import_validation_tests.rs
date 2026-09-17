@@ -106,7 +106,9 @@ fn a_rejected_hand_is_not_stored_silently() {
 
     let problems = db::import_problem_summary(&conn).expect("summary");
     assert!(
-        problems.iter().any(|(sev, code, _, _)| sev == "reject" && code == "no_dealt_in_players"),
+        problems
+            .iter()
+            .any(|(sev, code, _, _, _, _)| sev == "reject" && code == "no_dealt_in_players"),
         "the rejection must be recorded where diagnostics can read it: {problems:?}"
     );
 }

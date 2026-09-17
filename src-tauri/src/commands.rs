@@ -1349,7 +1349,7 @@ pub fn get_diagnostics_report(
         }
         Ok(problems) => {
             out.push_str("Import integrity gate findings (code x count):\n");
-            for (severity, code, count, detail) in problems {
+            for (severity, code, count, detail, _first_seen_at, _last_seen_at) in problems {
                 out.push_str(&format!(
                     "  [{severity}] {code} x{count} — most recent: {detail}\n"
                 ));
@@ -1557,4 +1557,190 @@ pub fn get_diagnostics_report(
     ));
 
     Ok(out)
+}
+
+// ---------------------------------------------------------------------
+// Ingestion health + app version
+// ---------------------------------------------------------------------
+
+/// One import-integrity finding, ready for the UI (/): the raw
+/// severity/code/detail the parser produced, plus a product-language
+/// `explanation` and when it was first/last seen.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IngestionProblemPayload {
+    pub severity: String,
+    pub code: String,
+    pub detail: String,
+    pub explanation: String,
+    pub count: i64,
+    pub first_seen_at: String,
+    pub last_seen_at: String,
+}
+
+/// `get_ingestion_health`'s payload (, work unit 2). Every field is
+/// computed from `hands`/`import_problems` on every call — nothing here is
+/// an in-memory counter, so a restart never loses or resets it.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IngestionHealthPayload {
+    pub hands_imported: i64,
+    pub hands_rejected: i64,
+    pub hands_with_warnings: i64,
+    pub problems: Vec<IngestionProblemPayload>,
+    pub last_import_at: Option<String>,
+}
+
+/// Product-language explanation for one import-integrity code: what
+/// failed and what the user loses, without parser vocabulary in the visible
+/// text. A code this map has not caught up with still gets an honest,
+/// non-empty sentence — never a blank string (product-profile priority 4,
+/// "honesty about errors").
+fn problem_explanation(code: &str) -> &'static str {
+    match code {
+        "missing_hand_id" => {
+            "Uma mão chegou sem identificador único: não dá para saber se já tinha sido \
+             contada, por isso ficou de fora das estatísticas."
+        }
+        "missing_played_at" => {
+            "Uma mão chegou sem data/hora: ficou de fora das estatísticas porque não é \
+             possível situá-la na sessão."
+        }
+        "no_dealt_in_players" => {
+            "Uma mão não trouxe nenhum jogador sentado à mesa: ficou de fora porque não há a \
+             quem atribuir as estatísticas dela."
+        }
+        "missing_max_seats" => {
+            "Uma mão chegou sem o tamanho da mesa: ficou de fora porque as posições dos \
+             jogadores não podiam ser calculadas com confiança."
+        }
+        "button_seat_out_of_range" => {
+            "Uma mão tinha o dealer button num lugar que não existe nessa mesa: ficou de fora \
+             para não estragar as posições de todos os jogadores dela."
+        }
+        "seat_out_of_range" => {
+            "Uma mão tinha um jogador sentado num lugar que não existe nessa mesa: ficou de \
+             fora para não estragar as posições de todos os jogadores dela."
+        }
+        "more_players_than_seats" => {
+            "Uma mão tinha mais jogadores do que lugares na mesa: ficou de fora porque os \
+             dados não batiam certo."
+        }
+        "duplicate_seat_number" => {
+            "Uma mão tinha dois jogadores no mesmo lugar: ficou de fora porque não dava para \
+             saber a quem pertencia cada ação."
+        }
+        "duplicate_player_in_hand" => {
+            "Uma mão tinha o mesmo jogador listado duas vezes: ficou de fora para não contar \
+             as ações dele a dobrar."
+        }
+        "action_by_unseated_player" => {
+            "Uma mão tinha ações de alguém que não estava sentado à mesa: ficou de fora porque \
+             essas ações não podiam ser atribuídas com confiança."
+        }
+        "action_order_inconsistent" => {
+            "Uma mão tinha as ações fora da ordem das ruas do jogo: ficou de fora porque a \
+             sequência da mão não era de confiar."
+        }
+        "action_index_not_increasing" => {
+            "Uma mão tinha ações repetidas ou fora de ordem: ficou de fora porque a sequência \
+             da mão não era de confiar."
+        }
+        "position_not_derived" => {
+            "Uma mão foi guardada, mas não foi possível calcular a posição de todos os \
+             jogadores: as estatísticas de posição dela podem estar incompletas."
+        }
+        "no_actions" => {
+            "Uma mão foi guardada sem nenhuma ação registada: conta para o número de mãos, mas \
+             não contribui para as estatísticas de jogo."
+        }
+        _ => {
+            "Uma mão teve um problema que esta versão ainda não sabe descrever em detalhe — foi \
+             contada e registada, nunca descartada em silêncio."
+        }
+    }
+}
+
+/// Pure computation behind `get_ingestion_health`: read-only (no writes, no
+/// import, no watcher), so it can be called as often as Settings/the status
+/// line want without side effects. Every number comes from `hands`/
+/// `import_problems` on this call — `handsRejected`/`handsWithWarnings` are
+/// never derived from an in-memory counter, which would reset on restart
+/// (, criterion 1).
+pub fn ingestion_health(conn: &rusqlite::Connection) -> Result<IngestionHealthPayload, String> {
+    let hands_imported = db::count_hands(conn).map_err(|e| e.to_string())?;
+    let hands_rejected =
+        db::import_problem_hand_count(conn, "reject").map_err(|e| e.to_string())?;
+    let hands_with_warnings =
+        db::import_problem_hand_count(conn, "warn").map_err(|e| e.to_string())?;
+    let last_import_at = db::last_import_activity_at(conn).map_err(|e| e.to_string())?;
+
+    let rows = db::import_problem_summary(conn).map_err(|e| e.to_string())?;
+    let problems = rows
+        .into_iter()
+        .map(
+            |(severity, code, count, detail, first_seen_at, last_seen_at)| IngestionProblemPayload {
+                explanation: problem_explanation(&code).to_string(),
+                severity,
+                code,
+                detail,
+                count,
+                first_seen_at,
+                last_seen_at,
+            },
+        )
+        .collect();
+
+    Ok(IngestionHealthPayload {
+        hands_imported,
+        hands_rejected,
+        hands_with_warnings,
+        problems,
+        last_import_at,
+    })
+}
+
+/// Tauri wrapper around `ingestion_health`: read-only status the Settings
+/// "Ingestão" section and the main-window status line () poll on demand.
+#[tauri::command]
+pub fn get_ingestion_health(state: State<AppState>) -> Result<IngestionHealthPayload, String> {
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    ingestion_health(&conn)
+}
+
+/// `get_app_version`'s payload: the build's own version string plus
+/// which optional, ToS-sensitive features were compiled in.
+/// `features` is empty on a distributed build — the only place a tester can
+/// tell the two builds apart without asking anyone ( consumes this).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppVersionPayload {
+    pub version: String,
+    pub features: Vec<String>,
+}
+
+/// Pure computation behind `get_app_version`. `features` is built from the
+/// same `#[cfg(feature = ...)]` gates `classification`/`description_rules`
+/// already use to decide what to compute, so it can never claim a feature is
+/// on when the gate that actually produces its output is compiled out.
+pub fn app_version() -> AppVersionPayload {
+    // `mut` goes unused in a `--no-default-features` build, where neither
+    // `push` below compiles in — that is the distributed build reporting an
+    // empty list exactly as intended, not a mistake to silence differently.
+    #[allow(unused_mut)]
+    let mut features = Vec::new();
+    #[cfg(feature = "auto-classification")]
+    features.push("auto-classification".to_string());
+    #[cfg(feature = "strategic-analysis")]
+    features.push("strategic-analysis".to_string());
+
+    AppVersionPayload {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        features,
+    }
+}
+
+#[tauri::command]
+pub fn get_app_version() -> AppVersionPayload {
+    app_version()
 }
