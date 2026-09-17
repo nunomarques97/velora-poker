@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
-import type { AppSettings, HudProfile, ImportStatus } from "../data/types";
-import type { ClassificationRule } from "../data/api";
+import type { AppSettings, HudProfile, ImportStatus, IngestionHealth } from "../data/types";
+import type { AppVersion, ClassificationRule } from "../data/api";
 import {
   DesktopAppRequiredError,
   getActiveHudProfile,
+  getAppVersion,
   getClassificationRules,
   getAppSettings,
   getDiagnosticsReport,
   getImportStatus,
+  getIngestionHealth,
   getTableDetectionStatus,
   resetOnboarding,
   setAutoCenterEnabled,
@@ -15,6 +17,9 @@ import {
   setHudProfileMinHands,
 } from "../data/api";
 import styles from "./SettingsView.module.css";
+
+/** Anchor id the main window's persistent status line scrolls to (/). */
+export const INGESTION_SECTION_ID = "ingestion-section";
 
 const SETTINGS_ITEMS = [
   {
@@ -26,6 +31,25 @@ const SETTINGS_ITEMS = [
 type StatusState =
   | { status: "loading" }
   | { status: "ready"; data: ImportStatus }
+  | { status: "unavailable"; message: string }
+  | { status: "error"; message: string };
+
+type IngestionState =
+  | { status: "loading" }
+  | { status: "ready"; data: IngestionHealth }
+  | { status: "unavailable"; message: string }
+  | { status: "error"; message: string };
+
+/**
+ * /. The same discriminated union every other view uses (the notes),
+ * and here for a sharper reason: this one state drives two sections ("About"
+ * and "Player Classification"), so swallowing a failed `get_app_version` would
+ * leave both of them stuck in "Loading…" with nothing to read — the one thing
+ * the notes forbids outright ("nunca engolir um erro").
+ */
+type VersionState =
+  | { status: "loading" }
+  | { status: "ready"; data: AppVersion }
   | { status: "unavailable"; message: string }
   | { status: "error"; message: string };
 
@@ -76,6 +100,19 @@ function formatParserStatus(status: string): string {
   }
 }
 
+/**
+ * the single line a tester reads to know which build is running.
+ * `features` is empty on the distributed build (`auto-classification`/
+ * `strategic-analysis` compiled out) — that emptiness is the whole signal,
+ * not an error state, so it renders as "build padrão" rather than a blank.
+ */
+function formatBuildLabel(version: AppVersion): string {
+  if (version.features.length === 0) {
+    return `Velora ${version.version} - build padrão`;
+  }
+  return `Velora ${version.version} - build pessoal (${version.features.join(", ")})`;
+}
+
 export function SettingsView() {
   const [state, setState] = useState<StatusState>({ status: "loading" });
   const [pathInput, setPathInput] = useState("");
@@ -93,10 +130,13 @@ export function SettingsView() {
   const [savingAutoCenter, setSavingAutoCenter] = useState(false);
 
   const [rules, setRules] = useState<ClassificationRule[] | null>(null);
+  const [version, setVersion] = useState<VersionState>({ status: "loading" });
 
   const [copyingDiagnostics, setCopyingDiagnostics] = useState(false);
   const [diagnosticsStatus, setDiagnosticsStatus] = useState<string | null>(null);
   const [diagnosticsText, setDiagnosticsText] = useState<string | null>(null);
+
+  const [ingestion, setIngestion] = useState<IngestionState>({ status: "loading" });
 
   function load() {
     getImportStatus()
@@ -109,6 +149,16 @@ export function SettingsView() {
           setState({ status: "unavailable", message: err.message });
         } else {
           setState({ status: "error", message: String(err) });
+        }
+      });
+
+    getIngestionHealth()
+      .then((data) => setIngestion({ status: "ready", data }))
+      .catch((err: unknown) => {
+        if (err instanceof DesktopAppRequiredError) {
+          setIngestion({ status: "unavailable", message: err.message });
+        } else {
+          setIngestion({ status: "error", message: String(err) });
         }
       });
 
@@ -126,6 +176,16 @@ export function SettingsView() {
     getClassificationRules()
       .then(setRules)
       .catch(() => setRules([]));
+
+    getAppVersion()
+      .then((data) => setVersion({ status: "ready", data }))
+      .catch((err: unknown) => {
+        if (err instanceof DesktopAppRequiredError) {
+          setVersion({ status: "unavailable", message: err.message });
+        } else {
+          setVersion({ status: "error", message: String(err) });
+        }
+      });
   }
 
   useEffect(() => {
@@ -216,11 +276,37 @@ export function SettingsView() {
     }
   }
 
+  // / the single source of truth for "does this build classify players
+  // at all". The rule rows still exist in SQLite in a distributed build —
+  // `list_rules` reads the table regardless of the feature — so a non-empty
+  // `rules` proves nothing; only the compiled feature list does
+  // (`classification::resolve_for_player` is the gate).
+  const autoClassification =
+    version.status === "ready" && version.data.features.includes("auto-classification");
+
   return (
     <div>
       <div className="view-header">
         <h1>Settings</h1>
         <p>Your poker room, hand history folder, HUD threshold and table detection.</p>
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>About</div>
+        {version.status === "loading" && <div className={styles.stateBox}>Loading&hellip;</div>}
+        {version.status === "ready" && (
+          <div className={styles.statusValue}>{formatBuildLabel(version.data)}</div>
+        )}
+        {version.status === "unavailable" && (
+          <div className={styles.stateBox}>{version.message}</div>
+        )}
+        {version.status === "error" && (
+          <div className={styles.stateBox}>
+            Failed to load build version: {version.message}. Velora is running — only this line
+            could not be read, so the version and build type stay unknown until you reopen
+            Settings.
+          </div>
+        )}
       </div>
 
       <div className={styles.section}>
@@ -305,6 +391,77 @@ export function SettingsView() {
         )}
       </div>
 
+      <div className={styles.section} id={INGESTION_SECTION_ID}>
+        <div className={styles.sectionTitle}>Ingestion</div>
+        <p className={styles.ruleIntro}>
+          Every hand history line the parser could not turn into a tracked hand is counted here,
+          with why — never dropped without a trace.
+        </p>
+
+        {ingestion.status === "loading" && <div className={styles.stateBox}>Loading&hellip;</div>}
+        {ingestion.status === "unavailable" && (
+          <div className={styles.stateBox}>{ingestion.message}</div>
+        )}
+        {ingestion.status === "error" && (
+          <div className={styles.stateBox}>Failed to load ingestion health: {ingestion.message}</div>
+        )}
+
+        {ingestion.status === "ready" && (
+          <>
+            <div className={styles.statusGrid}>
+              <div className={styles.statusCell}>
+                <span className={styles.statusLabel}>Hands Read</span>
+                <span className={`${styles.statusValue} tabular`}>
+                  {ingestion.data.handsImported.toLocaleString()}
+                </span>
+              </div>
+              <div className={styles.statusCell}>
+                <span className={styles.statusLabel}>Hands Rejected</span>
+                <span className={`${styles.statusValue} tabular`}>
+                  {ingestion.data.handsRejected.toLocaleString()}
+                </span>
+              </div>
+              <div className={styles.statusCell}>
+                <span className={styles.statusLabel}>Hands With Warnings</span>
+                <span className={`${styles.statusValue} tabular`}>
+                  {ingestion.data.handsWithWarnings.toLocaleString()}
+                </span>
+              </div>
+              <div className={styles.statusCell}>
+                <span className={styles.statusLabel}>Last Import Activity</span>
+                <span className={styles.statusValue}>{formatDate(ingestion.data.lastImportAt)}</span>
+              </div>
+            </div>
+
+            {ingestion.data.problems.length === 0 ? (
+              <div className={styles.ingestionOk}>Nenhuma mão ficou por ler.</div>
+            ) : (
+              <div className={styles.problemList}>
+                {ingestion.data.problems.map((problem) => (
+                  <div
+                    key={`${problem.severity}:${problem.code}`}
+                    className={styles.problemRow}
+                    data-severity={problem.severity}
+                  >
+                    <span className={styles.problemSeverity}>
+                      {problem.severity === "reject" ? "Rejected" : "Warning"}
+                    </span>
+                    <div className={styles.problemBody}>
+                      <div className={styles.problemExplanation}>{problem.explanation}</div>
+                      <div className={styles.problemMeta}>
+                        {problem.count.toLocaleString()} hand{problem.count === 1 ? "" : "s"}
+                        {" · since "}
+                        {formatDate(problem.firstSeenAt)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
       <div className={styles.section}>
         <div className={styles.sectionTitle}>HUD</div>
         {hudProfile ? (
@@ -331,8 +488,10 @@ export function SettingsView() {
                     unrelated numbers under one name. */}
                 <div className={styles.hudHint} style={{ marginTop: 4 }}>
                   Stat values on a HUD card fade while a player has fewer hands than
-                  this, and reach full strength at it. Purely visual — archetype labels
-                  come from the rules below and their own hand minimums.
+                  this, and reach full strength at it.{" "}
+                  {autoClassification
+                    ? "Purely visual — archetype labels come from the rules below and their own hand minimums."
+                    : "Purely visual — it changes no label and no colour on the card."}
                 </div>
               </span>
               <input
@@ -356,58 +515,92 @@ export function SettingsView() {
 
       <div className={styles.section}>
         <div className={styles.sectionTitle}>Player Classification</div>
-        <p className={styles.ruleIntro}>
-          Every tracked opponent is checked against these rules in order, top to bottom. The first
-          one that matches decides the label and colour on their HUD card.
-        </p>
 
-        {rules === null && <div className={styles.stateBox}>Loading&hellip;</div>}
-        {rules !== null && rules.length === 0 && (
-          <div className={styles.stateBox}>Classification rules are unavailable.</div>
+        {version.status === "loading" && <div className={styles.stateBox}>Loading&hellip;</div>}
+
+        {version.status === "unavailable" && (
+          <div className={styles.stateBox}>{version.message}</div>
         )}
 
-        {rules !== null && rules.length > 0 && (
-          <>
-            <div className={styles.ruleList}>
-              {rules.map((rule) => {
-                const clauses = ruleClauses(rule);
-                return (
-                  <div key={rule.id} className={styles.ruleRow}>
-                    <span className={styles.ruleSwatch} style={{ background: rule.color }} />
-                    <div className={styles.ruleBody}>
-                      <div className={styles.ruleLabel}>{rule.label}</div>
-                      {clauses.length > 0 ? (
-                        <div className={styles.ruleCriteria}>
-                          {clauses.length > 1
-                            ? `All of: ${clauses.join(", ")}`
-                            : clauses[0]}
-                          , on at least {rule.minHands} tracked hands.
-                        </div>
-                      ) : (
-                        <div className={styles.ruleDefault}>
-                          No stat thresholds at all — this rule sets none, so it matches on hand
-                          count alone and catches everyone the rules above did not. Anyone with at
-                          least {rule.minHands} tracked hands lands here, including tight, passive
-                          players who never reach the aggression floor above. It is a fallback
-                          bucket, not a detection of recreational play.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+        {version.status === "error" && (
+          <div className={styles.stateBox}>
+            Failed to load build version: {version.message}. Without it Velora cannot say whether
+            automatic classification is compiled into this build, so no rule table is shown here
+            — it would be a promise this build may not keep. The colour you set per player from
+            their profile applies either way, and stats are unaffected.
+          </div>
+        )}
 
-            <p className={styles.ruleNote}>
-              Below a rule&apos;s hand minimum nothing matches at all, and the player stays Unknown
-              with no archetype shown. A per-player colour override also wins outright: an
-              overridden player shows that colour and its label instead of any rule&apos;s.
+        {version.status === "ready" && !autoClassification && (
+          <>
+            <p className={styles.ruleIntro}>
+              Automatic classification is not part of this build (PokerStars ToS compliance) — the rule table that would decide a label and colour automatically plays no
+              part in what a HUD card shows here.
             </p>
-            <p className={styles.ruleNote}>
-              These hand minimums are not the &quot;Min hands&quot; field on the HUD Profiles page.
-              That one is a display setting: it fades stat values on thin samples and changes no
-              label. The minimums above are the only sample gate on classification.
+            <div className={styles.stateBox}>
+              HUD colours and labels in this build come only from the colour you set per player —
+              open their profile and choose Player Color. Stats always show real numbers regardless,
+              and notes you write are never affected by this.
+            </div>
+          </>
+        )}
+
+        {version.status === "ready" && autoClassification && (
+          <>
+            <p className={styles.ruleIntro}>
+              Every tracked opponent is checked against these rules in order, top to bottom. The
+              first one that matches decides the label and colour on their HUD card.
             </p>
+
+            {rules === null && <div className={styles.stateBox}>Loading&hellip;</div>}
+            {rules !== null && rules.length === 0 && (
+              <div className={styles.stateBox}>Classification rules are unavailable.</div>
+            )}
+
+            {rules !== null && rules.length > 0 && (
+              <>
+                <div className={styles.ruleList}>
+                  {rules.map((rule) => {
+                    const clauses = ruleClauses(rule);
+                    return (
+                      <div key={rule.id} className={styles.ruleRow}>
+                        <span className={styles.ruleSwatch} style={{ background: rule.color }} />
+                        <div className={styles.ruleBody}>
+                          <div className={styles.ruleLabel}>{rule.label}</div>
+                          {clauses.length > 0 ? (
+                            <div className={styles.ruleCriteria}>
+                              {clauses.length > 1
+                                ? `All of: ${clauses.join(", ")}`
+                                : clauses[0]}
+                              , on at least {rule.minHands} tracked hands.
+                            </div>
+                          ) : (
+                            <div className={styles.ruleDefault}>
+                              No stat thresholds at all — this rule sets none, so it matches on hand
+                              count alone and catches everyone the rules above did not. Anyone with
+                              at least {rule.minHands} tracked hands lands here, including tight,
+                              passive players who never reach the aggression floor above. It is a
+                              fallback bucket, not a detection of recreational play.
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <p className={styles.ruleNote}>
+                  Below a rule&apos;s hand minimum nothing matches at all, and the player stays
+                  Unknown with no archetype shown. A per-player colour override also wins outright:
+                  an overridden player shows that colour and its label instead of any rule&apos;s.
+                </p>
+                <p className={styles.ruleNote}>
+                  These hand minimums are not the &quot;Min hands&quot; field on the HUD Profiles
+                  page. That one is a display setting: it fades stat values on thin samples and
+                  changes no label. The minimums above are the only sample gate on classification.
+                </p>
+              </>
+            )}
           </>
         )}
       </div>

@@ -186,7 +186,20 @@ export function PlayerHudCard({
 
   const pages = profile.statPages.length > 0 ? profile.statPages : [];
   const activePage = pages[pageIndex] ?? pages[0];
-  const label = classification?.label ?? "Unknown";
+  // / `resolve_for_player` already decided what may be shown (same
+  // contract JivaroHudCard's `tint` reads). A manual override always carries
+  // `isOverride`; the automatic archetype only ever arrives when this build
+  // has `auto-classification` compiled in — otherwise it comes back as the
+  // neutral, build-level "unavailable" result, and repeating that full
+  // sentence next to every player's name would be noise, not information.
+  // A genuine "Unknown" (available, no rule matched, or below its own
+  // min_hands) still renders, same as before.
+  const label =
+    classification && (classification.isOverride || classification.classification !== "unknown")
+      ? classification.label
+      : classification?.available
+        ? classification.label
+        : null;
   const statConfidence = sampleConfidence(player.hands, profile.minHands);
 
   return (
@@ -239,7 +252,7 @@ export function PlayerHudCard({
           <span className={styles.name} title={player.name}>
             {player.name}
           </span>
-          <span className={styles.classificationLabel}>{label}</span>
+          {label && <span className={styles.classificationLabel}>{label}</span>}
         </div>
 
         {player.snapshot ? (

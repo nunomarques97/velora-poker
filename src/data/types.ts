@@ -220,6 +220,38 @@ export interface ImportStatus {
 }
 
 /**
+ * One import-integrity finding, mirrors `commands::IngestionProblemPayload`
+ * (/). `severity` is `"reject"` or `"warn"`; `count` and the
+ * `firstSeenAt`/`lastSeenAt` bracket are aggregated across every hand that hit
+ * this exact `code`, recomputed from `import_problems` on every call — never
+ * an in-memory counter that a restart could lose or reset.
+ */
+export interface IngestionProblem {
+  severity: string;
+  code: string;
+  detail: string;
+  explanation: string;
+  count: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
+/**
+ * Mirrors `commands::IngestionHealthPayload`, the `get_ingestion_health`
+ * response (/). Every count is a real, always-present number computed
+ * from `hands`/`import_problems` — zero is a genuine "nothing rejected", not
+ * a placeholder. `lastImportAt` is the only nullable field: `null` means no
+ * import activity (hand or problem) has ever been recorded.
+ */
+export interface IngestionHealth {
+  handsImported: number;
+  handsRejected: number;
+  handsWithWarnings: number;
+  problems: IngestionProblem[];
+  lastImportAt: string | null;
+}
+
+/**
  *  onboarding gate ( backend,  frontend). Mirrors
  * `commands::OnboardingFolderReadiness` field-for-field — `parsedHandCount`
  * is a real test-parse result, never the file count.

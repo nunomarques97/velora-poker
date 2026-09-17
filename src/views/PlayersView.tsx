@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Player } from "../data/types";
+import type { ClassificationResult, Player } from "../data/types";
 import { DesktopAppRequiredError, getPlayersPage, onHandsImported } from "../data/api";
 import { NO_OPPORTUNITY } from "../hud/statFormat";
 import styles from "./PlayersView.module.css";
@@ -8,6 +8,28 @@ import styles from "./PlayersView.module.css";
  * rendered as an em dash rather than a fabricated 0%. */
 function formatPct(value: number | null): string {
   return value === null ? NO_OPPORTUNITY : `${value}%`;
+}
+
+/**
+ * The archetype this row is allowed to show, or `null` when there is none to
+ * show. Same gate as `JivaroHudCard`'s `tint` and `PlayerHudCard`'s label, for
+ * the same two reasons (, the notes and §7.5):
+ * - `available: false` — this build has no automatic classifier and the player
+ *   has no manual override, so the backend's label is the build-level sentence
+ *   "Classification unavailable in this build"; repeating it on thousands of
+ *   rows says nothing about any player. Settings and the profile drawer say it
+ *   once, where it belongs.
+ * - a genuine `unknown` — available, but below a rule's own hand minimum or no
+ *   rule matched. A grey "Unknown" chip is a badge pretending to be a result;
+ *   the hands column already shows the sample, and the drawer explains it.
+ * A manual override always arrives with `isOverride` and always shows.
+ */
+function shownClassification(
+  classification: ClassificationResult | undefined,
+): ClassificationResult | null {
+  if (!classification || !classification.available) return null;
+  if (!classification.isOverride && classification.classification === "unknown") return null;
+  return classification;
 }
 
 interface PlayersViewProps {
@@ -126,7 +148,9 @@ export function PlayersView({ onSelectPlayer }: PlayersViewProps) {
             <span>3-Bet</span>
             <span>Notes</span>
           </div>
-          {state.players.map((player) => (
+          {state.players.map((player) => {
+            const shown = shownClassification(player.classification);
+            return (
             <button
               key={player.id}
               type="button"
@@ -136,11 +160,7 @@ export function PlayersView({ onSelectPlayer }: PlayersViewProps) {
               <span className={styles.playerCell}>
                 <span
                   className={styles.avatar}
-                  style={
-                    player.classification
-                      ? { boxShadow: `0 0 0 2px ${player.classification.color}` }
-                      : undefined
-                  }
+                  style={shown ? { boxShadow: `0 0 0 2px ${shown.color}` } : undefined}
                 >
                   {player.name.slice(0, 2).toUpperCase()}
                 </span>
@@ -148,12 +168,9 @@ export function PlayersView({ onSelectPlayer }: PlayersViewProps) {
                   <span className={styles.name} title={player.name}>
                     {player.name}
                   </span>
-                  {player.classification && (
-                    <span
-                      className={styles.classificationChip}
-                      style={{ color: player.classification.color }}
-                    >
-                      {player.classification.label}
+                  {shown && (
+                    <span className={styles.classificationChip} style={{ color: shown.color }}>
+                      {shown.label}
                     </span>
                   )}
                 </span>
@@ -168,7 +185,8 @@ export function PlayersView({ onSelectPlayer }: PlayersViewProps) {
               </span>
               <span className={styles.note}>{player.note ?? ""}</span>
             </button>
-          ))}
+            );
+          })}
         </div>
       )}
 

@@ -33,6 +33,15 @@ export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: Player
   const exploits = descriptions.filter((d) => d.category === "exploit");
   const [saving, setSaving] = useState(false);
   const classification = player.classification;
+  // /, same gate as PlayersView and the HUD cards: an archetype may be
+  // shown only when this build produced one (a manual override, or an
+  // automatic match). `available: false` is the build having no classifier at
+  // all; a genuine `unknown` is the classifier having nothing to say yet. The
+  // three cases read differently below, and only the first paints a colour.
+  const hasArchetype =
+    !!classification &&
+    classification.available &&
+    (classification.isOverride || classification.classification !== "unknown");
 
   // Draft of the note being typed. Committed on blur — same auto-save shape as
   // the `minHands` input in HudProfilesView, no explicit Save button.
@@ -95,7 +104,11 @@ export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: Player
           <div className={styles.identity}>
             <div
               className={styles.avatar}
-              style={classification ? { boxShadow: `0 0 0 2px ${classification.color}` } : undefined}
+              style={
+                hasArchetype && classification
+                  ? { boxShadow: `0 0 0 2px ${classification.color}` }
+                  : undefined
+              }
             >
               {player.name.slice(0, 2).toUpperCase()}
             </div>
@@ -117,6 +130,18 @@ export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: Player
             <div className={styles.descriptionEmpty}>No classification data.</div>
           ) : !classification.available ? (
             <div className={styles.descriptionEmpty}>Classification unavailable in this build.</div>
+          ) : !hasArchetype ? (
+            /* Available, but nothing matched: below a rule's own hand minimum, or
+               no rule covers these stats. Said in words instead of a grey
+               "Unknown" badge, so it can never be read as this build's
+               "unavailable" state — the two are different facts (DESIGN.md
+               §7.4 vs §7.5). */
+            <div className={styles.descriptionEmpty}>
+              No archetype yet — {player.hands.toLocaleString()} tracked hand
+              {player.hands === 1 ? "" : "s"} is under every rule&apos;s own hand minimum, or no
+              rule matches these stats. Stats, notes and the colour you set yourself are
+              unaffected.
+            </div>
           ) : (
             <div className={styles.classificationBar}>
               <span

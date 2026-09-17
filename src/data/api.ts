@@ -8,6 +8,7 @@ import type {
   HudPosition,
   HudProfile,
   ImportStatus,
+  IngestionHealth,
   OnboardingReadinessPayload,
   Player,
   SeatTemplate,
@@ -152,6 +153,17 @@ export async function validateHandHistoryDir(path: string): Promise<DirValidatio
 export async function pickFolderDialog(): Promise<string | null> {
   assertTauriAvailable();
   return invoke<string | null>("pick_folder_dialog");
+}
+
+/**
+ * Read-only ingestion health (/): how many hands were read, rejected or
+ * flagged with a warning, and why, recomputed from `hands`/`import_problems`
+ * on every call. Polled by the main window's persistent status line and by
+ * the Settings "Ingestion" section — never a hand dropped without a trace.
+ */
+export async function getIngestionHealth(): Promise<IngestionHealth> {
+  assertTauriAvailable();
+  return invoke<IngestionHealth>("get_ingestion_health");
 }
 
 // ---------------------------------------------------------------------
@@ -418,6 +430,26 @@ export interface TableDetectionStatus {
 export async function getTableDetectionStatus(): Promise<TableDetectionStatus> {
   assertTauriAvailable();
   return invoke<TableDetectionStatus>("get_table_detection_status");
+}
+
+// ---------------------------------------------------------------------
+// Build / version (, )
+// ---------------------------------------------------------------------
+
+/**
+ * Mirrors `commands::AppVersionPayload`. `features` is empty on a
+ * distributed build (`auto-classification`/`strategic-analysis` compiled
+ * out) — the only place a tester can tell the two builds apart without
+ * asking anyone ( consumes this in Settings).
+ */
+export interface AppVersion {
+  version: string;
+  features: string[];
+}
+
+export async function getAppVersion(): Promise<AppVersion> {
+  assertTauriAvailable();
+  return invoke<AppVersion>("get_app_version");
 }
 
 // ---------------------------------------------------------------------
