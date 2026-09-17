@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use serde::Serialize;
 use tauri::{Emitter, State};
 
@@ -7,6 +9,7 @@ use crate::description_rules::{self, RuleResult};
 use crate::hud::{self, HudProfile};
 use crate::import;
 use crate::overlay::{self, HotZone, OverlayMode};
+use crate::parser::{HandHistoryParser, PokerStarsParser};
 use crate::sessions::{self, SessionSummary, SessionsTodaySummary};
 use crate::settings::{self, DetectedDir, DirValidation};
 use crate::state::AppState;
@@ -536,6 +539,275 @@ pub async fn pick_folder_dialog(app_handle: tauri::AppHandle) -> Option<String> 
         .file()
         .blocking_pick_folder()
         .map(|p| p.to_string())
+}
+
+// ---------------------------------------------------------------------
+// Onboarding readiness — read-only gate check for the onboarding flow.
+// Never writes settings, never imports, never starts the watcher: it only
+// looks at the filesystem and test-parses one file, so it is safe to poll
+// from the onboarding screen as many times as the user re-checks their pick.
+// ---------------------------------------------------------------------
+
+/// The literal English action-description verbs `parser::pokerstars`'s
+/// `parse_action_desc` matches (see that module's `desc == "folds"` /
+/// `desc == "checks"` / `strip_prefix("calls "/"raises "/"posts ...")`
+/// branches). Checking the sample file's raw text for these — instead of any
+/// general-purpose language detection — is 's whole "client language"
+/// signal: a PokerStars client running in another language never produces
+/// these strings, so the hand's action lines silently fail to parse into
+/// `actions` (TECHNOLOGY.md S2 fixes this as the method; no i18n library).
+const ENGLISH_ACTION_VERBS: [&str; 5] = ["folds", "checks", "calls", "raises", "posts"];
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingFolderReadiness {
+    pub path: Option<String>,
+    pub exists: bool,
+    /// File count from `settings::validate_hand_history_dir` — reused as-is,
+    /// not recomputed here.
+    pub hand_file_count: i64,
+    /// Real hands parsed (`Ok(_)`) out of the most-recently-modified `.txt`
+    /// file in the folder (same recursive scan as `import::collect_txt_files`)
+    /// — never a file count standing in for a hand count. `0` whenever
+    /// nothing could be found, read or parsed.
+    pub parsed_hand_count: i64,
+    pub message: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingClientLanguageReadiness {
+    /// Whether a test-parse was actually attempted. `false` whenever there
+    /// was no folder, no `.txt` file, or the sample file could not be read —
+    ///  requires the verdict to come from a real test-parse, never a
+    /// guess, so those cases report "not checked" rather than a fabricated
+    /// `false`.
+    pub checked: bool,
+    pub is_english: bool,
+    pub sample_file: Option<String>,
+    /// Plain-language explanation of the verdict. Always non-empty.
+    pub reason: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingAutoCenterReadiness {
+    pub enabled: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OnboardingReadinessPayload {
+    pub folder: OnboardingFolderReadiness,
+    pub client_language: OnboardingClientLanguageReadiness,
+    pub auto_center: OnboardingAutoCenterReadiness,
+}
+
+/// Picks the most-recently-modified `.txt` file from the same recursive
+/// traversal `import::collect_txt_files` uses (nested per-screen-name
+/// subfolders included), so the file this command samples is always one the
+/// real import pipeline would also read. `None` when the scan finds nothing —
+/// missing, empty or unreadable directories all collapse to this without
+/// erroring (`collect_txt_files` itself never fails, it just returns fewer
+/// paths).
+fn most_recent_txt_file(dir: &Path) -> Option<PathBuf> {
+    import::collect_txt_files(dir)
+        .into_iter()
+        .max_by_key(|path| {
+            std::fs::metadata(path)
+                .and_then(|meta| meta.modified())
+                .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
+        })
+}
+
+/// How many hands `PokerStarsParser` actually parses (`Ok(_)`) out of `text`
+/// — the real hand count  asks for.
+fn count_parsed_hands(text: &str) -> i64 {
+    PokerStarsParser
+        .parse(text)
+        .into_iter()
+        .filter(Result::is_ok)
+        .count() as i64
+}
+
+fn unchecked_client_language(reason: &str) -> OnboardingClientLanguageReadiness {
+    OnboardingClientLanguageReadiness {
+        checked: false,
+        is_english: false,
+        sample_file: None,
+        reason: reason.to_string(),
+    }
+}
+
+/// Pure onboarding-readiness computation, kept independent of `State`
+/// so it can be exercised directly from tests without a live Tauri app. Never
+/// writes settings, never imports, never starts the watcher, never returns
+/// `Err` and never panics — a missing, empty or unreadable folder always
+/// comes back as data (`checked: false` plus a plain-language `reason`),
+/// never a thrown error or an invented number.
+pub fn onboarding_readiness(
+    path: Option<String>,
+    auto_center_enabled: bool,
+) -> OnboardingReadinessPayload {
+    let auto_center = OnboardingAutoCenterReadiness {
+        enabled: auto_center_enabled,
+    };
+
+    // No path given: fall back to the same best-effort auto-detection the
+    // rest of onboarding already uses (Settings' "detect" button), so this
+    // command can be polled with no argument to answer "is the folder we
+    // found automatically actually ready?".
+    let resolved_dir: Option<PathBuf> = match path {
+        Some(p) => Some(PathBuf::from(p)),
+        None => settings::detect_default_hand_history_dir(),
+    };
+
+    let Some(dir) = resolved_dir else {
+        return OnboardingReadinessPayload {
+            folder: OnboardingFolderReadiness {
+                path: None,
+                exists: false,
+                hand_file_count: 0,
+                parsed_hand_count: 0,
+                message: "Não encontrámos nenhuma pasta de hand histories automaticamente. \
+                          Escolhe a pasta onde o PokerStars guarda as mãos."
+                    .to_string(),
+            },
+            client_language: unchecked_client_language(
+                "Sem pasta para verificar: a língua do cliente só se confirma depois de \
+                 encontrar a pasta de hand histories.",
+            ),
+            auto_center,
+        };
+    };
+
+    let path_str = dir.to_string_lossy().to_string();
+
+    if !dir.is_dir() {
+        return OnboardingReadinessPayload {
+            folder: OnboardingFolderReadiness {
+                path: Some(path_str),
+                exists: false,
+                hand_file_count: 0,
+                parsed_hand_count: 0,
+                message: "Essa pasta não existe ou não está acessível.".to_string(),
+            },
+            client_language: unchecked_client_language(
+                "Sem pasta para verificar: a língua do cliente só se confirma depois de \
+                 encontrar a pasta de hand histories.",
+            ),
+            auto_center,
+        };
+    }
+
+    let validation = settings::validate_hand_history_dir(&dir);
+
+    let Some(sample_path) = most_recent_txt_file(&dir) else {
+        return OnboardingReadinessPayload {
+            folder: OnboardingFolderReadiness {
+                path: Some(path_str),
+                exists: true,
+                hand_file_count: validation.hand_file_count,
+                parsed_hand_count: 0,
+                message: "A pasta existe mas ainda não tem ficheiros de mãos (.txt)."
+                    .to_string(),
+            },
+            client_language: unchecked_client_language(
+                "Não há nenhum ficheiro de mãos na pasta para confirmar a língua do cliente.",
+            ),
+            auto_center,
+        };
+    };
+
+    let sample_str = sample_path.to_string_lossy().to_string();
+
+    let Ok(text) = std::fs::read_to_string(&sample_path) else {
+        return OnboardingReadinessPayload {
+            folder: OnboardingFolderReadiness {
+                path: Some(path_str),
+                exists: true,
+                hand_file_count: validation.hand_file_count,
+                parsed_hand_count: 0,
+                message: "A pasta existe mas o ficheiro mais recente não pôde ser lido."
+                    .to_string(),
+            },
+            client_language: OnboardingClientLanguageReadiness {
+                checked: false,
+                is_english: false,
+                sample_file: Some(sample_str),
+                reason: "Não foi possível ler o ficheiro mais recente para confirmar a língua \
+                         do cliente."
+                    .to_string(),
+            },
+            auto_center,
+        };
+    };
+
+    let parsed_hand_count = count_parsed_hands(&text);
+    let has_english_verb = ENGLISH_ACTION_VERBS.iter().any(|verb| text.contains(verb));
+    let is_english = parsed_hand_count > 0 && has_english_verb;
+
+    let folder = OnboardingFolderReadiness {
+        path: Some(path_str),
+        exists: true,
+        hand_file_count: validation.hand_file_count,
+        parsed_hand_count,
+        message: if parsed_hand_count > 0 {
+            format!("Pasta pronta: {parsed_hand_count} mão(s) lidas no ficheiro mais recente.")
+        } else {
+            "O ficheiro mais recente existe mas não foi possível ler nenhuma mão dele."
+                .to_string()
+        },
+    };
+
+    let reason = if is_english {
+        "O ficheiro mais recente tem ações em inglês: as mãos estão a ser lidas corretamente."
+            .to_string()
+    } else if parsed_hand_count == 0 {
+        "O ficheiro mais recente não foi reconhecido como um histórico de mãos do PokerStars."
+            .to_string()
+    } else {
+        "O ficheiro mais recente não tem ações em inglês: o cliente PokerStars está noutra \
+         língua e as mãos serão lidas mal."
+            .to_string()
+    };
+
+    let client_language = OnboardingClientLanguageReadiness {
+        checked: true,
+        is_english,
+        sample_file: Some(sample_str),
+        reason,
+    };
+
+    OnboardingReadinessPayload {
+        folder,
+        client_language,
+        auto_center,
+    }
+}
+
+/// Tauri wrapper around `onboarding_readiness`: its only job is to read the
+/// already-stored Auto-Center confirmation (never writes it) and hand off to
+/// the pure computation above. No settings write, no import, no watcher —
+/// safe to call as often as the onboarding screen wants to re-check.
+#[tauri::command]
+pub fn get_onboarding_readiness(
+    state: State<AppState>,
+    path: Option<String>,
+) -> OnboardingReadinessPayload {
+    let auto_center_enabled = state
+        .conn
+        .lock()
+        .ok()
+        .and_then(|conn| {
+            db::get_setting(&conn, settings::SETTING_AUTO_CENTER_ENABLED)
+                .ok()
+                .flatten()
+        })
+        .map(|value| value == "true")
+        .unwrap_or(false);
+
+    onboarding_readiness(path, auto_center_enabled)
 }
 
 // ---------------------------------------------------------------------

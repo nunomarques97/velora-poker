@@ -1,4 +1,7 @@
-mod commands;
+// `pub` (not private) so integration tests in `src-tauri/tests/` can call the
+// pure onboarding-readiness computation (, `commands::onboarding_readiness`)
+// directly, without going through a live Tauri `State`.
+pub mod commands;
 mod overlay;
 mod settings;
 mod state;
@@ -115,6 +118,7 @@ pub fn run() {
             commands::save_seat_template,
             commands::get_table_detection_status,
             commands::get_diagnostics_report,
+            commands::get_onboarding_readiness,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();

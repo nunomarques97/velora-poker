@@ -111,7 +111,12 @@ pub fn import_directory(
 
 /// Recursively collects `.txt` file paths under `dir`, descending into any
 /// number of nested subdirectories (e.g. one per PokerStars screen name).
-fn collect_txt_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+///
+/// `pub(crate)` (rather than private) so `commands::get_onboarding_readiness`
+/// can pick its language/hand-count sample file from exactly the same
+/// recursive scan the real import pipeline uses — never a different, possibly
+/// shallower traversal that could sample a different file.
+pub(crate) fn collect_txt_files(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
     let mut files = Vec::new();
     let entries = match std::fs::read_dir(dir) {
         Ok(entries) => entries,
