@@ -82,6 +82,36 @@ fn import_all(conn: &mut rusqlite::Connection) {
     }
 }
 
+/// Builds a heroless hand — every seat is a villain, nobody has a "Dealt to"
+/// line — exactly the shape of a bulk-imported third-party hand history
+/// (e.g. the hhDealer.com re-hosted archives). `hand_id`, `hour` and `minute`
+/// let the caller mint many distinct, time-spaced hands, including ones far
+/// outside the 30-minute session gap so a dense run can span hours the way
+/// the real bulk import did.
+fn heroless_hand(hand_id: u64, hour: u32, minute: u32) -> String {
+    format!(
+        r#"PokerStars Hand #{hand_id}: Hold'em No Limit ($0.25/$0.50 USD) - 2026/08/25 {hour:02}:{minute:02}:00 ET
+Table 'HerolessTable' 3-max Seat #1 is the button
+Seat 1: VillainA ($50.00 in chips)
+Seat 2: VillainB ($50.00 in chips)
+Seat 3: VillainC ($50.00 in chips)
+VillainB: posts small blind $0.25
+VillainC: posts big blind $0.50
+*** HOLE CARDS ***
+VillainA: raises $1.50 to $2
+VillainB: folds
+VillainC: folds
+Uncalled bet ($1.50) returned to VillainA
+VillainA collected $1.25 from pot
+*** SUMMARY ***
+Total pot $1.25 | Rake $0
+Seat 1: VillainA (button) collected ($1.25)
+Seat 2: VillainB (small blind) folded before Flop
+Seat 3: VillainC (big blind) folded before Flop
+"#
+    )
+}
+
 #[test]
 fn contiguous_hands_across_tables_merge_into_one_session() {
     let mut conn = setup_db();
@@ -191,4 +221,61 @@ fn sessions_today_aggregates_only_sessions_that_started_today() {
 
     let other_day = chrono::NaiveDate::from_ymd_opt(2026, 8, 26).unwrap();
     assert_eq!(sessions::sessions_today(&conn, other_day).unwrap(), None);
+}
+
+/// Reproduces the 52,561-hand mega-session artifact from the hhDealer.com
+/// bulk import: a dense run of heroless hands spanning many hours, densely
+/// packed (well within the 30-minute gap) among themselves. None of it has
+/// an `is_hero = 1` row for any seat. Asserts this run forms zero sessions
+/// of its own, and — interleaved between the two real hero hands — never
+/// extends the real session's hand or table count.
+#[test]
+fn heroless_bulk_imported_hands_never_form_or_extend_a_session() {
+    let mut conn = setup_db();
+
+    // A heroless hand at the very start of the day, long before any hero
+    // hand: must not create a session by itself.
+    import::import_text(&mut conn, &heroless_hand(500_000_000_001, 0, 0)).unwrap();
+
+    // A dense run of heroless hands, one per minute, spanning hours 5..12 —
+    // densely packed in time (well inside the 30-minute gap) but with no
+    // hero anywhere. This is the shape of the real mega-session.
+    let mut next_id = 500_000_000_002;
+    for hour in 5..12u32 {
+        for minute in [0u32, 20, 40] {
+            import::import_text(&mut conn, &heroless_hand(next_id, hour, minute)).unwrap();
+            next_id += 1;
+        }
+    }
+
+    // Real hero play: two hands 15 minutes apart, one real session.
+    import::import_text(&mut conn, SESSION1_HAND1).unwrap();
+    import::import_text(&mut conn, SESSION1_HAND2).unwrap();
+
+    // More heroless hands sandwiched between and after the hero hands, at
+    // times that would otherwise glue everything into one giant run.
+    import::import_text(&mut conn, &heroless_hand(next_id, 21, 5)).unwrap();
+    next_id += 1;
+    import::import_text(&mut conn, &heroless_hand(next_id, 21, 20)).unwrap();
+    next_id += 1;
+    import::import_text(&mut conn, &heroless_hand(next_id, 22, 0)).unwrap();
+
+    let all = sessions::list_sessions(&conn).unwrap();
+    assert_eq!(
+        all.len(),
+        1,
+        "every heroless hand must be excluded entirely — only the real hero session should remain, got {all:?}"
+    );
+
+    let session = &all[0];
+    assert_eq!(
+        session.hand_count, 2,
+        "the surviving session must count only the two real hero hands, not any heroless hand interleaved around it"
+    );
+    assert_eq!(
+        session.table_count, 2,
+        "the surviving session's tables must be only SessionTableA/B, not HerolessTable"
+    );
+    assert_eq!(session.start_at, "2026-08-25T21:00:00");
+    assert_eq!(session.end_at, "2026-08-25T21:15:00");
 }

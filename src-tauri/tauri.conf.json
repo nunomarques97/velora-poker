@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "velora-poker",
+  "productName": "Velora Poker",
   "version": "0.1.0",
   "identifier": "com.velora.poker",
   "build": {
@@ -14,7 +14,9 @@
       {
         "title": "Velora Poker",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "minWidth": 800,
+        "minHeight": 600
       },
       {
         "label": "overlay",
@@ -39,13 +41,29 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
+    "publisher": "Velora",
+    "copyright": "Copyright (c) 2026 Velora",
+    "category": "Utility",
+    "shortDescription": "Poker HUD for PokerStars",
+    "longDescription": "Velora Poker is a local-only Windows poker HUD. It watches your PokerStars hand-history folder, computes per-opponent statistics, classifies opponents, and shows them on an always-on-top transparent overlay.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["English"],
+        "displayLanguageSelector": false
+      }
+    }
   }
 }

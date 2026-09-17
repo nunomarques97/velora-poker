@@ -1,13 +1,18 @@
+/**
+ * `null` means "no opportunity" — the stat's denominator was zero (e.g. a
+ * player who never faced a 3-bet), not a real 0% — and must render as
+ * insufficient-data (an em dash), never as a fabricated 0.
+ */
 export interface PlayerStats {
-  vpip: number;
-  pfr: number;
-  threeBet: number;
-  foldToThreeBet: number;
-  cBet: number;
-  foldToCBet: number;
-  aggressionFactor: number;
-  wtsd: number;
-  wsd: number;
+  vpip: number | null;
+  pfr: number | null;
+  threeBet: number | null;
+  foldToThreeBet: number | null;
+  cBet: number | null;
+  foldToCBet: number | null;
+  aggressionFactor: number | null;
+  wtsd: number | null;
+  wsd: number | null;
 }
 
 export type PlayerClassificationKind =
@@ -16,13 +21,49 @@ export type PlayerClassificationKind =
   | "looseAggressive"
   | "tightAggressive"
   | "maniac"
+  | "nittyRock"
   | "recreational";
+
+export type RuleCategory = "tendency" | "exploit";
+
+export type ConfidenceTier = "high" | "medium" | "low" | "insufficientData";
+
+/** One stat that fed a `RuleResult`'s conclusion (Phase 0+1). */
+export interface Evidence {
+  statName: string;
+  value: number | null;
+  opportunities: number;
+}
+
+/**
+ * Structured rule result for the HUD click-popup / player profile drawer
+ * (, Tier 3; restructured Phase 0+1). Replaces the old bare
+ * `{ text, confidence }` pair — `confidencePct`/`confidenceTier` are
+ * per-conclusion, never a single global player score.
+ */
+export interface RuleResult {
+  ruleId: string;
+  category: RuleCategory;
+  conclusion: string;
+  confidencePct: number | null;
+  confidenceTier: ConfidenceTier;
+  evidence: Evidence[];
+}
 
 export interface ClassificationResult {
   classification: PlayerClassificationKind;
   label: string;
   color: string;
   isOverride: boolean;
+  /**
+   * False only when the automatic classifier isn't compiled into this build
+   * (`auto-classification` off) and there's no manual override — distinct
+   * from a genuine Unknown (below `minHands`, or no rule matched). The
+   * PROFILE section must render "Classification unavailable in this build"
+   * rather than a normal Unknown badge when this is false. TENDENCIES/
+   * EXPLOITS/CONFIDENCE never read this field (Phase 1 flag-independence).
+   */
+  available: boolean;
 }
 
 export interface PlayerSnapshot {
@@ -38,12 +79,28 @@ export interface Player {
   name: string;
   hands: number;
   stats: PlayerStats;
+  /**
+   * Structured rule results for the player profile drawer's TENDENCIES/
+   * EXPLOITS/CONFIDENCE sections (Phase 0+1), sorted by confidence
+   * descending. Empty when the `strategic-analysis` build flag is off, or
+   * when no rule cleared its opportunity floor — each section renders its
+   * own empty state for either case, never a blank or fabricated line.
+   * Independent of `classification` below (see `ClassificationResult.available`).
+   */
+  descriptions?: RuleResult[];
   /** Free-text note the user wrote about this player, or `null` when none. Not shown on the HUD overlay. */
   note?: string | null;
   classification?: ClassificationResult;
   snapshot?: PlayerSnapshot | null;
-  /** This player's seat at the currently active table. `null`/absent outside that context (e.g. the Players view). */
+  /** This player's absolute PokerStars seat at the currently active table. `null`/absent outside that context (e.g. the Players view). */
   seat?: number | null;
+  /**
+   * The same seat rotated so the hero sits at offset 0 — the key a
+   * saved HUD card position is stored under, because PokerStars' "Auto-Center
+   * me" makes the hero, not any absolute seat number, the fixed screen
+   * anchor. `null` when the active hand has no recorded hero or table size.
+   */
+  seatOffset?: number | null;
 }
 
 export interface SessionsTodaySummary {
@@ -93,7 +150,7 @@ export interface StatPage {
   statKeys: (keyof PlayerStats)[];
 }
 
-export type HudVisualModel = "velora_hud" | "velora_classic" | "minimal";
+export type HudVisualModel = "velora_hud" | "velora_classic" | "minimal" | "jivaro";
 
 export interface HudProfile {
   id: string;
@@ -115,9 +172,17 @@ export interface HudPosition {
   y: number;
 }
 
-/** One calibrated seat position for a given table size (2/6/9-max), reused automatically on every future table of that size. Same 0..1 fraction scheme as `HudPosition`. */
+/**
+ * One calibrated card position for a given table size (2/6/9-max), reused
+ * automatically on every future table of that size. Same 0..1 fraction scheme
+ * as `HudPosition`.
+ *
+ * Keyed by the seat's offset from the hero, not its absolute PokerStars seat
+ * number — "Auto-Center me" rotates the display so the hero is the
+ * fixed screen anchor, which makes distance-from-hero the only stable key.
+ */
 export interface SeatTemplate {
-  seat: number;
+  seatOffset: number;
   x: number;
   y: number;
 }

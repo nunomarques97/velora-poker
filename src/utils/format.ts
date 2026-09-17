@@ -43,9 +43,20 @@ export function formatSessionDate(iso: string): string {
   });
 }
 
+/**
+ * A session's clock time, e.g. `10:42 PM`.
+ *
+ * The space before the meridiem is a non-breaking one. In the Sessions
+ * table at the 800px window floor the Start-End cell is only wide enough for
+ * one time, so it wraps — and with an ordinary space it broke *inside* a time,
+ * turning one range into three lines of "12:30" / "AM-12:30" / "AM". Keeping
+ * each time atomic makes it break between them instead, where a reader expects.
+ */
 export function formatSessionTime(iso: string): string {
-  return parseLocalTimestamp(iso).toLocaleTimeString(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return parseLocalTimestamp(iso)
+    .toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+    .replace(/\s/g, "\u00a0");
 }

@@ -1,0 +1,290 @@
+PokerStars Hand #261900630639:  Hold'em No Limit (€0.01/€0.02 EUR) - 2026/08/29 0:32:37 WET [2026/08/28 19:32:37 ET]
+Table 'Aegle IV' 6-max Seat #1 is the button
+Seat 1: Hero (€1.60 in chips) 
+Seat 4: Player1 (€0.80 in chips) 
+Hero: posts small blind €0.01
+Player1: posts big blind €0.02
+*** HOLE CARDS ***
+Dealt to Hero [Qs Ah]
+Hero: raises €1.58 to €1.60 and is all-in
+Player1: folds 
+Uncalled bet (€1.58) returned to Hero
+Hero collected €0.04 from pot
+Hero: doesn't show hand 
+*** SUMMARY ***
+Total pot €0.04 | Rake €0 
+Seat 1: Hero (button) (small blind) collected (€0.04)
+Seat 4: Player1 (big blind) folded before Flop
+
+PokerStars Hand #261900508452:  Hold'em No Limit (€0.01/€0.02 EUR) - 2026/08/29 0:19:55 WET [2026/08/28 19:19:55 ET]
+Table 'Dares V' 6-max Seat #4 is the button
+Seat 1: Player2 (€0.72 in chips) 
+Seat 2: Hero (€0.80 in chips) 
+Seat 4: Player1 (€0.87 in chips) 
+Player2: posts small blind €0.01
+Hero: posts big blind €0.02
+*** HOLE CARDS ***
+Dealt to Hero [2d Kc]
+Player1: calls €0.02
+Player2: raises €0.08 to €0.10
+Hero: folds 
+Player1: folds 
+Uncalled bet (€0.08) returned to Player2
+Player2 collected €0.06 from pot
+Player2: doesn't show hand 
+*** SUMMARY ***
+Total pot €0.06 | Rake €0 
+Seat 1: Player2 (small blind) collected (€0.06)
+Seat 2: Hero (big blind) folded before Flop
+Seat 4: Player1 (button) folded before Flop
+
+PokerStars Hand #261897494753: Tournament #4022791123, €1.80+€0.20 EUR Hold'em No Limit - Level III (200/400) - 2026/08/28 20:06:41 WET [2026/08/28 15:06:41 ET]
+Table '4022791123 21' 6-max Seat #2 is the button
+Seat 1: Player1 (50790 in chips) 
+Seat 2: Hero (35580 in chips) is sitting out
+Seat 3: Player4 (50300 in chips) 
+Seat 4: Player3 (49730 in chips) 
+Player1: posts the ante 50
+Hero: posts the ante 50
+Player4: posts the ante 50
+Player3: posts the ante 50
+Player4: posts small blind 200
+Player3: posts big blind 400
+*** HOLE CARDS ***
+Dealt to Hero [9h Qh]
+Player2 is disconnected 
+Player1: folds 
+Hero: folds 
+Player4: calls 200
+Player3: raises 1000 to 1400
+Player4: calls 1000
+*** FLOP *** [6h 5d 8c]
+Player4: checks 
+Player3: checks 
+*** TURN *** [6h 5d 8c] [3c]
+Player4: bets 1200
+Player3: folds 
+Uncalled bet (1200) returned to Player4
+Player4 collected 3000 from pot
+Player4: doesn't show hand 
+*** SUMMARY ***
+Total pot 3000 | Rake 0 
+Board [6h 5d 8c 3c]
+Seat 1: Player1 folded before Flop (didn't bet)
+Seat 2: Hero (button) folded before Flop (didn't bet)
+Seat 3: Player4 (small blind) collected (3000)
+Seat 4: Player3 (big blind) folded on the Turn
+
+PokerStars Hand #261897372559: Tournament #4022791123, €1.80+€0.20 EUR Hold'em No Limit - Level II (150/300) - 2026/08/28 19:53:42 WET [2026/08/28 14:53:42 ET]
+Table '4022791123 4' 6-max Seat #1 is the button
+Seat 1: Player1 (45142 in chips) 
+Seat 2: Player4 (98905 in chips) 
+Seat 4: Player3 (47567 in chips) 
+Seat 5: Hero (50000 in chips) 
+Seat 6: Player2 (56581 in chips) 
+Player1: posts the ante 40
+Player4: posts the ante 40
+Player3: posts the ante 40
+Hero: posts the ante 40
+Player2: posts the ante 40
+Player4: posts small blind 150
+Player3: posts big blind 300
+*** HOLE CARDS ***
+Dealt to Hero [2d 8s]
+Hero: folds 
+Player2: folds 
+Player1: folds 
+Player4: raises 600 to 900
+Player3: folds 
+Uncalled bet (600) returned to Player4
+Player4 collected 800 from pot
+Player4: doesn't show hand 
+*** SUMMARY ***
+Total pot 800 | Rake 0 
+Seat 1: Player1 (button) folded before Flop (didn't bet)
+Seat 2: Player4 (small blind) collected (800)
+Seat 4: Player3 (big blind) folded before Flop
+Seat 5: Hero folded before Flop (didn't bet)
+Seat 6: Player2 folded before Flop (didn't bet)
+
+PokerStars Hand #261897506873: Tournament #4022791123, €1.80+€0.20 EUR Hold'em No Limit - Level III (200/400) - 2026/08/28 20:07:40 WET [2026/08/28 15:07:40 ET]
+Table '4022791123 21' 6-max Seat #4 is the button
+Seat 1: Player1 (50690 in chips) 
+Seat 2: Hero (35480 in chips) is sitting out
+Seat 3: Player5 (52850 in chips) 
+Seat 4: Player4 (47830 in chips) 
+Seat 5: Player2 (48710 in chips) is sitting out
+Seat 6: Player3 (50000 in chips) 
+Player1: posts the ante 50
+Hero: posts the ante 50
+Player5: posts the ante 50
+Player4: posts the ante 50
+Player2: posts the ante 50
+Player3: posts the ante 50
+Player2: posts small blind 200
+Player3: posts big blind 400
+*** HOLE CARDS ***
+Dealt to Hero [7s Th]
+Player1: folds 
+Hero: folds 
+Player5: folds 
+Player4: folds 
+Player2: folds 
+Uncalled bet (200) returned to Player3
+Player3 collected 700 from pot
+Player3: doesn't show hand 
+*** SUMMARY ***
+Total pot 700 | Rake 0 
+Seat 1: Player1 folded before Flop (didn't bet)
+Seat 2: Hero folded before Flop (didn't bet)
+Seat 3: Player5 folded before Flop (didn't bet)
+Seat 4: Player4 (button) folded before Flop (didn't bet)
+Seat 5: Player2 (small blind) folded before Flop
+Seat 6: Player3 (big blind) collected (700)
+
+PokerStars Hand #261851769364: Tournament #4025640258, 44000+6000 Hold'em No Limit - Level VIII (100/200) - 2026/08/24 13:01:14 WET [2026/08/24 8:01:14 ET]
+Table '4025640258 10' 8-max Seat #1 is the button
+Seat 1: Player1 (5000 in chips)
+Seat 2: Player6 (5000 in chips)
+Seat 3: Player4 (5000 in chips)
+Seat 4: Player3 (5000 in chips)
+Seat 5: Player2 (13035 in chips)
+Seat 6: Player5 (5000 in chips)
+Seat 7: Hero (5000 in chips)
+Player1: posts the ante 25
+Player6: posts the ante 25
+Player4: posts the ante 25
+Player3: posts the ante 25
+Player2: posts the ante 25
+Player5: posts the ante 25
+Hero: posts the ante 25
+Player6: posts small blind 100
+Player4: posts big blind 200
+*** HOLE CARDS ***
+Dealt to Hero [6s Qd]
+Player3: folds
+Player2: folds
+Player5: folds
+Hero: folds
+Player1: folds
+Player6: folds
+Uncalled bet (100) returned to Player4
+Player4 collected 375 from pot
+Player4: doesn't show hand
+*** SUMMARY ***
+Total pot 375 | Rake 0
+Seat 1: Player1 (button) folded before Flop (didn't bet)
+Seat 2: Player6 (small blind) folded before Flop
+Seat 3: Player4 (big blind) collected (375)
+Seat 4: Player3 folded before Flop (didn't bet)
+Seat 5: Player2 folded before Flop (didn't bet)
+Seat 6: Player5 folded before Flop (didn't bet)
+Seat 7: Hero folded before Flop (didn't bet)
+
+PokerStars Hand #260993290275: Tournament #4001646104, €45000+€45000+€10000 EUR Hold'em No Limit - Level XXVI (12500/25000) - 2026/05/31 23:49:28 WET [2026/05/31 18:49:28 ET]
+Table '4001646104 38' 8-max Seat #2 is the button
+Seat 1: Hero (307076 in chips)
+Seat 2: Player5 (760344 in chips)
+Seat 3: Player4 (1578409 in chips)
+Seat 4: Player7 (1269439 in chips)
+Seat 5: Player6 (2153830 in chips)
+Seat 6: Player2 (2113721 in chips)
+Seat 7: Player3 (1434502 in chips)
+Seat 8: Player1 (1613729 in chips)
+Hero: posts the ante 3250
+Player5: posts the ante 3250
+Player4: posts the ante 3250
+Player7: posts the ante 3250
+Player6: posts the ante 3250
+Player2: posts the ante 3250
+Player3: posts the ante 3250
+Player1: posts the ante 3250
+Player4: posts small blind 12500
+Player7: posts big blind 25000
+*** HOLE CARDS ***
+Dealt to Hero [2c Qd]
+Player6: folds
+Player2: folds
+Player3: raises 25000 to 50000
+Player1: calls 50000
+Hero: folds
+Player5: folds
+Player4: folds
+Player7: calls 25000
+*** FLOP *** [Ks 5d 9h]
+Player7: checks
+Player3: bets 62205
+Player1: folds
+Player7: folds
+Uncalled bet (62205) returned to Player3
+Player3 collected 188500 from pot
+Player3: doesn't show hand
+*** SUMMARY ***
+Total pot 188500 | Rake 0
+Board [Ks 5d 9h]
+Seat 1: Hero folded before Flop (didn't bet)
+Seat 2: Player5 (button) folded before Flop (didn't bet)
+Seat 3: Player4 (small blind) folded before Flop
+Seat 4: Player7 (big blind) folded on the Flop
+Seat 5: Player6 folded before Flop (didn't bet)
+Seat 6: Player2 folded before Flop (didn't bet)
+Seat 7: Player3 collected (188500)
+Seat 8: Player1 folded on the Flop
+
+PokerStars Hand #261851768288: Tournament #4025638884, 44000+6000 Hold'em No Limit - Level VII (60/120) - 2026/08/24 13:01:03 WET [2026/08/24 8:01:03 ET]
+Table '4025638884 1' 9-max Seat #4 is the button
+Seat 1: Player4 (1363 in chips)
+Seat 2: Hero (1500 in chips)
+Seat 3: Player7 (1500 in chips)
+Seat 4: Player2 (950 in chips)
+Seat 5: Player5 (1254 in chips)
+Seat 6: Player6 (5444 in chips)
+Seat 7: Player8 (1500 in chips)
+Seat 8: Player3 (1500 in chips)
+Seat 9: Player1 (2465 in chips)
+Player4: posts the ante 12
+Hero: posts the ante 12
+Player7: posts the ante 12
+Player2: posts the ante 12
+Player5: posts the ante 12
+Player6: posts the ante 12
+Player8: posts the ante 12
+Player3: posts the ante 12
+Player1: posts the ante 12
+Player5: posts small blind 60
+Player6: posts big blind 120
+*** HOLE CARDS ***
+Dealt to Hero [Kd Ks]
+Player8: folds
+Player3: calls 120
+Player1: folds
+Player4: calls 120
+Hero: raises 420 to 540
+Player7: folds
+Player2: folds
+Player5: folds
+Player6: folds
+Player3: calls 420
+Player4: folds
+*** FLOP *** [8h Ad Jc]
+Player3: bets 948 and is all-in
+Hero: calls 948 and is all-in
+*** TURN *** [8h Ad Jc] [Qc]
+*** RIVER *** [8h Ad Jc Qc] [8s]
+*** SHOW DOWN ***
+Player3: shows [Jd Ac] (two pair, Aces and Jacks)
+Hero: shows [Kd Ks] (two pair, Kings and Eights)
+Player3 collected 3384 from pot
+Hero finished the tournament
+*** SUMMARY ***
+Total pot 3384 | Rake 0
+Board [8h Ad Jc Qc 8s]
+Seat 1: Player4 folded before Flop
+Seat 2: Hero showed [Kd Ks] and lost with two pair, Kings and Eights
+Seat 3: Player7 folded before Flop (didn't bet)
+Seat 4: Player2 (button) folded before Flop (didn't bet)
+Seat 5: Player5 (small blind) folded before Flop
+Seat 6: Player6 (big blind) folded before Flop
+Seat 7: Player8 folded before Flop (didn't bet)
+Seat 8: Player3 showed [Jd Ac] and won (3384) with two pair, Aces and Jacks
+Seat 9: Player1 folded before Flop (didn't bet)

@@ -10,7 +10,32 @@ Everything runs locally. Accounts, billing and cloud sync are part of the long-t
 ## Documentation
 
 
-## Setup
+## For testers (no developer tools needed)
+
+Velora ships as a normal Windows installer. Testers do **not** need Node, Rust, or Visual Studio.
+
+1. Run `Velora Poker_<version>_x64-setup.exe`.
+2. It installs for the current user only, so Windows will not ask for administrator rights. Velora lands in `%LOCALAPPDATA%\Velora Poker` with a "Velora Poker" Start Menu shortcut.
+3. Launch it from the Start Menu. On first run, Velora asks for your poker room, then auto-detects your PokerStars hand-history folder (including regional installs such as `PokerStars.PT`), then lets you pick a HUD.
+4. Uninstall from Windows Settings → Installed apps → Velora Poker.
+
+Notes:
+
+- Windows SmartScreen will show "Windows protected your PC" because the installer is not code-signed. Choose **More info → Run anyway**. This is expected for now.
+- Velora needs the Microsoft Edge WebView2 Runtime, which is already present on Windows 10/11. If it is missing, the installer downloads and installs it silently, so the machine needs an internet connection during installation only.
+- Everything stays on the machine. Hands are parsed into `%APPDATA%\com.velora.poker\velora.db`; nothing is uploaded.
+- If something looks wrong during play, open Settings → Diagnostics → **Copy Diagnostics** and paste the result into your bug report.
+
+**Build the installer:**
+
+```sh
+npm run tauri build
+```
+
+The installer is written to `src-tauri/target/release/bundle/nsis/`.
+
+
+## Setup (developers)
 
 **Prerequisites:**
 

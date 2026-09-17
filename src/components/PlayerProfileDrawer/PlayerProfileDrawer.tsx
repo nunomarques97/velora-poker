@@ -15,12 +15,22 @@ const OVERRIDE_COLORS: { color: string; label: string }[] = [
   { color: "#e0524f", label: "Maniac" },
   { color: "#e0954f", label: "Loose Aggressive" },
   { color: "#d9b44a", label: "Loose Passive" },
+  { color: "#5b7a99", label: "Nitty / Rock" },
   { color: "#57b88b", label: "Recreational" },
   { color: "#a780e8", label: "Custom" },
 ];
 
+const TIER_LABEL: Record<string, string> = {
+  high: "High",
+  medium: "Medium",
+  low: "Low",
+  insufficientData: "Insufficient data",
+};
+
 export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: PlayerProfileDrawerProps) {
-  const { stats } = player;
+  const descriptions = player.descriptions ?? [];
+  const tendencies = descriptions.filter((d) => d.category === "tendency");
+  const exploits = descriptions.filter((d) => d.category === "exploit");
   const [saving, setSaving] = useState(false);
   const classification = player.classification;
 
@@ -101,30 +111,62 @@ export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: Player
           </button>
         </div>
 
-        {classification && (
-          <div className={styles.classificationBar}>
-            <span
-              className={styles.classificationDot}
-              style={{ backgroundColor: classification.color }}
-            />
-            <span className={styles.classificationText}>{classification.label}</span>
-            {classification.isOverride && <span className={styles.overrideTag}>Manual</span>}
-          </div>
-        )}
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>Profile</div>
+          {!classification ? (
+            <div className={styles.descriptionEmpty}>No classification data.</div>
+          ) : !classification.available ? (
+            <div className={styles.descriptionEmpty}>Classification unavailable in this build.</div>
+          ) : (
+            <div className={styles.classificationBar}>
+              <span
+                className={styles.classificationDot}
+                style={{ backgroundColor: classification.color }}
+              />
+              <span className={styles.classificationText}>{classification.label}</span>
+              {classification.isOverride && <span className={styles.overrideTag}>Manual</span>}
+            </div>
+          )}
+        </div>
 
-        <div className={styles.headline}>
-          <div className={styles.headlineCell}>
-            <div className={`${styles.headlineValue} tabular`}>{stats.vpip}%</div>
-            <div className={styles.headlineLabel}>VPIP</div>
-          </div>
-          <div className={styles.headlineCell}>
-            <div className={`${styles.headlineValue} tabular`}>{stats.pfr}%</div>
-            <div className={styles.headlineLabel}>PFR</div>
-          </div>
-          <div className={styles.headlineCell}>
-            <div className={`${styles.headlineValue} tabular`}>{stats.threeBet}%</div>
-            <div className={styles.headlineLabel}>3-Bet</div>
-          </div>
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>Tendencies</div>
+          {tendencies.length > 0 ? (
+            <ul className={styles.descriptionList}>
+              {tendencies.map((r) => (
+                <li key={r.ruleId} className={styles.descriptionItem}>
+                  <span className={styles.descriptionText}>{r.conclusion}</span>
+                  <span
+                    className={`${styles.confidenceBadge} ${styles[`tier-${r.confidenceTier}`] ?? ""}`}
+                  >
+                    {TIER_LABEL[r.confidenceTier] ?? r.confidenceTier}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className={styles.descriptionEmpty}>No tendencies identified yet.</div>
+          )}
+        </div>
+
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>Exploits</div>
+          {exploits.length > 0 ? (
+            <ul className={styles.descriptionList}>
+              {exploits.map((r) => (
+                <li key={r.ruleId} className={styles.descriptionItem}>
+                  <span className={styles.descriptionText}>{r.conclusion}</span>
+                  <span
+                    className={`${styles.confidenceBadge} ${styles[`tier-${r.confidenceTier}`] ?? ""}`}
+                  >
+                    {TIER_LABEL[r.confidenceTier] ?? r.confidenceTier}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className={styles.descriptionEmpty}>No exploits identified yet.</div>
+          )}
         </div>
 
         <div className={styles.section}>
@@ -140,24 +182,6 @@ export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: Player
             aria-label={`Notes about ${player.name}`}
           />
           <div className={styles.noteHint}>Saves automatically when you click away.</div>
-        </div>
-
-        <div className={styles.section}>
-          <div className={styles.sectionTitle}>Preflop</div>
-          <StatRow label="Fold to 3-Bet" value={`${stats.foldToThreeBet}%`} />
-        </div>
-
-        <div className={styles.section}>
-          <div className={styles.sectionTitle}>Postflop</div>
-          <StatRow label="C-Bet" value={`${stats.cBet}%`} />
-          <StatRow label="Fold to C-Bet" value={`${stats.foldToCBet}%`} />
-          <StatRow label="Aggression Factor" value={stats.aggressionFactor.toFixed(1)} />
-        </div>
-
-        <div className={styles.section}>
-          <div className={styles.sectionTitle}>Showdown</div>
-          <StatRow label="WTSD" value={`${stats.wtsd}%`} />
-          <StatRow label="W$SD" value={`${stats.wsd}%`} />
         </div>
 
         <div className={styles.section}>
@@ -188,14 +212,5 @@ export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: Player
         </div>
       </aside>
     </>
-  );
-}
-
-function StatRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className={styles.statRow}>
-      <span className={styles.statRowLabel}>{label}</span>
-      <span className={`${styles.statRowValue} tabular`}>{value}</span>
-    </div>
   );
 }

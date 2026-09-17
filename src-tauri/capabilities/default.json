@@ -1,11 +1,26 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window and the HUD overlay window",
-  "windows": ["main", "overlay"],
+  "description": "Capability for the main window and every per-table HUD overlay window",
+  "comment": [
+    "'overlay*' is a glob, and it has to be. Overlay windows are created",
+    "at runtime, one per tracked PokerStars table, with labels overlay1,",
+    "overlay2, ... — none of which an explicit list could name in advance.",
+    "This file previously listed exactly ['main', 'overlay'], and the failure",
+    "that caused is worth recording because nothing catches it: Tauri's ACL",
+    "gates *plugin* commands, not the app's own #[tauri::command] functions.",
+    "So a window outside this list could still invoke every Velora command and",
+    "render a full HUD, while 'plugin:event|listen' was denied — silently, into",
+    "a .catch(). Every overlay looked correct on open and then never updated",
+    "again: no refresh on a new hand, no visibility or mode broadcast, no",
+    "shared seat template. Found by dealing a hand to a simulated table and",
+    "watching the HUD not change."
+  ],
+  "windows": ["main", "overlay*"],
   "permissions": [
     "core:default",
     "opener:default",
-    "dialog:default"
+    "dialog:default",
+    "global-shortcut:default"
   ]
 }

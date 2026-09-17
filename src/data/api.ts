@@ -41,16 +41,44 @@ export async function getPlayers(): Promise<Player[]> {
   return invoke<Player[]>("get_players");
 }
 
-/** Players seated in the most recently imported hand (the active table) — what the live overlay shows. */
-export async function getActiveTablePlayers(): Promise<Player[]> {
-  assertTauriAvailable();
-  return invoke<Player[]>("get_active_table_players");
+export interface PlayersPage {
+  players: Player[];
+  /** Total players matching `search` (or the whole roster with no search), for a "showing N of TOTAL" / "load more" UI. */
+  total: number;
 }
 
-/** The current active table's max-players count (2/6/9-max), or `null` before any hand is imported. */
-export async function getActiveTableMaxPlayers(): Promise<number | null> {
+/**
+ * A bounded, most-played-first page of the roster. Use this instead of
+ * `getPlayers()` in any view that renders player cards/rows — `getPlayers()`
+ * computes full stats for every tracked player in one call, which is fine at
+ * a couple hundred players and multi-second at the thousands a bulk import
+ * can produce, and it holds the same connection lock the live overlay refresh
+ * needs.
+ */
+export async function getPlayersPage(
+  offset: number,
+  limit: number,
+  search?: string,
+): Promise<PlayersPage> {
   assertTauriAvailable();
-  return invoke<number | null>("get_active_table_max_players");
+  return invoke<PlayersPage>("get_players_page", { offset, limit, search: search ?? null });
+}
+
+/**
+ * Players seated in the most recently imported hand at one specific tracked
+ * table — what that table's own overlay shows. `tableId` comes from the
+ * overlay window's own URL; every overlay asks about its own table and
+ * no other.
+ */
+export async function getActiveTablePlayers(tableId: number): Promise<Player[]> {
+  assertTauriAvailable();
+  return invoke<Player[]>("get_active_table_players", { tableId });
+}
+
+/** One tracked table's max-players count (2/6/9-max), or `null` before any hand is imported there. */
+export async function getActiveTableMaxPlayers(tableId: number): Promise<number | null> {
+  assertTauriAvailable();
+  return invoke<number | null>("get_active_table_max_players", { tableId });
 }
 
 export async function setPlayerColorOverride(
@@ -172,26 +200,157 @@ export async function setHudProfileMinHands(id: string, minHands: number): Promi
 // Overlay window + HUD positions
 // ---------------------------------------------------------------------
 
-export async function openOverlay(): Promise<void> {
-  assertTauriAvailable();
-  return invoke("open_overlay");
+/** One tracked PokerStars table window and whether its own HUD overlay is up. */
+export interface TrackedTableStatus {
+  id: number;
+  /** Parsed from the table window's title; `null` when it didn't parse. */
+  name: string | null;
+  minimized: boolean;
+  overlayVisible: boolean;
+  /**
+   * Dismissed by hand via the overlay's own "Hide" button and not shown
+   * again since — distinct from `overlayVisible: false` while a window is
+   * merely still starting up.
+   */
+  dismissed: boolean;
 }
 
-export async function closeOverlay(): Promise<void> {
-  assertTauriAvailable();
-  return invoke("close_overlay");
+export interface OverlayStatus {
+  /** Global kill switch. When off, no table gets a HUD however many are open. */
+  enabled: boolean;
+  tables: TrackedTableStatus[];
 }
 
-export async function isOverlayOpen(): Promise<boolean> {
+/**
+ * Every tracked table plus whether its HUD is up. Overlays are automatic since
+ *  — one appears for each real table window and disappears with it — so
+ * this replaces the old single `isOverlayOpen()` the "Open Overlay" button
+ * used to read.
+ */
+export async function getOverlayStatus(): Promise<OverlayStatus> {
   assertTauriAvailable();
-  return invoke<boolean>("is_overlay_open");
+  return invoke<OverlayStatus>("get_overlay_status");
 }
 
-export async function setOverlayClickThrough(enabled: boolean): Promise<void> {
+/**
+ * The global HUD kill switch — a "not right now" for the rest of this
+ * session only. The backend forces it back to enabled on every app startup,
+ * so a past session's "off" can never silently suppress every HUD on a
+ * future launch.
+ */
+export async function setOverlaysEnabled(enabled: boolean): Promise<void> {
   assertTauriAvailable();
-  return invoke("set_overlay_click_through", { enabled });
+  return invoke("set_overlays_enabled", { enabled });
 }
 
+/**
+ * Collapses one table's HUD content from its own "Hide" button, leaving every
+ * other table's HUD alone. Not the kill switch, and —  — not a
+ * window hide either: the overlay window stays up and positioned, only its
+ * content collapses to a "Show" pill in the same spot, so bringing it back
+ * never requires leaving the overlay. Also reversible from the main window's
+ * table list or the global hotkey via `showOverlay`.
+ */
+export async function closeOverlay(tableId: number): Promise<void> {
+  assertTauriAvailable();
+  return invoke("close_overlay", { tableId });
+}
+
+/**
+ * Restores one table's full HUD content after it was collapsed via
+ * `closeOverlay` — the overlay's own "Show" pill, the HUD Profiles
+ * page's per-table action, or the global hotkey. Leaves every other table
+ * and the global switch untouched.
+ */
+export async function showOverlay(tableId: number): Promise<void> {
+  assertTauriAvailable();
+  return invoke("show_overlay", { tableId });
+}
+
+export async function isOverlayOpen(tableId: number): Promise<boolean> {
+  assertTauriAvailable();
+  return invoke<boolean>("is_overlay_open", { tableId });
+}
+
+/**
+ * Whether this table's HUD content is currently collapsed — read once
+ * on the overlay's own mount so it knows whether to paint the full HUD or
+ * the "Show" pill from the very first render, before any event has fired.
+ */
+export async function isOverlayDismissed(tableId: number): Promise<boolean> {
+  assertTauriAvailable();
+  return invoke<boolean>("is_overlay_dismissed", { tableId });
+}
+
+/**
+ * How an overlay window answers mouse input.
+ *
+ * - `normal` — table-interactive, and where every overlay opens. Clicks pass
+ *   through to the table everywhere except two hot zones that stay clickable
+ *   no matter what: that overlay's own control bar and each of its visible
+ *   cards' pagination dots.
+ * - `reposition` — the whole window captures pointer events so a card can be
+ *   dragged from anywhere on it. Nothing on that table is clickable meanwhile.
+ *
+ * Per table since repositioning one table's cards leaves every other
+ * table clickable.
+ */
+export type OverlayMode = "normal" | "reposition";
+
+export async function setOverlayMode(tableId: number, mode: OverlayMode): Promise<void> {
+  assertTauriAvailable();
+  return invoke("set_overlay_mode", { tableId, mode });
+}
+
+/** Puts every overlay in one mode — the main window's single Reposition control. */
+export async function setAllOverlayModes(mode: OverlayMode): Promise<void> {
+  assertTauriAvailable();
+  return invoke("set_all_overlay_modes", { mode });
+}
+
+/** One overlay's live mode, read from native hit-test state rather than any window's own flag. */
+export async function getOverlayMode(tableId: number): Promise<OverlayMode> {
+  assertTauriAvailable();
+  return invoke<OverlayMode>("get_overlay_mode", { tableId });
+}
+
+/** `reposition` if any overlay is repositioning — what the main window's one control reads. */
+export async function getAnyOverlayMode(): Promise<OverlayMode> {
+  assertTauriAvailable();
+  return invoke<OverlayMode>("get_any_overlay_mode");
+}
+
+/** One always-clickable rectangle, in CSS pixels relative to one overlay's viewport. */
+export interface OverlayHotZone {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Registers the rectangles that stay clickable in `normal` mode on one
+ * overlay. Reported by that overlay after every layout change, because a rect
+ * that outlives the control it describes would keep swallowing table clicks at
+ * a point where nothing of Velora's is drawn any more.
+ */
+export async function setOverlayHotZones(
+  tableId: number,
+  zones: OverlayHotZone[],
+): Promise<void> {
+  assertTauriAvailable();
+  return invoke("set_overlay_hot_zones", { tableId, zones });
+}
+
+/**
+ * Saves one player's manually-dragged card position.
+ *
+ * Deliberately not table-scoped, unlike its neighbours. A saved position
+ * is keyed by player and expressed as a fraction of the overlay window, which
+ * mirrors whichever table that player is sitting at — there is no
+ * table-specific component to store. The backend clamps `x`/`y` into 0..1
+ *.
+ */
 export async function saveHudPosition(playerId: string, x: number, y: number): Promise<void> {
   assertTauriAvailable();
   return invoke("save_hud_position", { playerId, x, y });
@@ -211,14 +370,15 @@ export async function getSeatTemplates(maxPlayers: number): Promise<SeatTemplate
   return invoke<SeatTemplate[]>("get_seat_templates", { maxPlayers });
 }
 
+/** `seatOffset` is the seat's distance from the hero, not an absolute PokerStars seat number. */
 export async function saveSeatTemplate(
   maxPlayers: number,
-  seat: number,
+  seatOffset: number,
   x: number,
   y: number,
 ): Promise<void> {
   assertTauriAvailable();
-  return invoke("save_seat_template", { maxPlayers, seat, x, y });
+  return invoke("save_seat_template", { maxPlayers, seatOffset, x, y });
 }
 
 export async function setAutoCenterEnabled(enabled: boolean): Promise<void> {
@@ -228,6 +388,11 @@ export async function setAutoCenterEnabled(enabled: boolean): Promise<void> {
 
 export interface TableDetectionStatus {
   detected: boolean;
+  /**
+   * How many real PokerStars table windows are open right now. Each one has
+   * its own overlay , so this is simply how many HUDs are running.
+   */
+  tableWindowCount: number;
   /**  debug evidence — see the notes decision  for the window-following bug this was added to diagnose. */
   hooksInstalled: number;
   eventCallbacksTotal: number;
@@ -241,6 +406,36 @@ export interface TableDetectionStatus {
 export async function getTableDetectionStatus(): Promise<TableDetectionStatus> {
   assertTauriAvailable();
   return invoke<TableDetectionStatus>("get_table_detection_status");
+}
+
+// ---------------------------------------------------------------------
+// Classification rules (read-only)
+// ---------------------------------------------------------------------
+
+/**
+ * One archetype rule exactly as the backend engine holds it. Thresholds are
+ * percentages and any of them may be null, meaning "unconstrained on this
+ * stat" — a rule with every threshold null (Recreational) matches on hand
+ * count alone, which is what makes it the catch-all.
+ */
+export interface ClassificationRule {
+  id: string;
+  label: string;
+  color: string;
+  priority: number;
+  minHands: number;
+  vpipMin: number | null;
+  vpipMax: number | null;
+  pfrMin: number | null;
+  pfrMax: number | null;
+  threeBetMin: number | null;
+  threeBetMax: number | null;
+}
+
+/** The archetype rules in the order the engine evaluates them (first match wins). */
+export async function getClassificationRules(): Promise<ClassificationRule[]> {
+  assertTauriAvailable();
+  return invoke<ClassificationRule[]>("get_classification_rules");
 }
 
 // ---------------------------------------------------------------------
@@ -270,14 +465,91 @@ export async function onHandsImported(callback: () => void): Promise<UnlistenFn>
 }
 
 /**
- * Fires whenever the overlay window is shown or hidden, from whichever window
- * triggered it — including the overlay's own "Close" button. Emitted by
- * `overlay::open`/`overlay::close` in Rust, so this is the single source of
- * truth for overlay visibility and no window has to keep a flag in sync by
- * hand (Phase E polish, a known issue).
+ * Fires whenever one table's overlay window is shown or hidden, from whichever
+ * window triggered it — including that overlay's own "Close" button. Emitted
+ * by `overlay::manager` in Rust, so this is the single source of truth for
+ * overlay visibility and no window has to keep a flag in sync by hand (Phase E
+ * polish, a known issue). Carries the table id since "the overlay
+ * closed" is only half an answer once there is one per table.
  */
 export async function onOverlayVisibilityChanged(
-  callback: (open: boolean) => void,
+  callback: (change: { tableId: number; visible: boolean }) => void,
 ): Promise<UnlistenFn> {
-  return listen<boolean>("overlay-visibility-changed", (event) => callback(event.payload));
+  return listen<{ tableId: number; visible: boolean }>(
+    "overlay-visibility-changed",
+    (event) => callback(event.payload),
+  );
+}
+
+/**
+ * Fires whenever one table's HUD *content* is collapsed or restored —
+ * `closeOverlay`/`showOverlay`, from any of their three triggers (the
+ * overlay's own "Hide"/"Show" pill, the main window's table list, or the
+ * global hotkey). Deliberately a separate event from
+ * `onOverlayVisibilityChanged`: that one also fires for a window-level
+ * change (minimize/restore, the kill switch) that has nothing to do with a
+ * deliberate per-table dismissal, and conflating the two would un-collapse a
+ * table's HUD just because its window was restored from being minimized.
+ */
+export async function onOverlayDismissedChanged(
+  callback: (change: { tableId: number; dismissed: boolean }) => void,
+): Promise<UnlistenFn> {
+  return listen<{ tableId: number; dismissed: boolean }>(
+    "overlay-dismissed-changed",
+    (event) => callback(event.payload),
+  );
+}
+
+/**
+ * Fires in every window whenever the overlay's interaction mode changes,
+ * whichever window triggered it. Emitted from `overlay::set_mode` in Rust
+ * only after the native state actually changed, so this is the single source
+ * of truth for the mode.
+ *
+ * The main window and the overlay each own a mode control, and before this
+ * existed neither could see the other's toggle. That let a button's label say
+ * the opposite of what it would do, which during live play left the overlay
+ * capturing while the control offered to make it capture — swallowing clicks
+ * intended for the table underneath (same bug class as a known issue).
+ */
+export async function onOverlayModeChanged(
+  callback: (change: { tableId: number; mode: OverlayMode }) => void,
+): Promise<UnlistenFn> {
+  return listen<{ tableId: number; mode: OverlayMode }>(
+    "overlay-mode-changed",
+    (event) => callback(event.payload),
+  );
+}
+
+/**
+ * Fires whenever the set of tracked PokerStars table windows changes — a
+ * table opened, closed, was renamed or was minimized — so the HUD page's table
+ * list stays live without polling. Replaced 's bare count broadcast, which
+ * existed only to power the "only one table gets a HUD" notice.
+ */
+export async function onTrackedTablesChanged(
+  callback: (tables: TrackedTable[]) => void,
+): Promise<UnlistenFn> {
+  return listen<TrackedTable[]>("tracked-tables-changed", (event) => callback(event.payload));
+}
+
+/**
+ * Fires whenever a seat template is calibrated by a drag, carrying the table
+ * size it was saved for. A template is shared by every same-sized table
+ *, and with one overlay per table the others have no other way to learn
+ * that a card just moved.
+ */
+export async function onSeatTemplatesChanged(
+  callback: (maxPlayers: number) => void,
+): Promise<UnlistenFn> {
+  return listen<number>("seat-templates-changed", (event) => callback(event.payload));
+}
+
+/** One table window as the tracker sees it, as broadcast by `onTrackedTablesChanged`. */
+export interface TrackedTable {
+  id: number;
+  hwnd: number;
+  name: string | null;
+  rect: { x: number; y: number; width: number; height: number };
+  minimized: boolean;
 }

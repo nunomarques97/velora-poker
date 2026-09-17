@@ -1,47 +1,76 @@
 import { useEffect, useState } from "react";
 import type { Player } from "../data/types";
-import { DesktopAppRequiredError, getPlayers, onHandsImported } from "../data/api";
+import { DesktopAppRequiredError, getPlayersPage, onHandsImported } from "../data/api";
+import { NO_OPPORTUNITY } from "../hud/statFormat";
 import styles from "./PlayersView.module.css";
+
+/** `null` means the stat's denominator was zero (no opportunity yet) —
+ * rendered as an em dash rather than a fabricated 0%. */
+function formatPct(value: number | null): string {
+  return value === null ? NO_OPPORTUNITY : `${value}%`;
+}
 
 interface PlayersViewProps {
   onSelectPlayer: (player: Player) => void;
 }
 
+// A bulk import can push `players` into the thousands (see
+// `getPlayersPage` doc comment); `get_players_page` only computes the
+// expensive per-player stats for one page's worth, so this is a request-size
+// knob, not a client-side truncation of already-fetched data.
+const PAGE_SIZE = 100;
+
 type LoadState =
   | { status: "loading" }
-  | { status: "ready"; players: Player[] }
+  | { status: "ready"; players: Player[]; total: number; search: string }
   | { status: "unavailable"; message: string }
   | { status: "error"; message: string };
 
 export function PlayersView({ onSelectPlayer }: PlayersViewProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [searchInput, setSearchInput] = useState("");
+
+  function load(search: string) {
+    getPlayersPage(0, PAGE_SIZE, search || undefined)
+      .then(({ players, total }) => {
+        setState({ status: "ready", players, total, search });
+      })
+      .catch((err: unknown) => {
+        if (err instanceof DesktopAppRequiredError) {
+          setState({ status: "unavailable", message: err.message });
+        } else {
+          setState({ status: "error", message: String(err) });
+        }
+      });
+  }
+
+  function loadMore() {
+    if (state.status !== "ready") return;
+    const { players, search } = state;
+    getPlayersPage(players.length, PAGE_SIZE, search || undefined)
+      .then(({ players: nextPlayers, total }) => {
+        setState({ status: "ready", players: [...players, ...nextPlayers], total, search });
+      })
+      .catch(() => undefined);
+  }
 
   useEffect(() => {
-    let cancelled = false;
-
-    function load() {
-      getPlayers()
-        .then((players) => {
-          if (!cancelled) setState({ status: "ready", players });
-        })
-        .catch((err: unknown) => {
-          if (cancelled) return;
-          if (err instanceof DesktopAppRequiredError) {
-            setState({ status: "unavailable", message: err.message });
-          } else {
-            setState({ status: "error", message: String(err) });
-          }
-        });
-    }
-
-    load();
-    const unlisten = onHandsImported(load).catch(() => undefined);
+    load("");
+    const unlisten = onHandsImported(() => load(searchInput)).catch(() => undefined);
 
     return () => {
-      cancelled = true;
       unlisten.then((fn) => fn?.());
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function handleSearchChange(value: string) {
+    setSearchInput(value);
+    load(value);
+  }
+
+  const remaining = state.status === "ready" ? state.total - state.players.length : 0;
+  const canLoadMore = remaining > 0;
 
   return (
     <div>
@@ -49,10 +78,24 @@ export function PlayersView({ onSelectPlayer }: PlayersViewProps) {
         <h1>Players</h1>
         <p>
           {state.status === "ready"
-            ? `${state.players.length} tracked players from imported hand histories.`
+            ? `${state.total.toLocaleString()} tracked player${state.total === 1 ? "" : "s"} from imported hand histories${
+                state.total > state.players.length
+                  ? ` (showing ${state.players.length.toLocaleString()})`
+                  : ""
+              }.`
             : "Tracked players from imported hand histories."}
         </p>
       </div>
+
+      {state.status !== "unavailable" && state.status !== "error" && (
+        <input
+          type="text"
+          className={styles.searchInput}
+          placeholder="Search players by name…"
+          value={searchInput}
+          onChange={(e) => handleSearchChange(e.target.value)}
+        />
+      )}
 
       {state.status === "loading" && <div className={styles.stateBox}>Loading players&hellip;</div>}
 
@@ -62,11 +105,15 @@ export function PlayersView({ onSelectPlayer }: PlayersViewProps) {
         <div className={styles.stateBox}>Failed to load players: {state.message}</div>
       )}
 
-      {state.status === "ready" && state.players.length === 0 && (
+      {state.status === "ready" && state.total === 0 && state.search === "" && (
         <div className={styles.stateBox}>
           No hands imported yet. Configure your PokerStars hand history folder in Settings to
           start tracking players.
         </div>
+      )}
+
+      {state.status === "ready" && state.total === 0 && state.search !== "" && (
+        <div className={styles.stateBox}>No tracked player matches &ldquo;{state.search}&rdquo;.</div>
       )}
 
       {state.status === "ready" && state.players.length > 0 && (
@@ -97,8 +144,10 @@ export function PlayersView({ onSelectPlayer }: PlayersViewProps) {
                 >
                   {player.name.slice(0, 2).toUpperCase()}
                 </span>
-                <span>
-                  <span className={styles.name}>{player.name}</span>
+                <span className={styles.playerIdentity}>
+                  <span className={styles.name} title={player.name}>
+                    {player.name}
+                  </span>
                   {player.classification && (
                     <span
                       className={styles.classificationChip}
@@ -112,15 +161,21 @@ export function PlayersView({ onSelectPlayer }: PlayersViewProps) {
               <span className={`${styles.statValue} tabular`}>
                 {player.hands.toLocaleString()}
               </span>
-              <span className={`${styles.statValue} tabular`}>{player.stats.vpip}%</span>
-              <span className={`${styles.statValue} tabular`}>{player.stats.pfr}%</span>
+              <span className={`${styles.statValue} tabular`}>{formatPct(player.stats.vpip)}</span>
+              <span className={`${styles.statValue} tabular`}>{formatPct(player.stats.pfr)}</span>
               <span className={`${styles.statValue} tabular`}>
-                {player.stats.threeBet}%
+                {formatPct(player.stats.threeBet)}
               </span>
               <span className={styles.note}>{player.note ?? ""}</span>
             </button>
           ))}
         </div>
+      )}
+
+      {canLoadMore && (
+        <button type="button" className={styles.loadMoreButton} onClick={loadMore}>
+          Load more ({remaining.toLocaleString()} remaining)
+        </button>
       )}
     </div>
   );

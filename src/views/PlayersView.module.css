@@ -1,3 +1,41 @@
+.searchInput {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  margin-bottom: 16px;
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-family: inherit;
+  padding: 8px 12px;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.loadMoreButton {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.loadMoreButton:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
 .list {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -40,10 +78,27 @@
   background: var(--bg-hover);
 }
 
+/* Grid items default to `min-width: auto`, which refuses to shrink below the
+   content's intrinsic width. Without this the Player column held its full
+   avatar + name + classification width at any window size, so it ran into the
+   Hands/VPIP/PFR/3-Bet columns and squeezed them into each other (visible at
+   800px and below). `.note` never had the bug because its `overflow: hidden`
+   already zeroes that automatic minimum. */
 .playerCell {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+  /* Guarantees a visible gutter before the Hands column once the name starts
+     truncating; without it the ellipsis ends ~2px from the next column. */
+  padding-right: 12px;
+}
+
+/* Same automatic minimum one level down: this wraps the name + classification
+   and is a flex item inside `.playerCell`, so it needs the same release before
+   the ellipsis rules below can ever take effect. */
+.playerIdentity {
+  min-width: 0;
 }
 
 .avatar {
@@ -65,8 +120,13 @@
   font-size: 13.5px;
   font-weight: 600;
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+/* Truncates for the same reason as `.name`: left to wrap, a two-word archetype
+   ("LOOSE AGGRESSIVE") broke onto a second line and grew the row instead. */
 .classificationChip {
   display: block;
   font-size: 10px;
@@ -74,6 +134,9 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
   margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .statValue {

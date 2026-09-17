@@ -77,6 +77,20 @@ pub fn builtin_profiles() -> Vec<HudProfile> {
             id: "minimal".to_string(),
             name: "Minimal".to_string(),
             visual_model: "minimal".to_string(),
+            stat_pages: pages.clone(),
+            min_hands: 25,
+            is_builtin: true,
+        },
+        // The Jivaro-style model (the notes, ratified
+        // in the notes). Backend-wise it is deliberately nothing new: the
+        // same canonical stat pages, the same 25-hand gate and the same
+        // `classification::resolve_for_player` colour source as the other three
+        // — the whole difference lives in the frontend's rendering of it
+        // (`src/hud/JivaroHudCard.tsx`).
+        HudProfile {
+            id: "jivaro".to_string(),
+            name: "Jivaro".to_string(),
+            visual_model: "jivaro".to_string(),
             stat_pages: pages,
             min_hands: 25,
             is_builtin: true,

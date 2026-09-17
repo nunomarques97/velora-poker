@@ -1,0 +1,55 @@
+PokerStars Hand #260993449710: Zoom Tournament #4002441239, €13.50+€13.50+€3.00 EUR Hold'em No Limit - Level VI (75/150) - 2026/06/01 0:06:23 WET [2026/05/31 19:06:23 ET]
+Table '4002441239 7' 3-max Seat #1 is the button
+Seat 1: Player1 (11262 in chips, €13.50 bounty)
+Seat 2: Hero (10507 in chips, €13.50 bounty)
+Seat 3: Player2 (24875 in chips, €20.25 bounty)
+Player1: posts the ante 20
+Hero: posts the ante 20
+Player2: posts the ante 20
+Hero: posts small blind 75
+Player2: posts big blind 150
+*** HOLE CARDS ***
+Dealt to Hero [Jd 9d]
+Player1: raises 300 to 450
+Hero: raises 675 to 1125
+Player2: folds
+Player1: raises 10117 to 11242 and is all-in
+Hero: calls 9362 and is all-in
+Uncalled bet (755) returned to Player1
+*** FLOP *** [3c 2s 2c]
+*** TURN *** [3c 2s 2c] [6s]
+*** RIVER *** [3c 2s 2c 6s] [Qc]
+*** SHOW DOWN ***
+Hero: shows [Jd 9d] (a pair of Deuces)
+Player1: shows [8s 8c] (two pair, Eights and Deuces)
+Player1 collected 21184 from pot
+Player1 wins €6.75 for eliminating Hero and their own bounty increases by €6.75 to €20.25
+*** SUMMARY ***
+Total pot 21184 | Rake 0
+Board [3c 2s 2c 6s Qc]
+Seat 1: Player1 (button) showed [8s 8c] and won (21184) with two pair, Eights and Deuces
+Seat 2: Hero (small blind) showed [Jd 9d] and lost with a pair of Deuces
+Seat 3: Player2 (big blind) folded before Flop
+
+PokerStars Hand #260993442517: Zoom Tournament #4002441239, €13.50+€13.50+€3.00 EUR Hold'em No Limit - Level VI (75/150) - 2026/06/01 0:05:40 WET [2026/05/31 19:05:40 ET]
+Table '4002441239 6' 3-max Seat #1 is the button
+Seat 1: Player1 (7700 in chips, €13.50 bounty) is sitting out
+Seat 2: Hero (10487 in chips, €13.50 bounty)
+Seat 3: Player2 (5650 in chips, €13.50 bounty)
+Player1: posts the ante 20
+Hero: posts the ante 20
+Player2: posts the ante 20
+Hero: posts small blind 75
+Player2: posts big blind 150
+*** HOLE CARDS ***
+Dealt to Hero [4c 8h]
+Player1: folds
+Hero: folds
+Uncalled bet (75) returned to Player2
+Player2 collected 210 from pot
+Player2: doesn't show hand
+*** SUMMARY ***
+Total pot 210 | Rake 0
+Seat 1: Player1 (button) folded before Flop (didn't bet)
+Seat 2: Hero (small blind) folded before Flop
+Seat 3: Player2 (big blind) collected (210)

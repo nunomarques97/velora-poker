@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import type { AppSettings, HudProfile, ImportStatus } from "../data/types";
-import type { TableDetectionStatus } from "../data/api";
+import type { ClassificationRule } from "../data/api";
 import {
   DesktopAppRequiredError,
   getActiveHudProfile,
+  getClassificationRules,
   getAppSettings,
   getDiagnosticsReport,
   getImportStatus,
@@ -35,6 +36,35 @@ function formatDate(iso: string | null): string {
   return date.toLocaleString();
 }
 
+function formatPct(value: number): string {
+  return `${Number.isInteger(value) ? value : value.toFixed(1)}%`;
+}
+
+/**
+ * Renders one stat's threshold pair in plain language, or null when the rule
+ * places no constraint on that stat.
+ */
+function statClause(name: string, min: number | null, max: number | null): string | null {
+  if (min !== null && max !== null) return `${name} ${formatPct(min)}–${formatPct(max)}`;
+  if (min !== null) return `${name} ${formatPct(min)}+`;
+  if (max !== null) return `${name} under ${formatPct(max)}`;
+  return null;
+}
+
+/**
+ * The rule's stat constraints as readable clauses, derived from the values the
+ * backend actually returns rather than restated as copy — if a threshold moves
+ * in the rule table, this text moves with it. An empty result means the rule
+ * constrains nothing but hand count, i.e. it is a catch-all.
+ */
+function ruleClauses(rule: ClassificationRule): string[] {
+  return [
+    statClause("VPIP", rule.vpipMin, rule.vpipMax),
+    statClause("PFR", rule.pfrMin, rule.pfrMax),
+    statClause("3-Bet", rule.threeBetMin, rule.threeBetMax),
+  ].filter((clause): clause is string => clause !== null);
+}
+
 function formatParserStatus(status: string): string {
   switch (status) {
     case "watching":
@@ -57,8 +87,12 @@ export function SettingsView() {
   const [minHandsInput, setMinHandsInput] = useState("25");
   const [resetting, setResetting] = useState(false);
   const [tableDetected, setTableDetected] = useState(false);
-  const [trackingDebug, setTrackingDebug] = useState<TableDetectionStatus | null>(null);
+  // how many real PokerStars tables are open. Each one has its own HUD,
+  // so this reads as a count of running HUDs rather than 's disclaimer.
+  const [tableWindowCount, setTableWindowCount] = useState(0);
   const [savingAutoCenter, setSavingAutoCenter] = useState(false);
+
+  const [rules, setRules] = useState<ClassificationRule[] | null>(null);
 
   const [copyingDiagnostics, setCopyingDiagnostics] = useState(false);
   const [diagnosticsStatus, setDiagnosticsStatus] = useState<string | null>(null);
@@ -88,6 +122,10 @@ export function SettingsView() {
         setMinHandsInput(String(p.minHands));
       })
       .catch(() => undefined);
+
+    getClassificationRules()
+      .then(setRules)
+      .catch(() => setRules([]));
   }
 
   useEffect(() => {
@@ -101,7 +139,7 @@ export function SettingsView() {
         .then((status) => {
           if (!cancelled) {
             setTableDetected(status.detected);
-            setTrackingDebug(status);
+            setTableWindowCount(status.tableWindowCount);
           }
         })
         .catch(() => undefined);
@@ -182,7 +220,7 @@ export function SettingsView() {
     <div>
       <div className="view-header">
         <h1>Settings</h1>
-        <p>Configuration will become available as features are implemented.</p>
+        <p>Your poker room, hand history folder, HUD threshold and table detection.</p>
       </div>
 
       <div className={styles.section}>
@@ -279,12 +317,24 @@ export function SettingsView() {
               <div className={styles.statusCell}>
                 <span className={styles.statusLabel}>Overlay</span>
                 <span className={styles.statusValue}>
-                  {appSettings?.overlayEnabled ? "Enabled" : "Disabled"}
+                  {appSettings?.overlayEnabled ? "On for every table" : "Off (kill switch)"}
                 </span>
               </div>
             </div>
             <label className={styles.minHandsRow}>
-              Minimum hands before automatic classification
+              <span>
+                Sample size for full-strength stat display
+                {/* This field writes the active HUD profile's `min_hands`, and the
+                    only thing that reads it is the HUD card's opacity fade. It used
+                    to be labelled "minimum hands before automatic classification",
+                    which is what the *rules* below do with their own minimum — two
+                    unrelated numbers under one name. */}
+                <div className={styles.hudHint} style={{ marginTop: 4 }}>
+                  Stat values on a HUD card fade while a player has fewer hands than
+                  this, and reach full strength at it. Purely visual — archetype labels
+                  come from the rules below and their own hand minimums.
+                </div>
+              </span>
               <input
                 className={styles.minHandsInput}
                 type="number"
@@ -295,12 +345,70 @@ export function SettingsView() {
               />
             </label>
             <p className={styles.hudHint}>
-              Switch HUD models, open the overlay, and manage per-player color overrides from the
-              HUD Profiles page.
+              Switch HUD models, turn HUDs on or off, and manage per-player color overrides from
+              the HUD Profiles page. A HUD appears on every PokerStars table you open, by itself.
             </p>
           </>
         ) : (
           <div className={styles.stateBox}>Loading&hellip;</div>
+        )}
+      </div>
+
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>Player Classification</div>
+        <p className={styles.ruleIntro}>
+          Every tracked opponent is checked against these rules in order, top to bottom. The first
+          one that matches decides the label and colour on their HUD card.
+        </p>
+
+        {rules === null && <div className={styles.stateBox}>Loading&hellip;</div>}
+        {rules !== null && rules.length === 0 && (
+          <div className={styles.stateBox}>Classification rules are unavailable.</div>
+        )}
+
+        {rules !== null && rules.length > 0 && (
+          <>
+            <div className={styles.ruleList}>
+              {rules.map((rule) => {
+                const clauses = ruleClauses(rule);
+                return (
+                  <div key={rule.id} className={styles.ruleRow}>
+                    <span className={styles.ruleSwatch} style={{ background: rule.color }} />
+                    <div className={styles.ruleBody}>
+                      <div className={styles.ruleLabel}>{rule.label}</div>
+                      {clauses.length > 0 ? (
+                        <div className={styles.ruleCriteria}>
+                          {clauses.length > 1
+                            ? `All of: ${clauses.join(", ")}`
+                            : clauses[0]}
+                          , on at least {rule.minHands} tracked hands.
+                        </div>
+                      ) : (
+                        <div className={styles.ruleDefault}>
+                          No stat thresholds at all — this rule sets none, so it matches on hand
+                          count alone and catches everyone the rules above did not. Anyone with at
+                          least {rule.minHands} tracked hands lands here, including tight, passive
+                          players who never reach the aggression floor above. It is a fallback
+                          bucket, not a detection of recreational play.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className={styles.ruleNote}>
+              Below a rule&apos;s hand minimum nothing matches at all, and the player stays Unknown
+              with no archetype shown. A per-player colour override also wins outright: an
+              overridden player shows that colour and its label instead of any rule&apos;s.
+            </p>
+            <p className={styles.ruleNote}>
+              These hand minimums are not the &quot;Min hands&quot; field on the HUD Profiles page.
+              That one is a display setting: it fades stat values on thin samples and changes no
+              label. The minimums above are the only sample gate on classification.
+            </p>
+          </>
         )}
       </div>
 
@@ -310,7 +418,17 @@ export function SettingsView() {
           <div className={styles.statusCell}>
             <span className={styles.statusLabel}>PokerStars Table Window</span>
             <span className={styles.statusValue}>
-              {tableDetected ? "Detected — overlay is following it" : "Not detected"}
+              {tableDetected ? "Detected — each table has its own HUD" : "Not detected"}
+            </span>
+          </div>
+          <div className={styles.statusCell}>
+            <span className={styles.statusLabel}>Open Tables</span>
+            <span className={styles.statusValue}>
+              {tableWindowCount === 0
+                ? "None"
+                : tableWindowCount === 1
+                  ? "1 — tracked, with its own HUD"
+                  : `${tableWindowCount} — each tracked, with its own HUD`}
             </span>
           </div>
         </div>
@@ -330,16 +448,6 @@ export function SettingsView() {
             onChange={(e) => handleAutoCenterToggle(e.target.checked)}
           />
         </label>
-        {trackingDebug && (
-          <div className={styles.hudHint} style={{ marginTop: 8 }}>
-            Window-following debug — hooks installed: {trackingDebug.hooksInstalled}/2, event
-            callbacks: {trackingDebug.eventCallbacksTotal} total /{" "}
-            {trackingDebug.eventCallbacksMatched} matched, poll ticks:{" "}
-            {trackingDebug.pollTicks}, integrity level — Velora:{" "}
-            {trackingDebug.appIntegrityLevel ?? "unknown"}, table:{" "}
-            {trackingDebug.tableIntegrityLevel ?? "not tracked"}
-          </div>
-        )}
       </div>
 
       <div className={styles.section}>

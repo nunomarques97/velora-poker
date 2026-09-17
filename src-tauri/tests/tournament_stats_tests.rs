@@ -30,10 +30,18 @@ fn player_id(conn: &rusqlite::Connection, name: &str) -> i64 {
     .unwrap_or_else(|_| panic!("player {name} not found"))
 }
 
-fn assert_close(actual: f64, expected: f64, label: &str) {
+fn assert_close(actual: Option<f64>, expected: f64, label: &str) {
+    let actual = actual.unwrap_or_else(|| panic!("{label}: expected Some({expected}), got None"));
     assert!(
         (actual - expected).abs() < 0.05,
         "{label}: expected {expected}, got {actual}"
+    );
+}
+
+fn assert_no_opportunity(actual: Option<f64>, label: &str) {
+    assert!(
+        actual.is_none(),
+        "{label}: expected None (no opportunity), got {actual:?}"
     );
 }
 
@@ -86,11 +94,17 @@ fn computes_stats_for_tournament_only_player() {
 
     assert_close(s.vpip, 50.0, "TourneyHero vpip");
     assert_close(s.pfr, 50.0, "TourneyHero pfr");
-    assert_close(s.three_bet, 0.0, "TourneyHero three_bet");
-    assert_close(s.fold_to_three_bet, 0.0, "TourneyHero fold_to_three_bet");
+    assert_no_opportunity(s.three_bet, "TourneyHero three_bet");
+    assert_no_opportunity(s.fold_to_three_bet, "TourneyHero fold_to_three_bet");
     assert_close(s.c_bet, 0.0, "TourneyHero c_bet");
-    assert_close(s.fold_to_c_bet, 0.0, "TourneyHero fold_to_c_bet");
+    assert_no_opportunity(s.fold_to_c_bet, "TourneyHero fold_to_c_bet");
     assert_close(s.aggression_factor, 0.0, "TourneyHero aggression_factor");
+    // The all-in-preflop-disconnect fixture is folded to (no showdown, no
+    // flop actually dealt to anyone) and correctly does NOT count toward the
+    // WTSD denominator — `went_to_showdown` is what discriminates it from a
+    // genuine all-in-preflop-then-showdown hand, both of which have zero
+    // flop-street action rows ( requirement 3 follow-up correction). Only
+    // the showdown_allin fixture's flop counts, so this is 1/1 = 100%.
     assert_close(s.wtsd, 100.0, "TourneyHero wtsd");
     assert_close(s.wsd, 0.0, "TourneyHero wsd");
 }

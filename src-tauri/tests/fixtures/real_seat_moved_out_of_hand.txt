@@ -1,0 +1,40 @@
+PokerStars Hand #261897473676: Tournament #4022791123, €1.80+€0.20 EUR Hold'em No Limit - Level II (150/300) - 2026/08/28 20:04:59 WET [2026/08/28 15:04:59 ET]
+Table '4022791123 4' 6-max Seat #5 is the button
+Seat 1: Player4 (49060 in chips) 
+Seat 2: Player3 (98122 in chips) 
+Seat 3: Player1 (50110 in chips) 
+Seat 4: Player2 (68870 in chips) 
+Seat 5: Hero (35920 in chips) is sitting out
+Seat 6: Player5 (50000 in chips) out of hand (moved from another table into small blind)
+Player5 will be allowed to play after the button
+Player4: posts the ante 40
+Player3: posts the ante 40
+Player1: posts the ante 40
+Player2: posts the ante 40
+Hero: posts the ante 40
+Player4: posts small blind 150
+Player3: posts big blind 300
+*** HOLE CARDS ***
+Dealt to Hero [Ks Qc]
+Player1: folds 
+Player2: raises 300 to 600
+Hero: folds 
+Player4: folds 
+Player3: calls 300
+*** FLOP *** [5c 5h 9h]
+Player3: checks 
+Player2: checks 
+*** TURN *** [5c 5h 9h] [Qs]
+Player3: checks 
+Player2: bets 1194
+Player3: folds 
+Uncalled bet (1194) returned to Player2
+Player2 collected 1550 from pot
+*** SUMMARY ***
+Total pot 1550 | Rake 0 
+Board [5c 5h 9h Qs]
+Seat 1: Player4 (small blind) folded before Flop
+Seat 2: Player3 (big blind) folded on the Turn
+Seat 3: Player1 folded before Flop (didn't bet)
+Seat 4: Player2 collected (1550)
+Seat 5: Hero (button) folded before Flop (didn't bet)

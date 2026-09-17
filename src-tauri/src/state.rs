@@ -15,14 +15,17 @@ pub struct ImportState {
     pub parser_status: String,
 }
 
-/// One entry in the  diagnostics refresh log — every time the overlay
-/// (or anything else) asked for the active table's players, what table it
-/// resolved to, and how many players came back. Kept so a user's "Copy
-/// Diagnostics" dump shows exactly what the overlay has been rendering and
-/// when, without needing him to characterize the bug himself.
+/// One entry in the  diagnostics refresh log — every time an overlay asked
+/// for its table's players, what table it resolved to, and how many players
+/// came back. Kept so a user's "Copy Diagnostics" dump shows exactly what
+/// each overlay has been rendering and when, without needing him to
+/// characterize the bug himself. `table_id` was added in with several
+/// overlays refreshing into one log, the entries interleave and the table's
+/// own id is what tells them apart.
 #[derive(Debug, Clone)]
 pub struct RefreshLogEntry {
     pub at: String,
+    pub table_id: u32,
     pub table_name: Option<String>,
     pub hand_id: Option<String>,
     pub player_count: usize,
@@ -40,6 +43,15 @@ pub struct AppState {
 impl AppState {
     pub fn new(db_path: std::path::PathBuf) -> rusqlite::Result<Self> {
         let conn = db::open(&db_path)?;
+
+        // The overlay kill switch is a "not right now" for the current
+        // session, not a permanent off — a past session left toggled off must
+        // never silently suppress every HUD on a future launch with no
+        // visible sign why. Forced back to enabled here, before the Tauri
+        // builder exists and before any window or command can read the
+        // setting, so there is no earlier point where a stale "off" could be
+        // observed.
+        db::set_setting(&conn, settings::SETTING_OVERLAY_ENABLED, "true")?;
 
         let configured_dir = db::get_setting(&conn, settings::SETTING_HAND_HISTORY_DIR)?.or_else(|| {
             settings::detect_default_hand_history_dir().map(|p| p.to_string_lossy().to_string())

@@ -97,8 +97,6 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 24px;
-  border-bottom: 1px solid var(--border-subtle);
 }
 
 .classificationDot {
@@ -164,35 +162,71 @@
   color: var(--accent-strong);
 }
 
-.headline {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+/* Rule-based conclusion lines (; restructured Phase 0+1) — shared by the
+   Tendencies, Exploits, and Confidence sections. An empty list renders
+   `.descriptionEmpty` instead, never a blank section. */
+.descriptionList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.descriptionItem {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.headlineCell {
-  padding: 18px 16px;
-  text-align: center;
-  border-left: 1px solid var(--border-subtle);
+.descriptionItem:last-child {
+  border-bottom: none;
 }
 
-.headlineCell:first-child {
-  border-left: none;
-}
-
-.headlineValue {
-  font-size: 22px;
-  font-weight: 600;
+.descriptionText {
+  font-size: 13px;
+  line-height: 1.5;
   color: var(--text-primary);
-  letter-spacing: -0.01em;
 }
 
-.headlineLabel {
-  margin-top: 4px;
-  font-size: 11px;
+.descriptionEmpty {
+  font-size: 13px;
   color: var(--text-tertiary);
+}
+
+/* Per-conclusion confidence tier badge (Phase 0+1) — replaces the raw
+   percentage that used to sit next to each description line; the CONFIDENCE
+   section shows one of these per conclusion, never a single player-wide
+   score. */
+.confidenceBadge {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.tier-high {
+  color: #57b88b;
+  background: rgba(87, 184, 139, 0.14);
+}
+
+.tier-medium {
+  color: #d9b44a;
+  background: rgba(217, 180, 74, 0.14);
+}
+
+.tier-low {
+  color: var(--text-tertiary);
+  background: var(--bg-surface-alt);
+}
+
+.tier-insufficientData {
+  color: var(--text-tertiary);
+  background: var(--bg-surface-alt);
 }
 
 /* Free-text player note. Same surface/border tokens as the other
@@ -235,6 +269,11 @@
 
 .section {
   padding: 20px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.section:last-child {
+  border-bottom: none;
 }
 
 .sectionTitle {
@@ -246,25 +285,3 @@
   margin-bottom: 12px;
 }
 
-.statRow {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.statRow:last-child {
-  border-bottom: none;
-}
-
-.statRowLabel {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.statRowValue {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}

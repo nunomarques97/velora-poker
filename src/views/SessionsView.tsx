@@ -71,7 +71,11 @@ export function SessionsView() {
               <div key={session.startAt} className={styles.row}>
                 <span className={styles.date}>{formatSessionDate(session.startAt)}</span>
                 <span className={`${styles.cell} tabular`}>
-                  {formatSessionTime(session.startAt)}–{formatSessionTime(session.endAt)}
+                  {/* Zero-width space after the dash: the only place this
+                      range is allowed to wrap, now that each time is atomic. */}
+                  {formatSessionTime(session.startAt)}
+                  {"\u2013\u200b"}
+                  {formatSessionTime(session.endAt)}
                 </span>
                 <span className={styles.cell}>{formatKind(session)}</span>
                 <span className={`${styles.cell} tabular`}>{session.tableCount}</span>

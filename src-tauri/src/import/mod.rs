@@ -3,11 +3,20 @@ use rusqlite::{params, Connection, OptionalExtension};
 use crate::db;
 use crate::parser::{HandHistoryParser, ParsedHand, PokerStarsParser};
 
+pub mod validate;
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ImportSummary {
     pub hands_imported: i64,
     pub hands_skipped_duplicate: i64,
     pub hands_failed: i64,
+    /// Hands the integrity gate refused to store (`validate::Severity::Reject`).
+    pub hands_rejected_invalid: i64,
+    /// Hands stored despite a recorded warning.
+    pub hands_with_warnings: i64,
+    /// Seat lines seen but not dealt into their hand — sitting out, or moved in
+    /// from another table. Counted, not an error.
+    pub seats_not_dealt_in: i64,
 }
 
 impl ImportSummary {
@@ -15,6 +24,9 @@ impl ImportSummary {
         self.hands_imported += other.hands_imported;
         self.hands_skipped_duplicate += other.hands_skipped_duplicate;
         self.hands_failed += other.hands_failed;
+        self.hands_rejected_invalid += other.hands_rejected_invalid;
+        self.hands_with_warnings += other.hands_with_warnings;
+        self.seats_not_dealt_in += other.seats_not_dealt_in;
     }
 }
 
@@ -29,14 +41,45 @@ pub fn import_text(conn: &mut Connection, text: &str) -> Result<ImportSummary, S
 
     for result in results {
         match result {
-            Ok(hand) => match import_hand(conn, &hand) {
-                Ok(true) => summary.hands_imported += 1,
-                Ok(false) => summary.hands_skipped_duplicate += 1,
-                Err(err) => {
-                    summary.hands_failed += 1;
-                    eprintln!("failed to import hand {}: {}", hand.hand_id, err);
+            Ok(hand) => {
+                summary.seats_not_dealt_in += hand.skipped_seats.len() as i64;
+
+                // Integrity gate (work unit 2, requirement 5). A hand that fails
+                // never reaches the database, and never fails silently: it is
+                // logged here and counted into the persisted totals below, which
+                // the Settings → Diagnostics report reads back.
+                let problems = validate::check(&hand);
+                if !validate::is_storable(&problems) {
+                    summary.hands_rejected_invalid += 1;
+                    for problem in problems.iter().filter(|p| p.severity == validate::Severity::Reject) {
+                        eprintln!(
+                            "REJECTED hand {} [{}]: {}",
+                            hand.hand_id, problem.code, problem.detail
+                        );
+                    }
+                    let _ = db::record_import_problems(conn, &hand.hand_id, &problems);
+                    continue;
                 }
-            },
+                if !problems.is_empty() {
+                    summary.hands_with_warnings += 1;
+                    for problem in &problems {
+                        eprintln!(
+                            "WARNING hand {} [{}]: {}",
+                            hand.hand_id, problem.code, problem.detail
+                        );
+                    }
+                    let _ = db::record_import_problems(conn, &hand.hand_id, &problems);
+                }
+
+                match import_hand(conn, &hand) {
+                    Ok(true) => summary.hands_imported += 1,
+                    Ok(false) => summary.hands_skipped_duplicate += 1,
+                    Err(err) => {
+                        summary.hands_failed += 1;
+                        eprintln!("failed to import hand {}: {}", hand.hand_id, err);
+                    }
+                }
+            }
             Err(_) => {
                 summary.hands_failed += 1;
             }
@@ -137,13 +180,14 @@ fn import_hand(conn: &mut Connection, hand: &ParsedHand) -> Result<bool, rusqlit
             .unwrap_or_default();
 
         tx.execute(
-            "INSERT INTO player_hands (hand_id, player_id, seat, starting_stack, is_hero, went_to_showdown, won_at_showdown, net_result)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO player_hands (hand_id, player_id, seat, starting_stack, position, is_hero, went_to_showdown, won_at_showdown, net_result)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 hand_row_id,
                 player_id,
                 seat.seat_number,
                 seat.starting_stack,
+                seat.position,
                 is_hero as i64,
                 result.went_to_showdown as i64,
                 result.won_at_showdown as i64,

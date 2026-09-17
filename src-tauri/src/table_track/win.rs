@@ -45,13 +45,31 @@
 //! user's machine — `debug_snapshot` below reports both processes'
 //! integrity level so that can be read directly from Settings instead of
 //! guessed at.
+//!
+//! ## one tracked table became a registry of all of them
+//!
+//! Until  this module held exactly one table's worth of state in
+//! process-wide statics — `TRACKED_HWND`, `LAST_RECT`, `LAST_TABLE_NAME` —
+//! and `try_acquire_and_sync` picked `enumerate_table_windows().first()`,
+//! discarding every other real table window it had just found. Everything
+//! above it inherited that shape: one overlay window, one hit-test instance,
+//! one "active table" for every DB query. Confirmed live: with two real
+//! tables open, one got a HUD and the other got nothing.
+//!
+//! The statics are now a single `TABLES` registry holding every open table
+//! window, each with its own id, rect and parsed name. The poll loop
+//! reconciles that registry against the live enumeration every tick — new
+//! windows are added, closed ones removed, survivors re-read — and every
+//! change is handed to `overlay::manager`, which owns one overlay window per
+//! entry. `win_event_proc` looks its HWND up in the registry instead of
+//! comparing it against the single tracked handle.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicIsize, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter};
 use windows::Win32::Foundation::{CloseHandle, BOOL, HANDLE, HWND, LPARAM, RECT};
 use windows::Win32::Security::{
     GetSidSubAuthority, GetSidSubAuthorityCount, GetTokenInformation, TokenIntegrityLevel,
@@ -62,14 +80,18 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::Accessibility::{SetWinEventHook, HWINEVENTHOOK};
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetClassNameW, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, IsWindow,
-    IsWindowVisible, CHILDID_SELF, EVENT_OBJECT_LOCATIONCHANGE, EVENT_SYSTEM_MOVESIZEEND,
-    OBJID_WINDOW, WINEVENT_OUTOFCONTEXT,
+    EnumWindows, GetClassNameW, GetForegroundWindow, GetWindowRect, GetWindowTextW,
+    GetWindowThreadProcessId, IsIconic, IsWindowVisible, CHILDID_SELF, EVENT_OBJECT_DESTROY,
+    EVENT_OBJECT_LOCATIONCHANGE, EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZESTART,
+    EVENT_SYSTEM_MOVESIZEEND, OBJID_WINDOW, WINEVENT_OUTOFCONTEXT,
 };
 
-use super::{extract_table_name, overlay_bounds_for_table, DebugSnapshot, ResyncLogEntry, WindowRect};
-use crate::db::now_iso;
-use crate::overlay::OVERLAY_LABEL;
+use super::{
+    extract_table_name, table_for_hwnd, DebugSnapshot, ResyncLogEntry, TrackedTable, WindowRect,
+    TRACKED_TABLES_EVENT,
+};
+use crate::db::{now_iso, now_played_at};
+use crate::overlay::manager;
 
 /// Confirmed against the user's live client via a read-only `EnumWindows`
 /// dump: real table windows report class `GLFW30`. That's a generic
@@ -86,6 +108,11 @@ const POKERSTARS_TABLE_CLASS_CANDIDATES: &[&str] = &["GLFW30"];
 /// PokerStars ships a new non-table window type.
 const LOGGED_IN_TITLE_MARKER: &str = " - Logged In as ";
 
+/// `EnumWindows` reads a callback's return value as "keep going": zero stops
+/// the enumeration. Named because the difference between the two is one
+/// character and, in `enum_windows_proc`, the whole  multi-table count.
+const CONTINUE_ENUMERATION: BOOL = BOOL(1);
+
 /// True if `title` belongs to a real, logged-in PokerStars table window.
 fn is_table_title(title: &str) -> bool {
     title.contains(LOGGED_IN_TITLE_MARKER)
@@ -95,20 +122,27 @@ fn log(msg: impl AsRef<str>) {
     eprintln!("[table_track] {}", msg.as_ref());
 }
 
-static TRACKED_HWND: AtomicIsize = AtomicIsize::new(0);
 static APP_HANDLE: OnceLock<AppHandle> = OnceLock::new();
-static LAST_RECT: Mutex<Option<WindowRect>> = Mutex::new(None);
 // Keeps the hooks alive for the process's lifetime; never unhooked (the app
 // only ever installs these once, at startup, and runs until process exit).
 static HOOKS: Mutex<Vec<isize>> = Mutex::new(Vec::new());
 
-// the table *name* of whichever window is currently
-// tracked, extracted from its title (see `extract_table_name`) so the
-// active-table DB query can be scoped to this specific table instead of
-// "whatever hand was imported most recently across every open table" — see
-// the notes  and `db::list_active_table_players_with_seats`.
-// `None` whenever no window is tracked, or its title didn't parse.
-static LAST_TABLE_NAME: Mutex<Option<String>> = Mutex::new(None);
+/// Every real, logged-in PokerStars table window currently open, in the
+/// `EnumWindows` order they were last enumerated in. This replaced
+/// `TRACKED_HWND`/`LAST_RECT`/`LAST_TABLE_NAME`, which between them could
+/// describe exactly one table.
+///
+/// A `Vec` rather than the `HashMap<isize, _>` the shape suggests: a real
+/// multi-tabling session is a handful of windows, so the lookups this does per
+/// event are already free, and a `Vec` both keeps the enumeration's own
+/// ordering (stable for the UI's table list) and is `const`-initialisable, so
+/// the registry needs no `LazyLock` wrapper to live in a plain `static`.
+static TABLES: Mutex<Vec<TrackedTable>> = Mutex::new(Vec::new());
+
+/// Source of `TrackedTable::id`. Monotonic and never reset: an id is not
+/// reused after its table closes, so a recycled HWND landing on a new table
+/// cannot be mistaken for the old one by an overlay that hasn't caught up yet.
+static NEXT_TABLE_ID: AtomicU32 = AtomicU32::new(1);
 
 const RESYNC_LOG_CAP: usize = 20;
 static RESYNC_LOG: Mutex<VecDeque<ResyncLogEntry>> = Mutex::new(VecDeque::new());
@@ -122,17 +156,53 @@ static EVENT_CALLBACKS_TOTAL: AtomicU64 = AtomicU64::new(0);
 static EVENT_CALLBACKS_MATCHED: AtomicU64 = AtomicU64::new(0);
 static POLL_TICKS: AtomicU64 = AtomicU64::new(0);
 
-pub fn last_known_table_rect() -> Option<WindowRect> {
-    LAST_RECT.lock().ok().and_then(|g| *g)
+/// Every table window currently tracked, newest-enumerated order. One overlay
+/// window exists per entry.
+pub fn tracked_tables() -> Vec<TrackedTable> {
+    TABLES.lock().map(|t| t.clone()).unwrap_or_default()
 }
 
-/// The table name extracted from the currently-tracked window's title, if
-/// any — see the `LAST_TABLE_NAME` doc comment above. Used both to scope
-/// the active-table DB query and surfaced in the diagnostics report
-/// so the user can see exactly which table Velora thinks is active and
-/// that it came from window tracking, not a guess.
-pub fn active_table_name() -> Option<String> {
-    LAST_TABLE_NAME.lock().ok().and_then(|g| g.clone())
+/// One tracked table by its id, or `None` once its window has closed.
+pub fn table_for(table_id: u32) -> Option<TrackedTable> {
+    TABLES
+        .lock()
+        .ok()
+        .and_then(|t| t.iter().find(|t| t.id == table_id).cloned())
+}
+
+/// The table name parsed from that table window's own title, which is
+/// what every DB query for this table is scoped by. `None` when the table has
+/// closed or its title didn't parse — see
+/// `commands::get_active_table_players` for what the second case renders.
+pub fn table_name_for(table_id: u32) -> Option<String> {
+    table_for(table_id).and_then(|t| t.name)
+}
+
+/// The  global-hotkey handler (default `Ctrl+Alt+H`, registered in
+/// `lib.rs`'s `setup()`): resolves "the" table to act on from OS foreground
+/// focus, not any Velora-side "active table" notion, so it always acts on
+/// whichever table the user is actually looking at with several open.
+/// Toggles that table's own dismissed state through the exact same
+/// `OverlayRequest` plumbing the in-overlay Hide button and the HUD
+/// Profiles page's Show button already use — this is a new trigger for that
+/// mechanism, not a new one.
+///
+/// A no-op, not an error, when the foreground window isn't a tracked table
+/// (PokerStars' own lobby, a different application, or nothing recognized)
+/// — the hotkey is meant to be pressed at any time without looking, so
+/// silently doing nothing is the only sane behavior outside a table.
+pub fn toggle_hud_for_foreground_table() {
+    let foreground = unsafe { GetForegroundWindow() };
+    let hwnd = foreground.0 as isize as i64;
+    let tables = tracked_tables();
+    let Some(table) = table_for_hwnd(&tables, hwnd) else {
+        return;
+    };
+    if manager::is_dismissed(table.id) {
+        manager::request(manager::OverlayRequest::Show { table_id: table.id });
+    } else {
+        manager::request(manager::OverlayRequest::Dismiss { table_id: table.id });
+    }
 }
 
 /// Last `RESYNC_LOG_CAP` overlay resync events (window acquired, WinEvent
@@ -148,14 +218,13 @@ pub fn resync_log() -> Vec<ResyncLogEntry> {
 }
 
 pub fn debug_snapshot() -> DebugSnapshot {
-    let tracked = TRACKED_HWND.load(Ordering::SeqCst);
-    let table_integrity_level = if tracked != 0 {
-        table_process_pid(HWND(tracked as *mut _))
+    // Any tracked table answers the UIPI question equally well — they are all
+    // windows of the same PokerStars process.
+    let table_integrity_level = tracked_tables().first().and_then(|t| {
+        table_process_pid(HWND(t.hwnd as isize as *mut _))
             .and_then(process_integrity_level_for_pid)
             .map(integrity_level_name)
-    } else {
-        None
-    };
+    });
     DebugSnapshot {
         hooks_installed: HOOKS_INSTALLED.load(Ordering::SeqCst),
         event_callbacks_total: EVENT_CALLBACKS_TOTAL.load(Ordering::SeqCst),
@@ -164,6 +233,26 @@ pub fn debug_snapshot() -> DebugSnapshot {
         app_integrity_level: current_process_integrity_level().map(integrity_level_name),
         table_integrity_level,
     }
+}
+
+/// Every WinEvent hook `install_tracking` registers, one entry per hook — the
+/// single source of truth for "how many hooks should there be", so a
+/// diagnostics message reporting that count can be derived from this list's
+/// length instead of a second hardcoded number that can silently drift out
+/// of sync the next time a hook is added or removed.
+const TRACKED_EVENTS: &[(&str, u32)] = &[
+    ("EVENT_OBJECT_LOCATIONCHANGE", EVENT_OBJECT_LOCATIONCHANGE),
+    ("EVENT_SYSTEM_MOVESIZEEND", EVENT_SYSTEM_MOVESIZEEND),
+    ("EVENT_OBJECT_DESTROY", EVENT_OBJECT_DESTROY),
+    ("EVENT_SYSTEM_MINIMIZESTART", EVENT_SYSTEM_MINIMIZESTART),
+    ("EVENT_SYSTEM_MINIMIZEEND", EVENT_SYSTEM_MINIMIZEEND),
+];
+
+/// How many WinEvent hooks `install_tracking` is expected to register —
+/// `TRACKED_EVENTS.len()`, so the diagnostics report can show "installed
+/// N/expected" without a hardcoded expectation of its own.
+pub fn expected_hook_count() -> u32 {
+    TRACKED_EVENTS.len() as u32
 }
 
 /// Installs the WinEvent hooks and starts the low-frequency re-acquisition
@@ -176,10 +265,7 @@ pub fn install_tracking(app_handle: AppHandle) {
     // One hook per event, each with eventMin == eventMax (the documented
     // way to hook exactly one event) — see the  doc comment above for
     // why a single hook spanning both events was wrong.
-    for (name, event) in [
-        ("EVENT_OBJECT_LOCATIONCHANGE", EVENT_OBJECT_LOCATIONCHANGE),
-        ("EVENT_SYSTEM_MOVESIZEEND", EVENT_SYSTEM_MOVESIZEEND),
-    ] {
+    for (name, event) in TRACKED_EVENTS.iter().copied() {
         let hook: HWINEVENTHOOK = unsafe {
             SetWinEventHook(
                 event,
@@ -211,109 +297,161 @@ pub fn install_tracking(app_handle: AppHandle) {
         log("could not determine Velora's own process integrity level");
     }
 
-    // Try an immediate acquisition so the overlay is already aligned if the
-    // table window already exists when Velora starts, then fall back to
-    // periodic re-checks for tables that open/close later.
-    try_acquire_and_sync();
+    // Reconcile immediately so tables that were already open when Velora
+    // started get their overlays without waiting for the first poll tick,
+    // then keep reconciling for tables that open and close later.
+    reconcile_tables("startup");
 
     std::thread::spawn(|| loop {
         std::thread::sleep(Duration::from_millis(1500));
         let tick = POLL_TICKS.fetch_add(1, Ordering::SeqCst) + 1;
+        reconcile_tables("poll");
 
-        let tracked = TRACKED_HWND.load(Ordering::SeqCst);
-        let still_valid = tracked != 0 && unsafe { IsWindow(HWND(tracked as *mut _)) }.as_bool();
-
-        if !still_valid {
-            if tracked != 0 {
-                log(format!(
-                    "poll tick {tick}: tracked window {tracked:#x} no longer valid, reacquiring"
-                ));
-            }
-            TRACKED_HWND.store(0, Ordering::SeqCst);
-            if let Ok(mut slot) = LAST_TABLE_NAME.lock() {
-                *slot = None;
-            }
-            try_acquire_and_sync();
-            continue;
-        }
-
-        // The actual polling fallback: unconditionally re-read the tracked
-        // window's current rect and re-sync the overlay to it, regardless
-        // of whether the WinEvent hook has fired since the last tick. This
-        // is what makes this a genuine fallback rather than something that
-        // only ever does work when the hook is already broken in a
-        // different way (window replaced).
-        if let Some(rect) = window_rect(HWND(tracked as *mut _)) {
-            let moved = last_known_table_rect() != Some(rect);
+        // The actual polling fallback: unconditionally re-sync every
+        // tracked table's overlay to its window's current rect, regardless of
+        // whether the WinEvent hook has fired since the last tick.
+        // `reconcile_tables` above has already re-read those rects and pushed
+        // the ones that moved; this line is the periodic evidence that the
+        // loop itself is alive.
+        if tick % 20 == 0 {
             log(format!(
-                "poll tick {tick}: tracked={tracked:#x} rect={rect:?} moved_since_last_sync={moved} \
-                 hooks_installed={} event_callbacks_total={} event_callbacks_matched={}",
+                "poll tick {tick}: tracking {} table(s) hooks_installed={} \
+                 event_callbacks_total={} event_callbacks_matched={}",
+                TABLES.lock().map(|t| t.len()).unwrap_or(0),
                 HOOKS_INSTALLED.load(Ordering::SeqCst),
                 EVENT_CALLBACKS_TOTAL.load(Ordering::SeqCst),
                 EVENT_CALLBACKS_MATCHED.load(Ordering::SeqCst),
             ));
-            sync_overlay_to_table(rect, "poll");
         }
     });
 }
 
-fn try_acquire_and_sync() {
-    if let Some(hwnd) = find_table_window() {
-        log(format!("acquired table window {:#x}", hwnd.0 as isize));
-        TRACKED_HWND.store(hwnd.0 as isize, Ordering::SeqCst);
+/// Brings `TABLES` in line with the table windows that actually exist right
+/// now, and hands each difference to the overlay manager.
+///
+/// This is the whole multi-table story in one function: a window that appeared
+/// gets an id and an overlay, a window that vanished loses its overlay, and a
+/// window that moved, resized, was renamed or was minimized has its own
+/// overlay — and only its own — brought back into line. It runs on the poll
+/// thread, never on the main thread, because overlay *creation* must not
+/// happen inside an event handler (see `overlay::manager`).
+fn reconcile_tables(source: &'static str) {
+    let live = enumerate_table_windows();
 
-        let table_name = extract_table_name(&window_title(hwnd));
-        log(format!("extracted table name: {table_name:?}"));
-        if let Ok(mut slot) = LAST_TABLE_NAME.lock() {
-            *slot = table_name;
+    let mut opened: Vec<TrackedTable> = Vec::new();
+    let mut closed: Vec<TrackedTable> = Vec::new();
+    let mut moved: Vec<TrackedTable> = Vec::new();
+    let changed;
+
+    {
+        let Ok(mut tables) = TABLES.lock() else {
+            return;
+        };
+        let before = tables.clone();
+
+        tables.retain(|tracked| {
+            let still_open = live.iter().any(|w| w.hwnd as i64 == tracked.hwnd);
+            if !still_open {
+                closed.push(tracked.clone());
+            }
+            still_open
+        });
+
+        for window in &live {
+            match tables.iter_mut().find(|t| t.hwnd == window.hwnd as i64) {
+                Some(existing) => {
+                    let name = extract_table_name(&window.title);
+                    let table_changed = existing.rect != window.rect
+                        || existing.minimized != window.minimized
+                        || existing.name != name;
+                    if table_changed {
+                        existing.rect = window.rect;
+                        existing.minimized = window.minimized;
+                        existing.name = name;
+                        moved.push(existing.clone());
+                    }
+                }
+                None => {
+                    let table = TrackedTable {
+                        id: NEXT_TABLE_ID.fetch_add(1, Ordering::SeqCst),
+                        hwnd: window.hwnd as i64,
+                        name: extract_table_name(&window.title),
+                        rect: window.rect,
+                        minimized: window.minimized,
+                        // stamped once, here, and never touched again —
+                        // the floor every "active hand for this table" query
+                        // is bound by, so a hand from an earlier sitting of a
+                        // reused table name can never resolve as this one's.
+                        // `now_played_at()`, not `now_iso()`: it has to be on
+                        // the same clock as `played_at` for the comparison to
+                        // mean anything — see that function's doc comment.
+                        first_seen_at: now_played_at(),
+                    };
+                    log(format!(
+                        "table {} opened ({source}): hwnd={:#x} name={:?} rect={:?}",
+                        table.id, window.hwnd, table.name, table.rect
+                    ));
+                    tables.push(table.clone());
+                    opened.push(table);
+                }
+            }
         }
 
-        if let Some(rect) = window_rect(hwnd) {
-            sync_overlay_to_table(rect, "acquire");
-        }
-    } else if let Ok(mut slot) = LAST_TABLE_NAME.lock() {
-        *slot = None;
+        changed = *tables != before;
+    }
+
+    for table in &closed {
+        log(format!(
+            "table {} closed: hwnd={:#x} name={:?}",
+            table.id, table.hwnd, table.name
+        ));
+    }
+    // A table that only *moved* is repositioned straight away rather than
+    // waiting behind the overlay thread's queue — repositioning an existing
+    // window is safe from any thread, unlike creating one.
+    for table in &moved {
+        record_resync(table, source);
+        manager::sync_overlay_bounds(table);
+    }
+    // Every tick, not only when something changed: `reconcile` is a full
+    // create/destroy/reposition pass against this registry, so a window build
+    // that failed once is retried on the next tick instead of leaving that one
+    // table permanently without a HUD.
+    manager::request(manager::OverlayRequest::Reconcile);
+
+    if changed {
+        broadcast_tracked_tables();
     }
 }
 
-fn record_resync(rect: WindowRect, source: &'static str) {
+/// Tells every window which tables are being followed right now, so the UI's
+/// table list updates live as tables open and close. Replaces 's bare count
+/// broadcast: the list is what a UI showing one HUD per table actually needs.
+fn broadcast_tracked_tables() {
+    let tables = tracked_tables();
+    log(format!("tracked tables changed: {} open", tables.len()));
+    if let Some(app_handle) = APP_HANDLE.get() {
+        let _ = app_handle.emit(TRACKED_TABLES_EVENT, tables);
+    }
+}
+
+fn record_resync(table: &TrackedTable, source: &'static str) {
     if let Ok(mut log) = RESYNC_LOG.lock() {
         if log.len() >= RESYNC_LOG_CAP {
             log.pop_front();
         }
-        log.push_back(ResyncLogEntry { at: now_iso(), source, rect });
+        log.push_back(ResyncLogEntry {
+            at: now_iso(),
+            table_id: table.id,
+            source,
+            rect: table.rect,
+        });
     }
-}
-
-fn sync_overlay_to_table(table_rect: WindowRect, source: &'static str) {
-    record_resync(table_rect, source);
-    if let Ok(mut slot) = LAST_RECT.lock() {
-        *slot = Some(table_rect);
-    }
-    let Some(app_handle) = APP_HANDLE.get() else {
-        log("sync_overlay_to_table: no AppHandle installed yet");
-        return;
-    };
-    let Some(win) = app_handle.get_webview_window(OVERLAY_LABEL) else {
-        log(format!(
-            "sync_overlay_to_table: overlay window '{OVERLAY_LABEL}' not found"
-        ));
-        return;
-    };
-    let bounds = overlay_bounds_for_table(table_rect);
-    let _ = win.set_position(tauri::Position::Physical(tauri::PhysicalPosition {
-        x: bounds.x,
-        y: bounds.y,
-    }));
-    let _ = win.set_size(tauri::Size::Physical(tauri::PhysicalSize {
-        width: bounds.width.max(0) as u32,
-        height: bounds.height.max(0) as u32,
-    }));
 }
 
 unsafe extern "system" fn win_event_proc(
     _hook: HWINEVENTHOOK,
-    _event: u32,
+    event: u32,
     hwnd: HWND,
     id_object: i32,
     id_child: i32,
@@ -325,14 +463,61 @@ unsafe extern "system" fn win_event_proc(
     if id_object != OBJID_WINDOW.0 || id_child != CHILDID_SELF as i32 {
         return;
     }
-    let tracked = TRACKED_HWND.load(Ordering::SeqCst);
-    if tracked == 0 || hwnd.0 as isize != tracked {
+    let raw = hwnd.0 as isize;
+
+    if event == EVENT_OBJECT_LOCATIONCHANGE || event == EVENT_SYSTEM_MOVESIZEEND {
+        // matched against every tracked table, not one global handle, and
+        // the update is pushed to that table's own overlay alone. This callback
+        // runs on the main thread (a `WINEVENT_OUTOFCONTEXT` hook is delivered
+        // through the message loop of the thread that installed it), so it may
+        // reposition an existing window — Tauri runs those calls inline when it
+        // is already on the event-loop thread — but must never *create* one:
+        // building a webview from inside an event handler is the documented
+        // Windows deadlock, and the reason overlay creation lives on
+        // `overlay::manager`'s own thread.
+        let updated = {
+            let Ok(mut tables) = TABLES.lock() else {
+                return;
+            };
+            let Some(table) = tables.iter_mut().find(|t| t.hwnd == raw as i64) else {
+                return;
+            };
+            let Some(rect) = window_rect(hwnd) else {
+                return;
+            };
+            let minimized = IsIconic(hwnd).as_bool();
+            if table.rect == rect && table.minimized == minimized {
+                return;
+            }
+            table.rect = rect;
+            table.minimized = minimized;
+            table.clone()
+        };
+
+        EVENT_CALLBACKS_MATCHED.fetch_add(1, Ordering::SeqCst);
+        record_resync(&updated, "event");
+        manager::sync_overlay_bounds(&updated);
         return;
     }
-    EVENT_CALLBACKS_MATCHED.fetch_add(1, Ordering::SeqCst);
-    if let Some(rect) = window_rect(hwnd) {
-        sync_overlay_to_table(rect, "event");
+
+    // EVENT_OBJECT_DESTROY / EVENT_SYSTEM_MINIMIZESTART / EVENT_SYSTEM_MINIMIZEEND:
+    // installed with no process/thread filter, so this fires for every window on
+    // the whole system — cheaply check whether `hwnd` is even one of ours before
+    // doing anything else. A destroyed window's rect can't be read any more, and
+    // a mid-minimize window is more reliably resolved by a fresh full
+    // enumeration than by hand-rolled incremental logic for this one case, so
+    // this reuses the poll's already-tested `reconcile_tables` path instead of
+    // patching a single field in place.
+    let is_tracked = TABLES
+        .lock()
+        .map(|tables| tables.iter().any(|t| t.hwnd == raw as i64))
+        .unwrap_or(false);
+    if !is_tracked {
+        return;
     }
+
+    EVENT_CALLBACKS_MATCHED.fetch_add(1, Ordering::SeqCst);
+    reconcile_tables("event");
 }
 
 fn window_rect(hwnd: HWND) -> Option<WindowRect> {
@@ -355,22 +540,36 @@ fn window_title(hwnd: HWND) -> String {
     String::from_utf16_lossy(&title_buf[..title_len.max(0) as usize])
 }
 
-fn find_table_window() -> Option<HWND> {
-    let mut found: Option<HWND> = None;
+/// One real table window as the enumeration found it — everything
+/// `reconcile_tables` needs to decide whether it is new, unchanged or moved,
+/// read once per window per tick rather than re-queried per comparison.
+struct EnumeratedWindow {
+    hwnd: isize,
+    title: String,
+    rect: WindowRect,
+    minimized: bool,
+}
+
+/// Every real, logged-in PokerStars table window currently open, in
+/// `EnumWindows` z-order (topmost first).  widened this from "the first
+/// match" to all of them so the count could be shown;  is what finally uses
+/// all of them — one tracked table, and one overlay, per entry.
+fn enumerate_table_windows() -> Vec<EnumeratedWindow> {
+    let mut found: Vec<EnumeratedWindow> = Vec::new();
     unsafe {
         let _ = EnumWindows(
             Some(enum_windows_proc),
-            LPARAM(&mut found as *mut Option<HWND> as isize),
+            LPARAM(&mut found as *mut Vec<EnumeratedWindow> as isize),
         );
     }
     found
 }
 
 unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
-    let found = &mut *(lparam.0 as *mut Option<HWND>);
+    let found = &mut *(lparam.0 as *mut Vec<EnumeratedWindow>);
 
     if !IsWindowVisible(hwnd).as_bool() {
-        return BOOL(1);
+        return CONTINUE_ENUMERATION;
     }
 
     let mut class_buf = [0u16; 256];
@@ -381,17 +580,29 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
         .iter()
         .any(|c| c.eq_ignore_ascii_case(&class_name));
     if !class_matches {
-        return BOOL(1);
+        return CONTINUE_ENUMERATION;
     }
 
     let title = window_title(hwnd);
 
     if !is_table_title(&title) {
-        return BOOL(1);
+        return CONTINUE_ENUMERATION;
     }
 
-    *found = Some(hwnd);
-    BOOL(0) // stop enumeration — found it
+    let Some(rect) = window_rect(hwnd) else {
+        return CONTINUE_ENUMERATION;
+    };
+
+    found.push(EnumeratedWindow {
+        hwnd: hwnd.0 as isize,
+        title,
+        rect,
+        minimized: IsIconic(hwnd).as_bool(),
+    });
+    // Keep enumerating:  needs the total, not just the first match. This
+    // used to return `BOOL(0)`, which stops `EnumWindows` — with that, only
+    // one table could ever be found, which is the whole gap  closes.
+    CONTINUE_ENUMERATION
 }
 
 /// PID of the process that owns `hwnd`, if it can be determined.

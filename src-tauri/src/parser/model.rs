@@ -61,6 +61,38 @@ pub struct ParsedSeat {
     pub seat_number: i64,
     pub player_name: String,
     pub starting_stack: f64,
+    /// Table position (`BTN`, `SB`, `BB`, `UTG`, …) derived from the button
+    /// seat and the ring of players actually dealt in — see
+    /// [`crate::parser::position`]. `None` only when the ring could not be
+    /// oriented (fewer than two players dealt in, or a button seat that is not
+    /// one of them), never a guess.
+    pub position: Option<String>,
+}
+
+/// Why a parsed `Seat` line did **not** become a dealt-in player.
+///
+/// PokerStars writes a seat line for everyone *sitting at* the table, which is
+/// not the same as everyone *dealt into the hand*. Measured across the
+/// user's 22 real hand-history files (1,599 seat lines): 28 seats were never
+/// dealt in, and the seat-line marker alone does **not** identify them — 174 of
+/// the 197 seats marked `is sitting out` were dealt in and played the hand
+/// normally, because PokerStars writes that marker when the player's sit-out
+/// flag is set at the time the hand is written, not when the hand is dealt.
+///
+/// The discriminator is therefore behavioural, not textual: a player was dealt
+/// in if they took at least one action (including posting a blind or ante) or
+/// carry a real description in the `*** SUMMARY ***` section. Those two signals
+/// were checked independently against all 1,599 seat lines and agreed on every
+/// one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkippedSeat {
+    pub seat_number: i64,
+    pub player_name: String,
+    /// The trailing text after `in chips`, e.g. `") is sitting out"` or
+    /// `") out of hand (moved from another table into small blind)"`. Recorded
+    /// for diagnostics only — never used to decide whether the seat was dealt
+    /// in.
+    pub seat_line_marker: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -115,7 +147,12 @@ pub struct ParsedHand {
     pub level: Option<String>,
     pub played_at: String,
     pub hero_name: Option<String>,
+    /// Only the players actually **dealt into** this hand. Seats present at the
+    /// table but not in the hand are in [`ParsedHand::skipped_seats`].
     pub seats: Vec<ParsedSeat>,
+    /// Seats parsed from the hand text that were not dealt in. Kept so the
+    /// import path can report them rather than discard them silently.
+    pub skipped_seats: Vec<SkippedSeat>,
     pub actions: Vec<ParsedAction>,
     pub results: HashMap<String, ParsedPlayerResult>,
     pub raw_text: String,

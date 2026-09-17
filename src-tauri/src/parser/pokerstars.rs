@@ -5,8 +5,9 @@ use std::sync::OnceLock;
 
 use super::model::{
     ActionType, HandFormat, ParseError, ParsedAction, ParsedHand, ParsedPlayerResult, ParsedSeat,
-    Street,
+    SkippedSeat, Street,
 };
+use super::position;
 
 /// Parses PokerStars hand history text into structured [`ParsedHand`] values.
 ///
@@ -95,10 +96,33 @@ fn table_regex() -> &'static Regex {
     })
 }
 
+/// Matches a seat line and captures everything trailing `in chips`.
+///
+/// The closing parenthesis is deliberately **not** required immediately after
+/// `in chips`. PokerStars appends content there in several real formats, and
+/// requiring the paren silently dropped every seat of every bounty-tournament
+/// hand: the whole seat block failed to match, so the hand was imported with no
+/// players at all (26 of 275 stored hands, 9.5% — see
+/// the notes §G.2).
+///
+/// Every trailing variant found in the user's own 22 hand-history files
+/// (1,599 seat lines), all covered by `tests/parser_seat_line_tests.rs`:
+///
+/// ```text
+/// Seat 3: NAME (1500 in chips)
+/// Seat 3: NAME (€2 in chips)
+/// Seat 3: NAME (1500 in chips) is sitting out
+/// Seat 3: NAME (11262 in chips, €13.50 bounty)
+/// Seat 3: NAME (11262 in chips, €13.50 bounty) is sitting out
+/// Seat 3: NAME (50000 in chips) out of hand (moved from another table into small blind)
+/// ```
+///
+/// Capture 4 is that trailing text, kept for diagnostics only — it is never
+/// used to decide whether the seat was dealt in (see [`ParsedHand::seats`]).
 fn seat_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"^Seat (\d+): (.+) \([\$€£]?([\d.]+) in chips\)").expect("valid seat regex")
+        Regex::new(r"^Seat (\d+): (.+) \([\$€£]?([\d.]+) in chips(.*)$").expect("valid seat regex")
     })
 }
 
@@ -300,13 +324,23 @@ fn strip_known_name<'a>(rest: &'a str, known_names: &[String]) -> Option<(String
     best.map(|name| (name.clone(), rest[name.len()..].trim_start()))
 }
 
-fn strip_position_tag(desc: &str) -> &str {
-    for tag in ["(button)", "(small blind)", "(big blind)"] {
-        if let Some(rest) = desc.strip_prefix(tag) {
-            return rest.trim_start();
+/// Strips **every** leading position tag, not just the first.
+///
+/// A heads-up summary line carries two, because the button also posts the small
+/// blind: `Seat 1: NAME (button) (small blind) collected (€0.04)`. Stripping
+/// one left `(small blind) …` as the description, which made "is this
+/// description empty" — the dealt-in test — read a tag as content.
+fn strip_position_tags(desc: &str) -> &str {
+    let mut rest = desc.trim_start();
+    'outer: loop {
+        for tag in ["(button)", "(small blind)", "(big blind)"] {
+            if let Some(stripped) = rest.strip_prefix(tag) {
+                rest = stripped.trim_start();
+                continue 'outer;
+            }
         }
+        return rest;
     }
-    desc
 }
 
 /// Matches a `"<Name> collected <amount> from pot"` (or "main pot" / "side
@@ -418,6 +452,10 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
     let mut results: HashMap<String, ParsedPlayerResult> = HashMap::new();
     let mut collected: HashMap<String, f64> = HashMap::new();
     let mut uncalled_returned: HashMap<String, f64> = HashMap::new();
+    // Trailing text after `in chips` per seat, and the set of players carrying a
+    // real `*** SUMMARY ***` description. Both feed the dealt-in decision below.
+    let mut seat_markers: HashMap<String, String> = HashMap::new();
+    let mut summary_described: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for line in lines {
         let line = line.trim_end();
@@ -434,10 +472,13 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
 
         if !in_summary {
             if let Some(caps) = seat_regex().captures(line) {
+                let name = caps[2].to_string();
+                seat_markers.insert(name.clone(), caps[4].to_string());
                 seats.push(ParsedSeat {
                     seat_number: caps[1].parse().unwrap_or(0),
-                    player_name: caps[2].to_string(),
+                    player_name: name,
                     starting_stack: parse_money(&caps[3]).unwrap_or(0.0),
+                    position: None,
                 });
                 continue;
             }
@@ -474,7 +515,10 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
             if let Some(caps) = summary_seat_regex().captures(line) {
                 let rest = caps[2].trim();
                 if let Some((name, desc)) = strip_known_name(rest, &known_names) {
-                    let desc = strip_position_tag(desc);
+                    let desc = strip_position_tags(desc);
+                    if !desc.is_empty() {
+                        summary_described.insert(name.clone());
+                    }
                     let folded = desc.starts_with("folded");
                     let won = desc.contains("collected") || desc.contains("won (");
                     let went_to_showdown = has_showdown && !folded;
@@ -532,6 +576,51 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
         }
     }
 
+    // Split the parsed seat lines into players actually dealt into this hand and
+    // players merely sitting at the table.
+    //
+    // The test is behavioural, never textual. A seat counts as dealt in when the
+    // player took at least one action (a posted blind or ante counts — every
+    // dealt-in player produces at least one) or carries a real description in
+    // the summary section. Checked independently against all 1,599 seat lines in
+    // the user's 22 hand-history files: the two signals agreed on every one,
+    // identifying the same 1,571 dealt in and 28 not.
+    //
+    // Deliberately *not* the `is sitting out` marker: 174 of the 197 seats
+    // carrying it were dealt in and played the hand (see `SkippedSeat`), so
+    // excluding on the marker would discard real players — a worse defect than
+    // the one being fixed. The union of the two signals is used rather than
+    // either alone so that a hand where one signal is unexpectedly absent still
+    // keeps the player.
+    let acted: std::collections::HashSet<&str> =
+        actions.iter().map(|a| a.player_name.as_str()).collect();
+    let mut skipped_seats: Vec<SkippedSeat> = Vec::new();
+    seats.retain(|seat| {
+        let dealt_in = acted.contains(seat.player_name.as_str())
+            || summary_described.contains(&seat.player_name);
+        if !dealt_in {
+            skipped_seats.push(SkippedSeat {
+                seat_number: seat.seat_number,
+                player_name: seat.player_name.clone(),
+                seat_line_marker: seat_markers
+                    .get(&seat.player_name)
+                    .cloned()
+                    .unwrap_or_default(),
+            });
+        }
+        dealt_in
+    });
+
+    // Position is derived from the dealt-in ring only — see `position.rs` for
+    // the measurement that made that a hard requirement rather than a detail.
+    let seat_numbers: Vec<i64> = seats.iter().map(|s| s.seat_number).collect();
+    for (seat, label) in seats
+        .iter_mut()
+        .zip(position::derive(&seat_numbers, button_seat))
+    {
+        seat.position = label;
+    }
+
     // Net money result is only meaningful for cash games: tournament chips
     // aren't money, and PokerStars hand-history text carries no buy-in/payout
     // to convert them with, so tournament hands never get a `net_result`
@@ -572,6 +661,7 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
         played_at: header.played_at,
         hero_name,
         seats,
+        skipped_seats,
         actions,
         results,
         raw_text: block.to_string(),

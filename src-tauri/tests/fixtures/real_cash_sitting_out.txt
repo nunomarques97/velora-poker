@@ -1,0 +1,39 @@
+PokerStars Hand #261991207863:  Hold'em No Limit (€0.01/€0.02 EUR) - 2026/09/06 16:32:58 WET [2026/09/06 11:32:58 ET]
+Table 'Hyperborea' 6-max Seat #2 is the button
+Seat 6: Player5 (€2 in chips) is sitting out
+Seat 1: Player1 (€0.85 in chips) 
+Seat 2: Player3 (€0.61 in chips) 
+Seat 3: Player4 (€2.11 in chips) 
+Seat 4: Hero (€1.60 in chips) 
+Player4: posts small blind €0.01
+Hero: posts big blind €0.02
+Player5: sits out 
+Player1: posts big blind €0.02
+*** HOLE CARDS ***
+Dealt to Hero [9s Kh]
+Player1: checks 
+Player3: folds 
+Player4: folds 
+Hero: checks 
+*** FLOP *** [9d Qh 5d]
+Hero: checks 
+Player1: checks 
+*** TURN *** [9d Qh 5d] [2s]
+Hero: checks 
+Player2 joins the table at seat #5 
+Player1: checks 
+*** RIVER *** [9d Qh 5d 2s] [7d]
+Hero: checks 
+Player1: checks 
+*** SHOW DOWN ***
+Hero: shows [9s Kh] (a pair of Nines)
+Player1: mucks hand 
+Hero collected €0.05 from pot
+*** SUMMARY ***
+Total pot €0.05 | Rake €0 
+Board [9d Qh 5d 2s 7d]
+Seat 6: Player5
+Seat 1: Player1 mucked [4c Kd]
+Seat 2: Player3 (button) folded before Flop (didn't bet)
+Seat 3: Player4 (small blind) folded before Flop
+Seat 4: Hero (big blind) showed [9s Kh] and won (€0.05) with a pair of Nines

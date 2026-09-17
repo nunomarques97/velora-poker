@@ -1,0 +1,19 @@
+PokerStars Hand #200000000005: Hold'em No Limit ($0.25/$0.50 USD) - 2026/08/20 21:40:00 ET
+Table 'Atlas III' 3-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Villain ($50.00 in chips)
+Seat 3: Robot ($50.00 in chips)
+Villain: posts small blind $0.25
+Robot: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Ac Ad]
+Hero: raises $49.50 to $50 and is all-in
+Villain: folds
+Robot: folds
+Uncalled bet ($49.50) returned to Hero
+Hero collected $0.75 from pot
+*** SUMMARY ***
+Total pot $0.75 | Rake $0
+Seat 1: Hero (button) collected ($0.75)
+Seat 2: Villain (small blind) folded before Flop
+Seat 3: Robot (big blind) folded before Flop

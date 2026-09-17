@@ -21,6 +21,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-global-shortcut = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.31", features = ["bundled"] }
@@ -31,6 +32,7 @@ regex = "1"
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
     "Win32_Foundation",
+    "Win32_Graphics_Gdi",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Accessibility",
     "Win32_Security",
@@ -39,4 +41,27 @@ windows = { version = "0.58", features = [
 
 [dev-dependencies]
 tempfile = "3"
+
+[features]
+# PokerStars' TOS (per Hand2Note's own compliance manual, an approved HUD
+# vendor) prohibits automatic player classification shown as a HUD color or
+# label — VPIP/PFR-derived archetypes like "Maniac" or "Reg" the player never
+# asked for. Manual per-player color overrides are explicitly allowed and are
+# NOT gated by this flag; see classification::resolve_for_player.
+#
+# This flag exists so the automatic classifier's output only reaches
+# serialization (and therefore the frontend) in the user's own personal
+# builds. Distributed/tester builds MUST be built WITHOUT it — do not enable
+# it by default, and do not remove this gate as "dead code" without a maintainer
+# decision, since it is load-bearing for TOS compliance, not leftover cruft.
+auto-classification = []
+
+# the player-description engine (the notes)
+# is Tier 3 — prescriptive advice ("3-bet him wider"), not descriptive
+# labeling like `auto-classification`, so it carries the higher ToS/account
+# risk and gets its own flag rather than reusing that one. The user
+# accepted that risk explicitly for his own personal builds; distributed
+# / tester builds MUST be built WITHOUT it. When off, `description_rules`'s
+# output is simply empty, same as `auto-classification`'s flag-off behavior.
+strategic-analysis = []
 

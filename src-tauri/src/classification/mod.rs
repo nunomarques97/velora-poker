@@ -15,6 +15,7 @@ pub enum PlayerClassification {
     LooseAggressive,
     TightAggressive,
     Maniac,
+    NittyRock,
     Recreational,
 }
 
@@ -42,10 +43,22 @@ pub struct ClassificationResult {
     /// True when this result comes from a manual per-player override rather
     /// than the automatic rule engine.
     pub is_override: bool,
+    /// False only when the automatic rule engine is not compiled into this
+    /// build (`auto-classification` off) and there is no manual override —
+    /// distinguishes "this build can't classify" from a genuine Unknown
+    /// (below `min_hands`, or no rule matched). The PROFILE section must
+    /// render differently for the two: "Classification unavailable in this
+    /// build" here, vs. a normal Unknown badge when `available` is true.
+    /// TENDENCIES/EXPLOITS/CONFIDENCE never read this field — they come from
+    /// `description_rules`, gated by the separate `strategic-analysis` flag,
+    /// and must render unaffected either way (Phase 1 flag-independence).
+    pub available: bool,
 }
 
 const UNKNOWN_COLOR: &str = "#6b7480";
 const UNKNOWN_LABEL: &str = "Unknown";
+#[cfg(not(feature = "auto-classification"))]
+const UNAVAILABLE_LABEL: &str = "Classification unavailable in this build";
 
 fn unknown_result() -> ClassificationResult {
     ClassificationResult {
@@ -53,6 +66,18 @@ fn unknown_result() -> ClassificationResult {
         label: UNKNOWN_LABEL.to_string(),
         color: UNKNOWN_COLOR.to_string(),
         is_override: false,
+        available: true,
+    }
+}
+
+#[cfg(not(feature = "auto-classification"))]
+fn unavailable_result() -> ClassificationResult {
+    ClassificationResult {
+        classification: PlayerClassification::Unknown,
+        label: UNAVAILABLE_LABEL.to_string(),
+        color: UNKNOWN_COLOR.to_string(),
+        is_override: false,
+        available: false,
     }
 }
 
@@ -115,10 +140,23 @@ pub fn builtin_rules() -> Vec<ClassificationRule> {
             three_bet_max: None,
         },
         ClassificationRule {
+            id: "builtin-nitty-rock".to_string(),
+            label: "Nitty / Rock".to_string(),
+            color: "#5b7a99".to_string(),
+            priority: 4,
+            min_hands: 25,
+            vpip_min: None,
+            vpip_max: Some(15.0),
+            pfr_min: None,
+            pfr_max: Some(10.0),
+            three_bet_min: None,
+            three_bet_max: None,
+        },
+        ClassificationRule {
             id: "builtin-recreational".to_string(),
             label: "Recreational".to_string(),
             color: "#57b88b".to_string(),
-            priority: 4,
+            priority: 5,
             min_hands: 25,
             vpip_min: None,
             vpip_max: None,
@@ -136,6 +174,7 @@ fn label_to_classification(id: &str) -> PlayerClassification {
         "builtin-loose-aggressive" => PlayerClassification::LooseAggressive,
         "builtin-loose-passive" => PlayerClassification::LoosePassive,
         "builtin-tight-aggressive" => PlayerClassification::TightAggressive,
+        "builtin-nitty-rock" => PlayerClassification::NittyRock,
         _ => PlayerClassification::Recreational,
     }
 }
@@ -194,10 +233,14 @@ fn in_range(value: f64, min: Option<f64>, max: Option<f64>) -> bool {
 }
 
 fn rule_matches(rule: &ClassificationRule, hands: i64, stats: &PlayerStats) -> bool {
+    // `unwrap_or(0.0)` here only feeds rule bucketing, never a displayed
+    // value: vpip/pfr are `None` only when `hands == 0`, already excluded by
+    // the `min_hands` gate below, and a `None` three_bet (no opportunity yet)
+    // sits at the low end of every threshold rule same as a real 0% would.
     hands >= rule.min_hands
-        && in_range(stats.vpip, rule.vpip_min, rule.vpip_max)
-        && in_range(stats.pfr, rule.pfr_min, rule.pfr_max)
-        && in_range(stats.three_bet, rule.three_bet_min, rule.three_bet_max)
+        && in_range(stats.vpip.unwrap_or(0.0), rule.vpip_min, rule.vpip_max)
+        && in_range(stats.pfr.unwrap_or(0.0), rule.pfr_min, rule.pfr_max)
+        && in_range(stats.three_bet.unwrap_or(0.0), rule.three_bet_min, rule.three_bet_max)
 }
 
 /// Runs the automatic rule engine only (ignores manual overrides).
@@ -209,6 +252,7 @@ pub fn classify(rules: &[ClassificationRule], hands: i64, stats: &PlayerStats) -
                 label: rule.label.clone(),
                 color: rule.color.clone(),
                 is_override: false,
+                available: true,
             };
         }
     }
@@ -216,7 +260,10 @@ pub fn classify(rules: &[ClassificationRule], hands: i64, stats: &PlayerStats) -
 }
 
 /// Resolves a player's HUD classification: a manual color override always
-/// wins; otherwise falls back to the automatic rule engine.
+/// wins (allowed under PokerStars' TOS regardless of the `auto-classification`
+/// feature); otherwise falls back to the automatic rule engine, whose result
+/// is only surfaced when that feature is compiled in — see the flag's doc
+/// comment in Cargo.toml for why.
 pub fn resolve_for_player(
     conn: &Connection,
     rules: &[ClassificationRule],
@@ -230,7 +277,17 @@ pub fn resolve_for_player(
             label: label.unwrap_or_else(|| "Custom".to_string()),
             color,
             is_override: true,
+            available: true,
         });
     }
-    Ok(classify(rules, hands, stats))
+
+    #[cfg(feature = "auto-classification")]
+    {
+        Ok(classify(rules, hands, stats))
+    }
+    #[cfg(not(feature = "auto-classification"))]
+    {
+        let _ = (rules, hands, stats);
+        Ok(unavailable_result())
+    }
 }

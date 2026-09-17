@@ -2,13 +2,46 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  overflow: hidden;
+  /* `auto`, not `hidden`: if the seven columns ever cannot fit their floors,
+     the table scrolls sideways rather than silently dropping the last column
+     off its right edge. Nothing scrolls vertically — the list has no height of
+     its own, so it grows with its rows and the page scrolls instead. */
+  overflow: auto;
 }
+
+/*
+ * each column is floored at the width of the widest
+ * thing it has to show. The two that broke hold unbreakable single words —
+ * "Tournament" and the "DURATION" header — which overflowed their cell at the
+ * 800px window floor and ate the gap beside them. That is what read as
+ * "Tournament" touching the Tables column and as a header saying
+ * "DURATIONRESULT".
+ *
+ * The floors are measured off a real 800px screenshot, not estimated, and they
+ * have to fit: at that width the list is 448px wide, leaving 360px for seven
+ * columns once padding and gaps are taken out. A first attempt used generous
+ * floors summing to 466px and the grid quietly pushed Result off the right
+ * edge — a whole column of data gone, worse than the collision it replaced.
+ * The tighter padding and column-gap below buy the room the floors need.
+ *
+ * `.headerRow` and `.row` must keep byte-identical templates or the header
+ * stops lining up with its values, and the floors must be fixed lengths rather
+ * than `min-content`: they are two separate grids and would size
+ * independently.
+ */
 
 .headerRow {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 0.6fr 0.8fr 0.8fr 0.9fr;
-  padding: 12px 20px;
+  grid-template-columns:
+    minmax(46px, 0.95fr)
+    minmax(60px, 1.05fr)
+    minmax(74px, 1fr)
+    minmax(38px, 0.45fr)
+    minmax(38px, 0.6fr)
+    minmax(53px, 0.8fr)
+    minmax(48px, 0.85fr);
+  column-gap: 10px;
+  padding: 12px 14px;
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -18,10 +51,32 @@
 
 .row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 0.6fr 0.8fr 0.8fr 0.9fr;
+  grid-template-columns:
+    minmax(46px, 0.95fr)
+    minmax(60px, 1.05fr)
+    minmax(74px, 1fr)
+    minmax(38px, 0.45fr)
+    minmax(38px, 0.6fr)
+    minmax(53px, 0.8fr)
+    minmax(48px, 0.85fr);
+  column-gap: 10px;
   align-items: center;
-  padding: 14px 20px;
+  padding: 14px 14px;
   border-bottom: 1px solid var(--border-subtle);
+}
+
+/* Same CSS Grid `min-width: auto` trap as PlayersView: without this the Format
+   cell kept its full intrinsic width and ran into the Tables column at narrow
+   widths ("Tournament3"), and the header collapsed to "DURATIONRESULT".
+   Releasing the automatic minimum lets the columns shrink, and the
+   `column-gap` above guarantees a gutter between them.
+   No ellipsis here, unlike PlayersView: these cells hold whole values rather
+   than free text, so they are left to wrap onto a second line. Truncating
+   would silently drop half of a time range ("08:10 PM–08:1…") or the year off
+   a date, which is worse than a taller row. */
+.headerRow > *,
+.row > * {
+  min-width: 0;
 }
 
 .row:last-child {

@@ -20,6 +20,19 @@
   transition: box-shadow 160ms ease;
 }
 
+/* HUD Profiles preview only. `width: max-content` sizes every card to its own
+   content, so in the preview grid a long screen name or a seven-digit chip
+   count made one card wider than its neighbour and the columns never lined up.
+   Pinning one width per visual model turns the wrapping flex row into even
+   columns without touching the layout itself; `.name` already truncates with
+   an ellipsis, so nothing new overflows. The overlay deliberately does NOT set
+   this — cards there are dragged to arbitrary positions around a real table
+   and must stay sized to their content. See `.minimal.fixedWidth` below for
+   the narrower model. */
+.card.fixedWidth {
+  width: 300px;
+}
+
 /* Overlay-only: the entire card is the drag surface (a known issue — the
    old handle was just the avatar ring, which was hard to hit). */
 .draggable {
@@ -34,6 +47,102 @@
    the overlay there is no detail view, so it must not advertise a click. */
 .draggable .content {
   cursor: inherit;
+}
+
+/*
+ * URGENT build (2026-09-13, multi-tabling live): the on-table card's wrapper
+ * — none of `.card`'s pill chrome (background/border/shadow/padding), since
+ * the whole point is a small badge, not a big card with its text hidden.
+ * Sized to its content (the ring below), same reasoning `.card` already uses.
+ */
+.badgeCard {
+  position: relative;
+  display: inline-flex;
+  width: max-content;
+}
+
+/*
+ * user request (live, 2026-09-13, "color twist"): two-tone, not the
+ * single-fill solid circle from earlier tonight — the outer ring is
+ * `--bb-color` (stack depth, `badgeStackColor` above), the center circle
+ * (`.badgeInner`) is `--profile-color` (classification, the same `color` the
+ * full card's ring used before this badge existed). Same 64px footprint the
+ * original ring occupied throughout tonight's changes.
+ */
+.badge {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--bb-color);
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font-family: inherit;
+  overflow: hidden;
+  box-shadow:
+    0 0 10px 0 color-mix(in srgb, var(--bb-color) 55%, transparent),
+    0 4px 10px rgba(0, 0, 0, 0.45);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.draggable .badge {
+  cursor: inherit;
+}
+
+/* The ring band left visible is `.badge`'s size minus this inset on all
+   sides — 7px matches the old `.avatar`'s own inset, same visual weight. */
+.badgeInner {
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  background: var(--profile-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  padding: 2px;
+  overflow: hidden;
+}
+
+/* Dark text reads clearly against both palettes (BB tiers and classification
+   colors are similar medium-saturation/medium-brightness ranges, checked
+   against each). */
+.badgeName {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.15;
+  color: #0a0c10;
+}
+
+.badgeHands {
+  font-size: 8px;
+  font-weight: 700;
+  color: rgba(10, 12, 16, 0.72);
+}
+
+.minimal .badge {
+  width: 44px;
+  height: 44px;
+}
+
+.minimal .badgeInner {
+  inset: 5px;
+}
+
+.minimal .badgeName {
+  font-size: 7.5px;
+}
+
+.minimal .badgeHands {
+  font-size: 6.5px;
 }
 
 /* --- Ring / avatar --- */
@@ -150,8 +259,21 @@
 .bbValue {
   font-size: 13px;
   font-weight: 800;
-  color: #4fd1ff;
   font-variant-numeric: tabular-nums;
+}
+
+/* Stack-depth color tiers (user decision, all HUD models): short/medium/
+   deep stack is a quick read the eye needs faster than the BB number itself. */
+.bbShort {
+  color: #ff5c5c;
+}
+
+.bbMedium {
+  color: #4fd1ff;
+}
+
+.bbDeep {
+  color: #4ade80;
 }
 
 .bbLabel {
@@ -183,12 +305,17 @@
   }
 }
 
+/* The divider was `rgba(255, 255, 255, 0.08)`, which against the card's
+   #12151c background rendered as no visible line at all — the three stat
+   values read as one run of text ("6.0% 2.5% 0.0%") instead of three columns.
+   0.2 is the lowest alpha that reads as a deliberate separator at the card's
+   real on-screen size without turning into a hard grid rule. */
 .statCell {
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 0 10px;
-  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .statCell:first-child {
@@ -222,15 +349,28 @@
    a known issue ("dots are hard to see") had two causes. Contrast: against
    the bright segmented ring they washed out, so the backdrop is now near
    opaque, every dot carries a dark 1px rim, and active/inactive differ in
-   lightness, hue and scale rather than by opacity alone. Geometry: at
+   lightness and hue rather than by opacity alone. (Active used to also scale
+   1.5x; that made the row read as one big dot next to small ones instead of
+   an even row, so the size is now fixed and only colour changes.) Geometry: at
    `left/bottom: -2px` the pill sat in the card's rounded bottom-left corner —
    *outside* the 38px border-radius, so `overflow: hidden` sheared the active
-   dot in half. Nudging it to `left: 4px; bottom: 0` clears the corner arc on
-   all three visual models (38px default, 14px classic, 26px minimal) while
-   staying on the badge, and still clears the hand-count label. */
+   dot in half. A fixed `left: 4px` fixed that but was never about being
+   centred, and it left the pill visibly lopsided under a round avatar.
+    centres it on the ring instead. The ring's transparent gap was measured
+   on the live render rather than derived from the conic-gradient angles: the
+   gap spans ~75° centred at 179.8°/180.1°/179.8° for default/Classic/Minimal,
+   i.e. dead bottom-centre, so the gap's centre already coincides with the
+   ring's horizontal centre and only the pill had to move. `left: 50%` +
+   `translateX(-50%)` therefore aligns pill-centre to gap-centre for every ring
+   size in one rule: it resolves to 14px on the 64px rings (a 10px shift right)
+   and to 4px on Minimal's 44px ring, which was already centred by coincidence
+   — hence no per-model override. It also *increases* the  corner clearance
+   on the default model (bottom-left pill corner moves from 1.6px to 8.9px
+   inside the 38px arc), and still clears the hand-count label. */
 .dots {
   position: absolute;
-  left: 4px;
+  left: 50%;
+  transform: translateX(-50%);
   bottom: 0;
   display: flex;
   gap: 4px;
@@ -241,7 +381,19 @@
   z-index: 3;
 }
 
+/* The button used to *be* the dot: 4x4px with `padding: 0`, so the whole
+   pointer target was 4x4px — effectively unhittable, especially mid-session on
+   a laptop trackpad. The button's own box therefore stays exactly 4x4px and
+   keeps painting the visible dot; the larger target is an absolutely
+   positioned, fully transparent `::after` layered over it. Taking the hit area
+   out of flow this way means the pill's layout and paint are completely
+   untouched by it — an earlier attempt used `padding: 6px` with `margin: -6px`
+   on the button instead, which worked for hit-testing but is a far easier
+   thing to reason about wrongly. Targets extend past the pill and overlap
+   slightly, which is the intended trade: a near-miss lands on the adjacent
+   page rather than on nothing at all. */
 .dot {
+  position: relative;
   width: 4px;
   height: 4px;
   border-radius: 50%;
@@ -250,19 +402,40 @@
   border: none;
   padding: 0;
   cursor: pointer;
-  transition: background-color 120ms ease, transform 120ms ease;
+  transition: background-color 120ms ease;
+}
+
+/* the horizontal half of this used to be `-6px` all round, which made
+   each dot's hit area 16px wide on an 8px pitch — every dot's target
+   overlapped both of its neighbours', and since the later sibling paints on
+   top, each clickable band ended up sitting ~6px to the left of the dot it
+   belongs to. Measured with real OS clicks: pressing the visible centre of
+   dot 2 selected page 3. Horizontal growth is now capped at half the 4px gap,
+   so the bands tile the pill exactly and each one is centred on its own dot.
+   Vertical growth is unconstrained by neighbours, so it stays generous — the
+   target is 8x24px, which is what makes a 4px dot clickable at all. */
+.dot::after {
+  content: "";
+  position: absolute;
+  inset: -10px -2px;
 }
 
 .dot:hover {
   background: rgba(255, 255, 255, 0.8);
 }
 
+/* No coloured outer glow here, deliberately. The pill is 8px tall and the dot
+   4px, so there are exactly 2px of headroom above and below the dot; the glow
+   this rule used to carry (`0 0 6px 1px`) reached ~7px and therefore always
+   spilled past the pill's edge. Measured on the live app via DevTools: the
+   spill brightened the backdrop around whichever dot was active and its fade
+   read as a notch/step in the pill's top edge, next to the active dot. Any
+   outer glow is geometrically impossible to contain here, so active state is
+   carried by fill colour alone. The 1px rim below is spread-only (no blur), so
+   it lands inside the 2px headroom and leaves the pill a clean rounded rect. */
 .dotActive {
   background: var(--player-color);
-  transform: scale(1.5);
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.8),
-    0 0 6px 1px color-mix(in srgb, var(--player-color) 85%, transparent);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.8);
 }
 
 .dotActive:hover {
@@ -276,8 +449,18 @@
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
 }
 
+/* Classic keeps its flat, solid ring — no segment dividers, no glow — but it
+   must still carry the default model's 80° gap at the same angle. `from
+   -140deg` with colour running 0-280deg puts that gap over the bottom-left arc
+   where `.dots` sits. A full 0-360deg ring, which is what this rule used
+   to be, drew its stroke straight across the pagination pill in this model
+   only. */
 .velora_classic .ringSegments {
-  background: conic-gradient(var(--player-color) 0deg 360deg);
+  background: conic-gradient(
+    from -140deg,
+    var(--player-color) 0deg 280deg,
+    transparent 280deg 360deg
+  );
   filter: none;
 }
 
@@ -303,9 +486,18 @@
 .minimal .avatar {
   font-size: 11px;
   inset: 5px;
+  padding-bottom: 4px;
 }
 
 .minimal .handsInRing {
+  bottom: 3px;
+  width: 30px;
+  font-size: 7px;
+}
+
+/* user decision: Minimal is the "min stats" model — the stat-page
+   pagination dots don't fit it even when a card has more than one page. */
+.minimal .dots {
   display: none;
 }
 
@@ -342,4 +534,13 @@
 
 .minimal .statLabel {
   font-size: 7px;
+}
+
+/* Must stay after `.card.fixedWidth` — equal specificity, so source order is
+   what makes the narrower model win. Kept close to this model's natural
+   content width (~205px measured): Minimal exists to fit more players on
+   screen, and padding it out to the default card's width cost a whole column
+   at typical window sizes. */
+.minimal.fixedWidth {
+  width: 216px;
 }

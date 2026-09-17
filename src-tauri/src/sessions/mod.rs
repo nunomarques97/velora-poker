@@ -53,10 +53,14 @@ fn round_cents(value: f64) -> f64 {
 }
 
 fn fetch_hands(conn: &Connection) -> rusqlite::Result<Vec<HandRow>> {
+    // INNER JOIN, not LEFT: a hand with no is_hero=1 row was never the
+    // user's own play (e.g. bulk-imported third-party hand histories with
+    // no "Dealt to" line for anyone) and must not feed session grouping at
+    // all — not even to extend an existing session's hand/table counts.
     let mut stmt = conn.prepare(
         "SELECT h.format, h.table_name, h.played_at, h.currency, ph.net_result
          FROM hands h
-         LEFT JOIN player_hands ph ON ph.hand_id = h.id AND ph.is_hero = 1
+         JOIN player_hands ph ON ph.hand_id = h.id AND ph.is_hero = 1
          WHERE h.played_at IS NOT NULL
          ORDER BY h.played_at ASC, h.id ASC",
     )?;

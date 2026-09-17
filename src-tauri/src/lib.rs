@@ -6,6 +6,7 @@ mod watcher;
 
 pub mod classification;
 pub mod db;
+pub mod description_rules;
 pub mod hud;
 pub mod import;
 pub mod parser;
@@ -14,16 +15,68 @@ pub mod stats;
 pub mod table_track;
 
 use tauri::{Emitter, Manager};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 use state::AppState;
 
+/// Resolves the same per-user data directory Tauri's own
+/// `PathResolver::app_data_dir()` returns on Windows — `%APPDATA%\<identifier>`
+/// — but without needing an `AppHandle`, so the database can be opened before
+/// the Tauri app exists. The identifier is read from the generated context
+/// rather than hardcoded, so it cannot drift from `tauri.conf.json`.
+fn app_data_dir(identifier: &str) -> std::path::PathBuf {
+    let base = std::env::var_os("APPDATA")
+        .map(std::path::PathBuf::from)
+        .expect("resolve %APPDATA%");
+    base.join(identifier)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+
+    // `AppState` is created here and handed to
+    // `Builder::manage` *before* the builder runs, rather than being
+    // `app.manage(...)`-ed from inside `setup()`. Windows declared in
+    // `tauri.conf.json` start loading their frontend as soon as Tauri creates
+    // them, and in a release bundle (assets embedded in the binary, no Vite
+    // dev-server round-trip) that is fast enough that the frontend's first IPC
+    // calls — `get_app_settings`, `get_dashboard_summary` — can land before
+    // `setup()` ever reaches `app.manage(...)`. Those calls then fail with
+    // "state not managed for field `state`", which is not just a cosmetic
+    // error: `App.tsx` treats a failed `get_app_settings` as "already
+    // onboarded", so a first-time user on a fresh install would silently skip
+    // onboarding and never be asked for their hand-history folder. This only
+    // ever reproduced in an installed build, never under `npm run tauri dev`.
+    // `Builder::manage` populates the state map before any window exists, so
+    // the race cannot occur at all.
+    let db_path = app_data_dir(&context.config().identifier).join("velora.db");
+    let app_state = AppState::new(db_path).expect("failed to initialize database");
+
     tauri::Builder::default()
+        .manage(app_state)
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        // global HUD toggle hotkey. One shortcut is ever registered, so
+        // the handler doesn't need to discriminate by which one fired — see
+        // `table_track::toggle_hud_for_foreground_table` for what it does
+        // and why resolving "the" table from OS foreground focus, not any
+        // Velora-side concept of an active table, is the whole point.
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|_app, _shortcut, event| {
+                    // A shortcut delivers both press and release; acting
+                    // only on `Pressed` is what makes this "press once,
+                    // toggle once" instead of firing twice per press.
+                    if event.state() == ShortcutState::Pressed {
+                        table_track::toggle_hud_for_foreground_table();
+                    }
+                })
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![
             commands::get_players,
+            commands::get_players_page,
             commands::get_active_table_players,
             commands::set_player_color_override,
             commands::clear_player_color_override,
@@ -37,14 +90,22 @@ pub fn run() {
             commands::get_app_settings,
             commands::complete_onboarding,
             commands::reset_onboarding,
+            commands::get_classification_rules,
             commands::get_hud_profiles,
             commands::get_active_hud_profile,
             commands::set_active_hud_profile,
             commands::set_hud_profile_min_hands,
-            commands::open_overlay,
+            commands::get_overlay_status,
+            commands::set_overlays_enabled,
             commands::close_overlay,
+            commands::show_overlay,
             commands::is_overlay_open,
-            commands::set_overlay_click_through,
+            commands::is_overlay_dismissed,
+            commands::set_overlay_mode,
+            commands::set_all_overlay_modes,
+            commands::get_overlay_mode,
+            commands::get_any_overlay_mode,
+            commands::set_overlay_hot_zones,
             commands::save_hud_position,
             commands::get_hud_positions,
             commands::get_sessions,
@@ -57,21 +118,13 @@ pub fn run() {
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
-            let data_dir = app_handle
-                .path()
-                .app_data_dir()
-                .expect("resolve app data dir");
-            let db_path = data_dir.join("velora.db");
-
-            let app_state = AppState::new(db_path).expect("failed to initialize database");
-            let configured_dir = app_state
+            let configured_dir = app
+                .state::<AppState>()
                 .import
                 .lock()
                 .expect("import state lock poisoned")
                 .configured_dir
                 .clone();
-
-            app.manage(app_state);
 
             if let Some(dir) = configured_dir {
                 let dir_path = std::path::PathBuf::from(&dir);
@@ -134,31 +187,61 @@ pub fn run() {
                 }
             }
 
-            // the overlay window is now declared
-            // statically in `tauri.conf.json` (`visible: false`), so Tauri
-            // creates it as part of its own normal batch window-bootstrap —
-            // the same mechanism the main window has always used without
-            // issue — rather than via a manual `WebviewWindowBuilder::build()`
-            // call from inside this closure. That manual, out-of-band
-            // approach (building a second window synchronously in `setup()`,
-            // before the main window's own WebView2 environment had finished
-            // initializing) is what reliably crashed the whole process on
-            // Windows historically (`velora-poker.exe` exiting with
-            // 0xcfffffff a few seconds after launch) — this static
-            // declaration does not do that. It stays hidden until the user
-            // clicks "Open Overlay"; see `overlay::open`.
+            // / the `overlay` window
+            // declared in `tauri.conf.json` is created here by Tauri's own
+            // batch window-bootstrap and stays hidden forever. Since  it is
+            // a *prototype*: every real per-table overlay is cloned from its
+            // config at runtime by `overlay::manager`, on that module's own
+            // thread. Building windows from a plain thread is one of the three
+            // patterns Tauri documents as safe on Windows; building them from
+            // a *synchronous command handler* — which is what the old
+            // `open_overlay` did — is the one it documents as deadlocking, and
+            // is what spent eight rounds diagnosing. See
+            // `overlay::manager`'s header for the citation.
 
             // PHASE E (2026-08-28): table window-following. Installs a
             // `SetWinEventHook` on the main thread — the same thread that
             // runs Tauri's window message loop, which is what pumps the
             // hook's `WINEVENT_OUTOFCONTEXT` callback — plus a low-frequency
-            // polling fallback that (re)acquires the PokerStars table window
-            // whenever it isn't currently tracked (app started before the
-            // table opened, or a new hand opened a table with a new HWND).
+            // polling fallback that reconciles the tracked-table registry
+            // against the table windows that actually exist (app started
+            // before the tables opened, tables opened or closed since).
+            // an overlay decides click-through per-pixel from a list of
+            // hot zones instead of one window-wide WS_EX_TRANSPARENT flag, so
+            // the table stays clickable while the overlay's own control bar
+            // and pagination dots never stop being reachable. per
+            // overlay window, since there are now as many as there are tables.
+            overlay::install(&app_handle);
+
+            let app_state = app.state::<AppState>();
+            let overlays_enabled = {
+                let conn = app_state.conn.lock().expect("db lock poisoned");
+                // HUDs are automatic, so the default for a fresh install
+                // is on — the setting only exists as a kill switch. Before
+                //  this was written by an explicit "Open Overlay" click and
+                // defaulted to off, which as a default now would mean a new
+                // user opens a table and sees nothing.
+                db::get_setting(&conn, settings::SETTING_OVERLAY_ENABLED)
+                    .ok()
+                    .flatten()
+                    .map(|v| v != "false")
+                    .unwrap_or(true)
+            };
+            overlay::manager::start(app_handle.clone(), overlays_enabled);
+
             table_track::install_tracking(app_handle.clone());
+
+            // default, hardcoded for now — no settings UI to change it
+            // yet. Registration failure (e.g. another app already owns this
+            // combination) is logged, not fatal: every other feature works
+            // fine without the hotkey, so it must not block startup.
+            let hotkey = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyH);
+            if let Err(err) = app_handle.global_shortcut().register(hotkey) {
+                eprintln!("[table_track] failed to register global hotkey Ctrl+Alt+H: {err}");
+            }
 
             Ok(())
         })
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("error while running tauri application");
 }
