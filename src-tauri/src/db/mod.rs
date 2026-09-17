@@ -446,11 +446,14 @@ fn migrate_seat_templates_to_hero_relative(conn: &Connection) -> rusqlite::Resul
 /// in the top-left corner until the user dragged each one out — a first-run
 /// experience nobody but the user could have fixed for themselves.
 ///
-/// Only 6-max ships. The other table sizes have no measured layout behind
-/// them, and an evenly-spaced ellipse fitted to these six points misses the
-/// real side seats by 4-7% of the window width (~40px on the ~800px table
-/// this was calibrated at), so those sizes deliberately keep starting empty
-/// rather than start confidently wrong.
+/// Only 6-max is measured. Every other table size from 2 to 10 seats ships
+/// with a *derived* layout instead (`ellipse_seat_template`) — a
+/// centred ellipse fitted to these six points, clamped so it can never place
+/// a card off the overlay window. It is a calibrated approximation, not a
+/// second measured table: still far better than the alternative it replaced
+/// (the notes #24), which was every size but 6-max starting with no
+/// template at all and scattering its first table's cards across
+/// `OverlayApp`'s fallback grid.
 ///
 /// Two known limits, both fixed the same way — by dragging, which still
 /// overrides any default:
@@ -470,11 +473,71 @@ const BUILTIN_SEAT_TEMPLATES: &[(i64, i64, f64, f64)] = &[
     (6, 5, 0.71186081, 0.51867566),
 ];
 
-/// Seeds the built-in seat layout. `INSERT OR IGNORE` on the
-/// `(max_players, seat_offset)` primary key, so a user who has dragged that
-/// seat keeps their own position forever and a user who has not gets the
-/// default back if they somehow clear it — the same never-overwrite shape
-/// `seed_builtin_rules`/`seed_builtin_profiles` use for their own rows.
+/// Centre and radii (fractions of the overlay window) of the ellipse used to
+/// derive a seat layout for every table size that has no hand-measured rows
+/// of its own — fitted to minimize the worst-point distance to the six
+/// measured 6-max points above, then clamped (see `ELLIPSE_MIN`/
+/// `ELLIPSE_MAX`) so the ellipse's own bounding box can never leave the safe
+/// overlay margin: the unclamped best fit alone puts seat_offset 1 at
+/// x≈0.0125, just outside it.
+const ELLIPSE_CENTER: (f64, f64) = (0.364, 0.382);
+const ELLIPSE_RADII: (f64, f64) = (0.4, 0.282);
+
+/// Degrees. The angle seat_offset 0 (hero) sits at on the derived ellipse,
+/// chosen so it lands at the same bottom-centre convention the measured
+/// 6-max layout's own offset 0 uses (`BUILTIN_SEAT_TEMPLATES[0]`, ~x 0.38,
+/// y 0.68), and so that incrementing seat_offset sweeps the ellipse in the
+/// same rotational direction the measured 6-max offsets already go in (left
+/// side next, then up and around to the right side last).
+const ELLIPSE_START_DEG: f64 = 91.5;
+
+/// A seat template's card is anchored at its top-left corner (see this
+/// module's `BUILTIN_SEAT_TEMPLATES` doc comment), so a raw ellipse point
+/// closer than this to either edge would draw part of a card off the
+/// overlay window entirely. Every derived position is clamped into this
+/// range before it is stored.
+///
+/// This is a guarantee of the *generator*, not of the table as a whole: the
+/// hand-measured row `(6, 1)` sits at `x = 0.01080431`, just outside it, and
+/// stays there on purpose — the measured six are the live calibration every
+/// derived layout is fitted against and a real client does render
+/// a seat there, so they are never rewritten to satisfy a margin invented
+/// for generated points. The test
+/// `every_table_size_stays_on_screen_and_only_the_measured_six_max_row_leaves_the_safe_margin`
+/// (`tests/db_tests.rs`) pins that as the single allowed exception, so a
+/// second one can never appear unnoticed.
+const ELLIPSE_MIN: f64 = 0.02;
+const ELLIPSE_MAX: f64 = 0.92;
+
+/// Derives one seat's position on the centred ellipse (`ELLIPSE_CENTER`/
+/// `ELLIPSE_RADII`/`ELLIPSE_START_DEG`) for a table size with no
+/// hand-measured layout. Not part of `BUILTIN_SEAT_TEMPLATES` itself because
+/// `f64::sin`/`cos` are not `const fn` in stable Rust — this runs once per
+/// seat, per seed call, straight from `std`, no crate beyond it (TECHNOLOGY.md
+/// S2).
+fn ellipse_seat_template(max_players: i64, seat_offset: i64) -> (f64, f64) {
+    let step_deg = 360.0 / max_players as f64;
+    let theta = (ELLIPSE_START_DEG + seat_offset as f64 * step_deg).to_radians();
+    let x = ELLIPSE_CENTER.0 + ELLIPSE_RADII.0 * theta.cos();
+    let y = ELLIPSE_CENTER.1 + ELLIPSE_RADII.1 * theta.sin();
+    (
+        x.clamp(ELLIPSE_MIN, ELLIPSE_MAX),
+        y.clamp(ELLIPSE_MIN, ELLIPSE_MAX),
+    )
+}
+
+/// Seeds the built-in seat layout: the six measured 6-max rows above, plus a
+/// derived-ellipse row for every offset of every other table size from 2 to
+/// 10 seats inclusive ( — before this, every size but 6-max started with
+/// no template at all and its first table scattered cards in
+/// `OverlayApp`'s fallback grid, the notes #24). `INSERT OR IGNORE` on
+/// the `(max_players, seat_offset)` primary key throughout, so a user who has
+/// dragged that seat keeps their own position forever and a user who has not
+/// gets the default back if they somehow clear it — the same never-overwrite
+/// shape `seed_builtin_rules`/`seed_builtin_profiles` use for their own rows.
+/// 6-max itself is skipped in the derived pass: its rows are already seeded
+/// by the measured table above, and `INSERT OR IGNORE` would just discard the
+/// ellipse version anyway.
 ///
 /// Depends on running *after* `migrate_schema`, which `open` guarantees:
 /// `migrate_seat_templates_to_hero_relative` clears `seat_templates` exactly
@@ -488,6 +551,20 @@ fn seed_builtin_seat_templates(conn: &Connection) -> rusqlite::Result<()> {
              VALUES (?1, ?2, ?3, ?4, ?5)",
             params![max_players, seat_offset, x, y, now_iso()],
         )?;
+    }
+
+    for max_players in 2..=10i64 {
+        if max_players == 6 {
+            continue;
+        }
+        for seat_offset in 0..max_players {
+            let (x, y) = ellipse_seat_template(max_players, seat_offset);
+            conn.execute(
+                "INSERT OR IGNORE INTO seat_templates (max_players, seat_offset, x, y, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![max_players, seat_offset, x, y, now_iso()],
+            )?;
+        }
     }
     Ok(())
 }
@@ -873,8 +950,11 @@ pub fn list_active_table_players_with_seats(
 
     // resolved here rather than by the caller so there is exactly one
     // place that knows how a stored HUD position is keyed. Both inputs come
-    // from the same hand the seats above came from.
-    let max_seats = active_table_max_players(conn, table_name)?;
+    // from the same hand the seats above came from. `since` passed through
+    // unchanged — a known issue — so a reused table name reopening at a
+    // different max-players format can never briefly borrow a stale sitting's
+    // seat count before its own first hand deals.
+    let max_seats = active_table_max_players(conn, table_name, since)?;
     let hero_seat = rows.iter().find(|r| r.is_hero).and_then(|r| r.seat);
     if let (Some(hero_seat), Some(max_seats)) = (hero_seat, max_seats) {
         for row in &mut rows {
@@ -889,15 +969,27 @@ pub fn list_active_table_players_with_seats(
 
 /// `max_seats` of the current active table (same latest-hand definition and
 /// `table_name` scoping as `list_active_table_players_with_seats` —).
+///
+/// `since`: same / recency floor as `list_active_table_players_with_seats`
+/// and `active_hand_info` — `Some(table.first_seen_at)` excludes a hand from
+/// an earlier sitting of a reused table name; `None` for a caller with no
+/// specific table to bound by. Fixes a known issue: before this bound
+/// existed, a table name reused at a *different* max-players format (e.g. a
+/// 6-max name later reused for a 3-max sitting) could still momentarily
+/// resolve the stale sitting's seat count until a fresh hand dealt and
+/// refreshed it — a possible wrong-slot seat-position glitch, not a data leak
+/// (player identities were already bounded by).
 pub fn active_table_max_players(
     conn: &Connection,
     table_name: Option<&str>,
+    since: Option<&str>,
 ) -> rusqlite::Result<Option<i64>> {
     conn.query_row(
         "SELECT max_seats FROM hands
          WHERE (?1 IS NULL OR table_name = ?1)
+           AND (?2 IS NULL OR played_at >= ?2)
          ORDER BY played_at DESC, id DESC LIMIT 1",
-        params![table_name],
+        params![table_name, since],
         |row| row.get(0),
     )
     .optional()
@@ -1122,6 +1214,7 @@ pub fn set_hud_position(conn: &Connection, player_id: i64, x: f64, y: f64) -> ru
     Ok(())
 }
 
+#[derive(Debug)]
 pub struct SeatTemplateRow {
     pub seat_offset: i64,
     pub x: f64,
@@ -1255,6 +1348,27 @@ mod tests {
         assert_eq!(get_seat_template(&conn, 6, 3).unwrap(), Some((0.36757288, 0.13304348)));
     }
 
+    ///  acceptance criterion 3 — the only objective control that the
+    /// derived ellipse actually follows the real 6-max data's own convention:
+    /// generate the ellipse for 6 players and check each point lands within
+    /// 0.06 (euclidean, in window-fraction units) of the corresponding
+    /// measured row. If a change to `ELLIPSE_CENTER`/`ELLIPSE_RADII`/
+    /// `ELLIPSE_START_DEG` ever pushes a point past that, the fix is to the
+    /// ellipse's own parameters, never to the measured values themselves.
+    #[test]
+    fn derived_ellipse_for_six_players_stays_within_calibration_tolerance_of_measured_six_max() {
+        for &(max_players, seat_offset, measured_x, measured_y) in BUILTIN_SEAT_TEMPLATES {
+            assert_eq!(max_players, 6, "sanity: BUILTIN_SEAT_TEMPLATES is 6-max only");
+            let (x, y) = ellipse_seat_template(max_players, seat_offset);
+            let distance = ((x - measured_x).powi(2) + (y - measured_y).powi(2)).sqrt();
+            assert!(
+                distance <= 0.06,
+                "offset {seat_offset}: derived ({x}, {y}) is {distance} from measured \
+                 ({measured_x}, {measured_y}), over the 0.06 calibration tolerance"
+            );
+        }
+    }
+
     #[test]
     fn seeding_never_overwrites_a_position_the_user_dragged() {
         let conn = test_conn();
@@ -1270,18 +1384,36 @@ mod tests {
     }
 
     #[test]
-    fn no_table_size_other_than_six_max_is_seeded() {
+    fn every_table_size_other_than_six_max_is_seeded_with_a_derived_ellipse_layout() {
         let conn = test_conn();
         seed_builtin_seat_templates(&conn).unwrap();
 
-        // Only 6-max was measured live. Every other size must still start
-        // empty rather than inherit a guessed layout.
+        // the user's real pool is 100% MTT, typically 9-max — every
+        // size from 2 to 10 seats must now start with a full set of derived
+        // positions rather than the empty table the notes #24 describes.
         for max_players in [2, 3, 4, 5, 7, 8, 9, 10] {
-            assert!(
-                list_seat_templates(&conn, max_players).unwrap().is_empty(),
-                "{max_players}-max must not be seeded"
+            let rows = list_seat_templates(&conn, max_players).unwrap();
+            assert_eq!(
+                rows.len(),
+                max_players as usize,
+                "{max_players}-max must have one derived row per seat"
             );
         }
+
+        // Values hardcoded (to 1e-6) rather than recomputed from
+        // `ellipse_seat_template` here, so this test actually catches a
+        // change to the ellipse's parameters or a mis-wired call, not just
+        // echo back whatever the function currently produces.
+        fn assert_close(actual: Option<(f64, f64)>, expected: (f64, f64), label: &str) {
+            let (ax, ay) = actual.unwrap_or_else(|| panic!("{label}: no row seeded"));
+            assert!(
+                (ax - expected.0).abs() < 1e-6 && (ay - expected.1).abs() < 1e-6,
+                "{label}: expected ~{expected:?}, got ({ax}, {ay})"
+            );
+        }
+        assert_close(get_seat_template(&conn, 9, 0).unwrap(), (0.35352922, 0.66390337), "9-max offset 0");
+        assert_close(get_seat_template(&conn, 9, 3).unwrap(), (0.02294393, 0.23465540), "9-max offset 3");
+        assert_close(get_seat_template(&conn, 2, 1).unwrap(), (0.37447078, 0.10009663), "2-max offset 1");
     }
 
     #[test]

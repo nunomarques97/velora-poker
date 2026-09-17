@@ -308,8 +308,12 @@ pub fn get_active_table_max_players(
     let Some(scope) = table_scope(table_id) else {
         return Ok(None);
     };
+    // /a known issue: bounded by this table window's own first
+    // appearance, same as `get_active_table_players`, so a reused table name
+    // can never resolve to a stale sitting's max-players format either.
+    let since = table_track::table_for(table_id).map(|t| t.first_seen_at);
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    db::active_table_max_players(&conn, scope.name()).map_err(|e| e.to_string())
+    db::active_table_max_players(&conn, scope.name(), since.as_deref()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

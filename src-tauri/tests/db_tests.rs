@@ -271,12 +271,12 @@ fn scoped_active_table_players_ignores_hands_on_other_tables() {
     assert!(beta_names.contains(&"Regular4".to_string()));
 
     assert_eq!(
-        db::active_table_max_players(&conn, Some("Table Alpha")).unwrap(),
+        db::active_table_max_players(&conn, Some("Table Alpha"), None).unwrap(),
         Some(3),
         "max-players must also be scoped to the tracked table, not the global latest hand"
     );
     assert_eq!(
-        db::active_table_max_players(&conn, Some("Table Beta")).unwrap(),
+        db::active_table_max_players(&conn, Some("Table Beta"), None).unwrap(),
         Some(6)
     );
 
@@ -304,7 +304,7 @@ fn scoped_active_table_players_is_empty_for_a_table_with_no_hands_yet() {
         empty.is_empty(),
         "a table with no imported hands must show no players, not another table's roster"
     );
-    assert_eq!(db::active_table_max_players(&conn, Some("Table Gamma")).unwrap(), None);
+    assert_eq!(db::active_table_max_players(&conn, Some("Table Gamma"), None).unwrap(), None);
 }
 
 ///  regression: PokerStars reuses table *names* from a pool, so
@@ -363,4 +363,148 @@ fn active_hand_includes_a_sitting_newer_than_the_tracked_tables_own_first_seen_a
         .unwrap()
         .expect("the fresh hand must resolve as the active hand");
     assert_eq!(hand.hand_id, "400000000002");
+}
+
+/// a fresh database seeds every table size from 2 to 10 seats, not just
+/// the six measured 6-max rows — the user's real pool is 100% MTT,
+/// typically 9-max, so a 9-max table must never fall back to `OverlayApp`'s
+/// stacking grid (the notes #24).
+#[test]
+fn nine_max_table_is_seeded_with_nine_distinct_seat_offsets() {
+    let conn = setup_db();
+
+    let nine_max = db::list_seat_templates(&conn, 9).unwrap();
+    assert_eq!(nine_max.len(), 9, "expected all 9 offsets seeded, got {nine_max:?}");
+
+    let mut offsets: Vec<i64> = nine_max.iter().map(|row| row.seat_offset).collect();
+    offsets.sort_unstable();
+    offsets.dedup();
+    assert_eq!(
+        offsets,
+        (0..9).collect::<Vec<i64>>(),
+        "every offset 0..9 must have its own distinct derived position"
+    );
+}
+
+/// seeding runs on every `db::open`, not just the first — a user who
+/// dragged a seat on a derived (non-6-max) table size must keep that position
+/// forever, exactly like the already-covered 6-max case.
+#[test]
+fn seeding_never_overwrites_a_users_dragged_position_on_a_derived_table_size() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let db_path = dir.path().join("velora.db");
+
+    {
+        let conn = db::open(&db_path).expect("first open seeds the derived layout");
+        db::set_seat_template(&conn, 9, 2, 0.5, 0.5).expect("save the user's own drag");
+    }
+
+    // Reopening re-runs `seed_defaults`/`seed_builtin_seat_templates` on the
+    // same database — the regression this guards is the derived-ellipse pass
+    // clobbering a user's own row the same way the measured 6-max pass
+    // already never does.
+    let conn = db::open(&db_path).expect("second open re-seeds");
+    assert_eq!(
+        db::get_seat_template(&conn, 9, 2).unwrap(),
+        Some((0.5, 0.5)),
+        "a user-dragged position on a derived table size must survive reseeding"
+    );
+}
+
+/// , acceptance criteria 4 and 7 — the bound, *and* the one place where
+/// those two criteria contradict each other, resolved here in code rather
+/// than only in a report.
+///
+/// A seat card is anchored at its top-left corner, so a position too close to
+/// an edge draws part of the card outside the overlay window. Hence two
+/// bounds, deliberately different:
+///
+/// - **Hard bound — every size 2..=10, 6-max included:** `0.0 < x,y < 1.0`.
+///   Outside this a card is born off the overlay entirely. Nothing may ever
+///   be seeded there, measured or derived.
+/// - **Safe margin `0.02..=0.92`** — what criterion 4 asks for, literally,
+///   "for every size 2..10". Every *derived* position satisfies it by
+///   construction (`db::ellipse_seat_template` clamps to it). Exactly one
+///   seeded position does not, and cannot be made to: the hand-measured
+///   `BUILTIN_SEAT_TEMPLATES` row `(6, 1)` is `x = 0.01080431`, and
+///   criterion 1 requires the six measured rows to stay byte-for-byte
+///   identical. Criteria 1 and 4 cannot both hold literally for 6-max;
+///   criterion 1 wins, because those six points are the live-measured
+///   calibration every derived layout is fitted against and a real
+///   client does render a seat there.
+///
+/// So the safe margin is asserted as a guarantee of the *generator*, and the
+/// single measured exception is asserted explicitly instead of being
+/// skipped: if a future change ever adds a second position outside the
+/// margin, or moves this one, this test fails and the conflict comes back to
+/// a person rather than shipping silently.
+#[test]
+fn every_table_size_stays_on_screen_and_only_the_measured_six_max_row_leaves_the_safe_margin() {
+    let conn = setup_db();
+
+    const SAFE_MIN: f64 = 0.02;
+    const SAFE_MAX: f64 = 0.92;
+    let mut outside_safe_margin: Vec<(i64, i64, f64, f64)> = Vec::new();
+
+    for max_players in 2..=10i64 {
+        let rows = db::list_seat_templates(&conn, max_players).unwrap();
+        assert_eq!(
+            rows.len(),
+            max_players as usize,
+            "{max_players}-max must have one row per seat"
+        );
+        for row in rows {
+            assert!(
+                row.x > 0.0 && row.x < 1.0 && row.y > 0.0 && row.y < 1.0,
+                "{max_players}-max offset {}: ({}, {}) would place a card off the overlay \
+                 window entirely",
+                row.seat_offset,
+                row.x,
+                row.y
+            );
+            if !(SAFE_MIN..=SAFE_MAX).contains(&row.x)
+                || !(SAFE_MIN..=SAFE_MAX).contains(&row.y)
+            {
+                outside_safe_margin.push((max_players, row.seat_offset, row.x, row.y));
+            }
+        }
+    }
+
+    assert_eq!(
+        outside_safe_margin,
+        vec![(6, 1, 0.01080431, 0.49984758)],
+        "the hand-measured 6-max row (6, 1) is the only seeded position allowed outside \
+         the {SAFE_MIN}..={SAFE_MAX} safe margin (criterion 1 freezes the measured rows \
+         byte-for-byte); every derived position must be inside it"
+    );
+}
+
+/// a known issue: a reused table name reopening before a fresh hand deals
+/// must not resolve `max_seats` from an earlier sitting either — the same
+///  recency floor `active_hand_info`/`list_active_table_players_with_seats`
+/// already apply. Without `since`, this would still return the old sitting's
+/// `3`, which is merely correct by coincidence here (both sittings share the
+/// same size); the real-world failure this bound prevents is a name reused at
+/// a *different* max-players format, so the important assertion is that the
+/// pre-first-hand answer is `None`, exactly like "no hand imported yet".
+#[test]
+fn active_table_max_players_excludes_a_sitting_older_than_the_tracked_tables_own_first_seen_at() {
+    let mut conn = setup_db();
+    import::import_text(&mut conn, OLD_SITTING_HAND).expect("import old sitting");
+
+    let since = "2026-08-20T12:00:00";
+
+    assert_eq!(
+        db::active_table_max_players(&conn, Some("Reused Table"), Some(since)).unwrap(),
+        None,
+        "a stale sitting's max_seats must not leak into a table that has not dealt a fresh hand yet"
+    );
+
+    // Unbounded, the same query still resolves the stale sitting — proves the
+    // assertion above is actually exercising the `since` floor, not just
+    // reflecting an empty table.
+    assert_eq!(
+        db::active_table_max_players(&conn, Some("Reused Table"), None).unwrap(),
+        Some(3)
+    );
 }
