@@ -20,14 +20,16 @@
   padding: 32px 36px 28px;
 }
 
-/*  — the readiness step (4/4) is the only screen of the flow that can be
-   taller than the 800×600 floor (src-tauri/tauri.conf.json:16-19): three items
-   plus a failed check pushed the Back / Check again / Continue row half off the
-   card's edge, and a button cut in half reads as a broken render, not as an
-   invitation to scroll. On that step the card stops scrolling as a whole and
-   becomes a column: the item list takes the scroll, the action row is pinned to
-   the bottom of the box and is always on screen. Every other step keeps the
-   card's own `overflow-y: auto` exactly as it was. */
+/*  (step 4) /  (step 2) — these two screens are the only ones of the
+   flow that can be taller than the 800×600 floor (src-tauri/tauri.conf.json:
+   16-19): step 4 with three items plus a failed check, and step 2 with the
+   tutorial open on top of a detected/selected folder box, both pushed their
+   Back / Continue row half off the card's edge — a button cut in half reads
+   as a broken render, not as an invitation to scroll. On these steps the card
+   stops scrolling as a whole and becomes a column: the step's own content
+   takes the scroll, the action row is pinned to the bottom of the box and is
+   always on screen. Every other step keeps the card's own `overflow-y: auto`
+   exactly as it was. */
 .cardPinnedFooter {
   display: flex;
   flex-direction: column;
@@ -44,13 +46,14 @@
   min-height: 0;
 }
 
-/* The scroll box. `min-height: 0` is what lets it actually shrink inside the
-   flex column instead of pushing the footer out of the card. `scroll-padding`
-   keeps a keyboard-focused control (and its 2px :focus-visible ring) clear of
-   the box's own edges when the browser scrolls it into view; the 2px of
-   vertical padding leaves room for that ring at the two extremes. No negative
-   margin: the box must never bleed under the pinned row. */
-.readinessScroll {
+/* The scroll box, shared by step 2 (tutorial) and step 4 (readiness).
+   `min-height: 0` is what lets it actually shrink inside the flex column
+   instead of pushing the footer out of the card. `scroll-padding` keeps a
+   keyboard-focused control (and its 2px :focus-visible ring) clear of the
+   box's own edges when the browser scrolls it into view; the 2px of vertical
+   padding leaves room for that ring at the two extremes. No negative margin:
+   the box must never bleed under the pinned row. */
+.stepScroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;

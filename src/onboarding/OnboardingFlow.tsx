@@ -329,10 +329,12 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
 
   return (
     <div className={styles.overlay}>
-      {/*  on the readiness step the card becomes a column with a pinned
+      {/* / on steps 2 and 4 the card becomes a column with a pinned
           action row (see OnboardingFlow.module.css). Every other step keeps the
           card's own scroll, untouched. */}
-      <div className={`${styles.card} ${step === 4 ? styles.cardPinnedFooter : ""}`}>
+      <div
+        className={`${styles.card} ${step === 2 || step === 4 ? styles.cardPinnedFooter : ""}`}
+      >
         <div className={styles.brand}>
           <div className={styles.mark}>V</div>
           <span>Welcome to Velora</span>
@@ -372,76 +374,78 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
 
         {step === 2 && (
           <div className={styles.stepBody}>
-            <h1 className={styles.title}>Configure PokerStars</h1>
+            <div className={styles.stepScroll}>
+              <h1 className={styles.title}>Configure PokerStars</h1>
 
-            {detecting && <p className={styles.detecting}>Scanning for your hand history folder&hellip;</p>}
+              {detecting && <p className={styles.detecting}>Scanning for your hand history folder&hellip;</p>}
 
-            {!detecting && bestCandidate && (
-              <div className={styles.detectedBox}>
-                <div className={styles.detectedHeader}>
-                  <span className={styles.checkmark}>&#10003;</span> Hand history detected
+              {!detecting && bestCandidate && (
+                <div className={styles.detectedBox}>
+                  <div className={styles.detectedHeader}>
+                    <span className={styles.checkmark}>&#10003;</span> Hand history detected
+                  </div>
+                  <div className={styles.detectedPath}>{bestCandidate.path}</div>
+                  <div className={styles.detectedMeta}>
+                    {bestCandidate.handFileCount} hand file(s)
+                    {bestCandidate.screenNames.length > 0 &&
+                      ` · ${bestCandidate.screenNames.join(", ")}`}
+                  </div>
                 </div>
-                <div className={styles.detectedPath}>{bestCandidate.path}</div>
-                <div className={styles.detectedMeta}>
-                  {bestCandidate.handFileCount} hand file(s)
-                  {bestCandidate.screenNames.length > 0 &&
-                    ` · ${bestCandidate.screenNames.join(", ")}`}
-                </div>
-              </div>
-            )}
-
-            {!detecting && !bestCandidate && (
-              <p className={styles.notFound}>
-                We couldn&apos;t automatically find your PokerStars hand history. Choose the folder
-                manually.
-              </p>
-            )}
-
-            {chosenDir && chosenDir !== bestCandidate?.path && (
-              <div className={styles.detectedBox}>
-                <div className={styles.detectedHeader}>
-                  <span className={styles.checkmark}>&#10003;</span> Folder selected
-                </div>
-                <div className={styles.detectedPath}>{chosenDir}</div>
-                {manualValidation && (
-                  <div className={styles.detectedMeta}>{manualValidation.message}</div>
-                )}
-              </div>
-            )}
-
-            <div className={styles.buttonRow}>
-              {bestCandidate && (
-                <button
-                  type="button"
-                  className={styles.primaryButton}
-                  onClick={() => setChosenDir(bestCandidate.path)}
-                >
-                  Use detected folder
-                </button>
               )}
-              <button type="button" className={styles.secondaryButton} onClick={handleChooseAnotherFolder}>
-                Choose another folder
-              </button>
-            </div>
 
-            <button
-              type="button"
-              className={styles.tutorialToggle}
-              onClick={() => setShowTutorial((v) => !v)}
-            >
-              How do I configure PokerStars?
-            </button>
+              {!detecting && !bestCandidate && (
+                <p className={styles.notFound}>
+                  We couldn&apos;t automatically find your PokerStars hand history. Choose the folder
+                  manually.
+                </p>
+              )}
 
-            {showTutorial && (
-              <div className={styles.tutorialBox}>
-                <ol className={styles.tutorialList}>
-                  {POKERSTARS_TUTORIAL_STEPS.map((line, i) => (
-                    <li key={i}>{line}</li>
-                  ))}
-                </ol>
-                <p className={styles.tutorialNote}>{POKERSTARS_TUTORIAL_NOTE}</p>
+              {chosenDir && chosenDir !== bestCandidate?.path && (
+                <div className={styles.detectedBox}>
+                  <div className={styles.detectedHeader}>
+                    <span className={styles.checkmark}>&#10003;</span> Folder selected
+                  </div>
+                  <div className={styles.detectedPath}>{chosenDir}</div>
+                  {manualValidation && (
+                    <div className={styles.detectedMeta}>{manualValidation.message}</div>
+                  )}
+                </div>
+              )}
+
+              <div className={styles.buttonRow}>
+                {bestCandidate && (
+                  <button
+                    type="button"
+                    className={styles.primaryButton}
+                    onClick={() => setChosenDir(bestCandidate.path)}
+                  >
+                    Use detected folder
+                  </button>
+                )}
+                <button type="button" className={styles.secondaryButton} onClick={handleChooseAnotherFolder}>
+                  Choose another folder
+                </button>
               </div>
-            )}
+
+              <button
+                type="button"
+                className={styles.tutorialToggle}
+                onClick={() => setShowTutorial((v) => !v)}
+              >
+                How do I configure PokerStars?
+              </button>
+
+              {showTutorial && (
+                <div className={styles.tutorialBox}>
+                  <ol className={styles.tutorialList}>
+                    {POKERSTARS_TUTORIAL_STEPS.map((line, i) => (
+                      <li key={i}>{line}</li>
+                    ))}
+                  </ol>
+                  <p className={styles.tutorialNote}>{POKERSTARS_TUTORIAL_NOTE}</p>
+                </div>
+              )}
+            </div>
 
             <div className={styles.footer}>
               <button type="button" className={styles.linkButton} onClick={() => setStep(1)}>
@@ -494,7 +498,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
 
         {step === 4 && (
           <div className={styles.stepBody}>
-            <div className={styles.readinessScroll}>
+            <div className={styles.stepScroll}>
               <h1 className={styles.title}>Let&apos;s make sure it works</h1>
               <p className={styles.readinessIntro}>
                 Velora checks three things before it can trust what it shows you. Anything you skip
