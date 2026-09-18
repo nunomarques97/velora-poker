@@ -29,3 +29,15 @@ npm-debug.log*
 # Rust / Tauri build output
 /src-tauri/target/
 /src-tauri/gen/schemas/
+
+# Credential and secret files — must never be committed
+# (*token* skipped: collides with tracked the notes, token.png)
+.env
+.env.*
+*.key
+*.pem
+*.jks
+*.keystore
+google-services.json
+credentials.json
+*secret*
