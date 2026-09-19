@@ -14,7 +14,7 @@ import { getAppSettings, getIngestionHealth, isTauriAvailable, onHandsImported }
 
 export type View = "dashboard" | "players" | "sessions" | "hud" | "settings";
 
-// / how often the main window re-checks ingestion health for the
+// How often the main window re-checks ingestion health for the
 // persistent status line. Cheap (one read-only SQLite query) and matches the
 // existing Table Detection poll cadence in SettingsView.
 const INGESTION_POLL_MS = 5000;

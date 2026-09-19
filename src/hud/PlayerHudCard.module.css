@@ -33,7 +33,7 @@
   width: 300px;
 }
 
-/* Overlay-only: the entire card is the drag surface (a known issue — the
+/* Overlay-only: the entire card is the drag surface (the
    old handle was just the avatar ring, which was hard to hit). */
 .draggable {
   cursor: grab;
@@ -50,7 +50,7 @@
 }
 
 /*
- * URGENT build (2026-09-13, multi-tabling live): the on-table card's wrapper
+ * The on-table card's wrapper
  * — none of `.card`'s pill chrome (background/border/shadow/padding), since
  * the whole point is a small badge, not a big card with its text hidden.
  * Sized to its content (the ring below), same reasoning `.card` already uses.
@@ -62,12 +62,11 @@
 }
 
 /*
- * user request (live, 2026-09-13, "color twist"): two-tone, not the
- * single-fill solid circle from earlier tonight — the outer ring is
+ * Two-tone, not a single-fill solid circle — the outer ring is
  * `--bb-color` (stack depth, `badgeStackColor` above), the center circle
  * (`.badgeInner`) is `--profile-color` (classification, the same `color` the
  * full card's ring used before this badge existed). Same 64px footprint the
- * original ring occupied throughout tonight's changes.
+ * original ring occupied.
  */
 .badge {
   position: relative;
@@ -262,7 +261,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* Stack-depth color tiers (user decision, all HUD models): short/medium/
+/* Stack-depth color tiers (all HUD models): short/medium/
    deep stack is a quick read the eye needs faster than the BB number itself. */
 .bbShort {
   color: #ff5c5c;
@@ -343,10 +342,10 @@
   letter-spacing: 0.03em;
 }
 
-/*  anchors the pager in the ring's corner precisely so it adds zero card
+/* The pager is anchored in the ring's corner precisely so it adds zero card
    height — everything below stays inside the existing footprint (absolutely
    positioned, 4px dots), so none of this grows the card.
-   a known issue ("dots are hard to see") had two causes. Contrast: against
+   "Dots are hard to see" had two causes. Contrast: against
    the bright segmented ring they washed out, so the backdrop is now near
    opaque, every dot carries a dark 1px rim, and active/inactive differ in
    lightness and hue rather than by opacity alone. (Active used to also scale
@@ -356,7 +355,7 @@
    *outside* the 38px border-radius, so `overflow: hidden` sheared the active
    dot in half. A fixed `left: 4px` fixed that but was never about being
    centred, and it left the pill visibly lopsided under a round avatar.
-    centres it on the ring instead. The ring's transparent gap was measured
+   It is now centred on the ring instead. The ring's transparent gap was measured
    on the live render rather than derived from the conic-gradient angles: the
    gap spans ~75° centred at 179.8°/180.1°/179.8° for default/Classic/Minimal,
    i.e. dead bottom-centre, so the gap's centre already coincides with the
@@ -364,7 +363,7 @@
    `translateX(-50%)` therefore aligns pill-centre to gap-centre for every ring
    size in one rule: it resolves to 14px on the 64px rings (a 10px shift right)
    and to 4px on Minimal's 44px ring, which was already centred by coincidence
-   — hence no per-model override. It also *increases* the  corner clearance
+   — hence no per-model override. It also *increases* the corner clearance
    on the default model (bottom-left pill corner moves from 1.6px to 8.9px
    inside the 38px arc), and still clears the hand-count label. */
 .dots {
@@ -405,7 +404,7 @@
   transition: background-color 120ms ease;
 }
 
-/* the horizontal half of this used to be `-6px` all round, which made
+/* The horizontal half of this used to be `-6px` all round, which made
    each dot's hit area 16px wide on an 8px pitch — every dot's target
    overlapped both of its neighbours', and since the later sibling paints on
    top, each clickable band ended up sitting ~6px to the left of the dot it
@@ -495,7 +494,7 @@
   font-size: 7px;
 }
 
-/* user decision: Minimal is the "min stats" model — the stat-page
+/* Minimal is the "min stats" model — the stat-page
    pagination dots don't fit it even when a card has more than one page. */
 .minimal .dots {
   display: none;

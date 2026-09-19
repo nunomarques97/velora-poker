@@ -18,7 +18,7 @@ import {
 } from "../data/api";
 import styles from "./SettingsView.module.css";
 
-/** Anchor id the main window's persistent status line scrolls to (/). */
+/** Anchor id the main window's persistent status line scrolls to. */
 export const INGESTION_SECTION_ID = "ingestion-section";
 
 const SETTINGS_ITEMS = [
@@ -41,11 +41,11 @@ type IngestionState =
   | { status: "error"; message: string };
 
 /**
- * /. The same discriminated union every other view uses (the notes),
+ * The same discriminated union every other view uses,
  * and here for a sharper reason: this one state drives two sections ("About"
  * and "Player Classification"), so swallowing a failed `get_app_version` would
- * leave both of them stuck in "Loading…" with nothing to read — the one thing
- * the notes forbids outright ("nunca engolir um erro").
+ * leave both of them stuck in "Loading…" with nothing to read — an error must
+ * never be swallowed.
  */
 type VersionState =
   | { status: "loading" }
@@ -54,12 +54,11 @@ type VersionState =
   | { status: "error"; message: string };
 
 /**
- *  (QA finding 1). Same union again (the notes), for the same reason the
+ * Same union again, for the same reason the
  * version one exists: a swallowed `get_app_settings` used to leave "Poker Room"
  * in "Loading…" forever, and — worse — the HUD section read the resulting
  * `null` as a value and stated "Off (kill switch)" for an overlay whose real
- * state was simply unknown (PRODUCT-PROFILE priority 1: never show a wrong
- * state).
+ * state was simply unknown (never show a wrong state).
  */
 type AppSettingsState =
   | { status: "loading" }
@@ -67,7 +66,7 @@ type AppSettingsState =
   | { status: "unavailable"; message: string }
   | { status: "error"; message: string };
 
-/** . Drives the "HUD" section; see `AppSettingsState`. */
+/** Drives the "HUD" section; see `AppSettingsState`. */
 type HudProfileState =
   | { status: "loading" }
   | { status: "ready"; data: HudProfile }
@@ -78,7 +77,7 @@ type HudProfileState =
  * The overlay kill switch as a line of text, honest about not knowing. The
  * default branch deliberately does not fall back to "Off": a failed read is
  * not an off switch, and the reason is spelled out by the "Poker Room"
- * section right above this one (the notes).
+ * section right above this one.
  */
 function overlayStateLabel(settings: AppSettingsState): string {
   switch (settings.status) {
@@ -139,7 +138,7 @@ function formatParserStatus(status: string): string {
 }
 
 /**
- * the single line a tester reads to know which build is running.
+ * The single line a tester reads to know which build is running.
  * `features` is empty on the distributed build (`auto-classification`/
  * `strategic-analysis` compiled out) — that emptiness is the whole signal,
  * not an error state, so it renders as "standard build" rather than a blank.
@@ -164,8 +163,8 @@ export function SettingsView() {
   const [autoCenterError, setAutoCenterError] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
   const [tableDetected, setTableDetected] = useState(false);
-  // how many real PokerStars tables are open. Each one has its own HUD,
-  // so this reads as a count of running HUDs rather than 's disclaimer.
+  // How many real PokerStars tables are open. Each one has its own HUD,
+  // so this reads as a count of running HUDs.
   const [tableWindowCount, setTableWindowCount] = useState(0);
   const [savingAutoCenter, setSavingAutoCenter] = useState(false);
 
@@ -349,7 +348,7 @@ export function SettingsView() {
     }
   }
 
-  // / the single source of truth for "does this build classify players
+  // The single source of truth for "does this build classify players
   // at all". The rule rows still exist in SQLite in a distributed build —
   // `list_rules` reads the table regardless of the feature — so a non-empty
   // `rules` proves nothing; only the compiled feature list does
@@ -630,7 +629,8 @@ export function SettingsView() {
         {version.status === "ready" && !autoClassification && (
           <>
             <p className={styles.ruleIntro}>
-              Automatic classification is not part of this build (PokerStars ToS compliance) — the rule table that would decide a label and colour automatically plays no
+              Automatic classification is not part of this build (PokerStars ToS compliance)
+              — the rule table that would decide a label and colour automatically plays no
               part in what a HUD card shows here.
             </p>
             <div className={styles.stateBox}>

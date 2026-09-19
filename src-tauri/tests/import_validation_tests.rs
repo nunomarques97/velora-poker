@@ -21,7 +21,7 @@ fn setup_db() -> rusqlite::Connection {
 }
 
 /// The safety property that makes rejecting hands acceptable at all: the gate
-/// must not refuse a single real hand the user has actually played.
+/// must not refuse a single real hand from the bundled real-hand fixtures.
 #[test]
 fn the_gate_rejects_none_of_the_real_hands() {
     let mut checked = 0;

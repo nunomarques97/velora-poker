@@ -81,8 +81,7 @@ pub fn builtin_profiles() -> Vec<HudProfile> {
             min_hands: 25,
             is_builtin: true,
         },
-        // The Jivaro-style model (the notes, ratified
-        // in the notes). Backend-wise it is deliberately nothing new: the
+        // The Jivaro-style model. Backend-wise it is deliberately nothing new: the
         // same canonical stat pages, the same 25-hand gate and the same
         // `classification::resolve_for_player` colour source as the other three
         // — the whole difference lives in the frontend's rendering of it

@@ -72,8 +72,8 @@ pub struct ParsedSeat {
 /// Why a parsed `Seat` line did **not** become a dealt-in player.
 ///
 /// PokerStars writes a seat line for everyone *sitting at* the table, which is
-/// not the same as everyone *dealt into the hand*. Measured across the
-/// user's 22 real hand-history files (1,599 seat lines): 28 seats were never
+/// not the same as everyone *dealt into the hand*. Measured across a corpus
+/// of 22 real hand-history files (1,599 seat lines): 28 seats were never
 /// dealt in, and the seat-line marker alone does **not** identify them — 174 of
 /// the 197 seats marked `is sitting out` were dealt in and played the hand
 /// normally, because PokerStars writes that marker when the player's sit-out

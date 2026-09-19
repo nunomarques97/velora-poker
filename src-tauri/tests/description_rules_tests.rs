@@ -333,7 +333,7 @@ fn passive_postflop_does_not_match_just_over_the_1_0_af_boundary() {
     assert!(find(&out, PASSIVE_POSTFLOP).is_none());
 }
 
-// --- squeeze/fold-to-squeeze-based rule family (Phase 3) ---
+// --- squeeze/fold-to-squeeze-based rule family ---
 
 #[test]
 fn squeezes_aggressively_matches_at_exactly_the_12_percent_boundary() {
@@ -379,7 +379,7 @@ fn rarely_squeezes_matches_at_exactly_the_4_percent_boundary() {
         ..base_stats()
     };
     let opp = PlayerStatsOpportunities {
-        squeeze_opportunities: 71, // matches the real Opponent16 sample size, see report
+        squeeze_opportunities: 71, // a realistic sample size seen in real data
         ..base_opp()
     };
     let out = description_rules::evaluate(&stats, &opp);
@@ -408,8 +408,7 @@ fn rarely_squeezes_does_not_match_just_over_the_4_percent_boundary() {
 fn both_squeeze_rules_can_co_occur_with_a_direct_3bet_rule_on_the_same_stat_line() {
     // A player can be both "3-bets often" and "rarely squeezes" at once --
     // three_bet% and squeeze% are independent readings of different decision
-    // points (a direct re-raise vs. a re-raise over a live caller), exactly
-    // as documented for the mechanism in stat-contracts.md.
+    // points (a direct re-raise vs. a re-raise over a live caller).
     let stats = PlayerStats {
         three_bet: Some(10.0),
         squeeze: Some(4.0),
@@ -466,13 +465,11 @@ fn folds_a_lot_to_squeezes_does_not_match_just_under_the_65_percent_boundary() {
     );
 }
 
-/// Documents a real limitation found while calibrating this round (see the
-/// report-back message): the live database's max `faced_squeeze_opportunities`
-/// for any single player is 9 (hand #260992916701 / hands.id=39's
-/// `Opponent15` included) — a genuine 100% fold-to-squeeze, but below the
-/// 10-opportunity floor every rule enforces, so it correctly produces no
-/// conclusion yet. Not a bug: the floor is doing exactly what
-/// player-descriptions.md specifies ("insufficient data, not a fabricated
+/// Documents a real limitation found while calibrating against real data: a
+/// player can show a genuine 100% fold-to-squeeze over 9 opportunities, but
+/// that is below the 10-opportunity floor every rule enforces, so it
+/// correctly produces no conclusion yet. Not a bug: the floor is doing
+/// exactly what it is meant to ("insufficient data, not a fabricated
 /// number"). This rule will start surfacing once enough hands accumulate.
 #[test]
 fn folds_a_lot_to_squeezes_correctly_shows_no_conclusion_below_the_confidence_floor() {
@@ -526,7 +523,7 @@ fn evidence_matches_the_accumulator_for_a_squeeze_happy_reg() {
     );
 }
 
-// --- 4-bet/fold-to-4-bet/cold-call-based rule family (Phase 3 round 2) ---
+// --- 4-bet/fold-to-4-bet/cold-call-based rule family ---
 
 #[test]
 fn four_bets_aggressively_matches_at_exactly_the_40_percent_boundary() {
@@ -643,7 +640,7 @@ fn folds_a_lot_to_4bets_does_not_match_just_under_the_60_percent_boundary() {
 
 #[test]
 fn four_bets_aggressively_and_rarely_4bets_share_faced_3bet_opportunities_not_a_new_counter() {
-    // The spec's own call: `four_bet` reuses `faced_3bet_opportunities` as its
+    // Design choice: `four_bet` reuses `faced_3bet_opportunities` as its
     // confidence basis rather than a separate `four_bet_opportunities`
     // counter, because `four_bet` is just the response side of the same
     // `facing_3bet` event `fold_to_three_bet` already tracks. Confirm the
@@ -844,8 +841,8 @@ fn defends_blinds_too_wide_does_not_match_just_over_the_40_percent_boundary() {
 fn steal_rules_correctly_show_no_conclusion_below_the_confidence_floor() {
     // Mirrors folds_a_lot_to_squeezes_correctly_shows_no_conclusion_below_the_confidence_floor:
     // a real, extreme reading with too few opportunities to trust must not
-    // surface a conclusion ( requirement 1's confidence floor, not a
-    // fabricated exception for these two new stats).
+    // surface a conclusion (the shared confidence floor, not a special
+    // exception for these two stats).
     let stats = PlayerStats {
         steal_attempt: Some(100.0),
         fold_to_steal: Some(100.0),
@@ -899,7 +896,7 @@ fn evidence_matches_the_accumulator_for_a_four_bet_happy_reg_who_also_cold_calls
     );
 }
 
-// --- composite/relational rule family (Phase 3 round 3) ---
+// --- composite/relational rule family ---
 
 #[test]
 fn cold_calls_wide_folds_to_cbets_matches_when_both_legs_qualify() {
@@ -1164,7 +1161,7 @@ fn no_stats_at_all_produces_an_empty_list() {
     assert!(out.is_empty());
 }
 
-// --- evidence accuracy (Phase 1: RuleResult.evidence must match the
+// --- evidence accuracy (RuleResult.evidence must match the
 // underlying accumulator exactly, independent of whatever basis a rule's own
 // confidence math uses) ---
 

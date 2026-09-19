@@ -98,7 +98,7 @@ export async function clearPlayerColorOverride(playerId: string): Promise<Player
 }
 
 /**
- * Saves this player's free-text note (Phase E), returning the refreshed
+ * Saves this player's free-text note, returning the refreshed
  * player. One note per player, overwritten on each save; a blank note clears
  * it. Whitespace is trimmed on the Rust side.
  */
@@ -156,7 +156,7 @@ export async function pickFolderDialog(): Promise<string | null> {
 }
 
 /**
- * Read-only ingestion health (/): how many hands were read, rejected or
+ * Read-only ingestion health: how many hands were read, rejected or
  * flagged with a warning, and why, recomputed from `hands`/`import_problems`
  * on every call. Polled by the main window's persistent status line and by
  * the Settings "Ingestion" section — never a hand dropped without a trace.
@@ -235,8 +235,7 @@ export interface OverlayStatus {
 }
 
 /**
- * Every tracked table plus whether its HUD is up. Overlays are automatic since
- *  — one appears for each real table window and disappears with it — so
+ * Every tracked table plus whether its HUD is up. Overlays are automatic — one appears for each real table window and disappears with it — so
  * this replaces the old single `isOverlayOpen()` the "Open Overlay" button
  * used to read.
  */
@@ -258,7 +257,7 @@ export async function setOverlaysEnabled(enabled: boolean): Promise<void> {
 
 /**
  * Collapses one table's HUD content from its own "Hide" button, leaving every
- * other table's HUD alone. Not the kill switch, and —  — not a
+ * other table's HUD alone. Not the kill switch, and not a
  * window hide either: the overlay window stays up and positioned, only its
  * content collapses to a "Show" pill in the same spot, so bringing it back
  * never requires leaving the overlay. Also reversible from the main window's
@@ -305,7 +304,7 @@ export async function isOverlayDismissed(tableId: number): Promise<boolean> {
  * - `reposition` — the whole window captures pointer events so a card can be
  *   dragged from anywhere on it. Nothing on that table is clickable meanwhile.
  *
- * Per table since repositioning one table's cards leaves every other
+ * Per table: repositioning one table's cards leaves every other
  * table clickable.
  */
 export type OverlayMode = "normal" | "reposition";
@@ -361,8 +360,7 @@ export async function setOverlayHotZones(
  * Deliberately not table-scoped, unlike its neighbours. A saved position
  * is keyed by player and expressed as a fraction of the overlay window, which
  * mirrors whichever table that player is sitting at — there is no
- * table-specific component to store. The backend clamps `x`/`y` into 0..1
- *.
+ * table-specific component to store. The backend clamps `x`/`y` into 0..1.
  */
 export async function saveHudPosition(playerId: string, x: number, y: number): Promise<void> {
   assertTauriAvailable();
@@ -375,7 +373,7 @@ export async function getHudPositions(): Promise<HudPosition[]> {
 }
 
 // ---------------------------------------------------------------------
-// Seat-mapping templates (Phase E)
+// Seat-mapping templates
 // ---------------------------------------------------------------------
 
 export async function getSeatTemplates(maxPlayers: number): Promise<SeatTemplate[]> {
@@ -400,7 +398,7 @@ export async function setAutoCenterEnabled(enabled: boolean): Promise<void> {
 }
 
 /**
- *  onboarding gate (): read-only, no settings write, no import, no
+ * Onboarding readiness gate: read-only, no settings write, no import, no
  * watcher start — safe to call as often as the readiness step wants to
  * re-check. `path` defaults to the same auto-detection Settings uses when
  * omitted.
@@ -414,10 +412,10 @@ export interface TableDetectionStatus {
   detected: boolean;
   /**
    * How many real PokerStars table windows are open right now. Each one has
-   * its own overlay , so this is simply how many HUDs are running.
+   * its own overlay, so this is simply how many HUDs are running.
    */
   tableWindowCount: number;
-  /**  debug evidence — see the notes decision  for the window-following bug this was added to diagnose. */
+  /** Debug evidence for diagnosing window-following problems. */
   hooksInstalled: number;
   eventCallbacksTotal: number;
   eventCallbacksMatched: number;
@@ -433,14 +431,14 @@ export async function getTableDetectionStatus(): Promise<TableDetectionStatus> {
 }
 
 // ---------------------------------------------------------------------
-// Build / version (, )
+// Build / version
 // ---------------------------------------------------------------------
 
 /**
  * Mirrors `commands::AppVersionPayload`. `features` is empty on a
  * distributed build (`auto-classification`/`strategic-analysis` compiled
  * out) — the only place a tester can tell the two builds apart without
- * asking anyone ( consumes this in Settings).
+ * asking anyone (Settings displays this).
  */
 export interface AppVersion {
   version: string;
@@ -491,8 +489,8 @@ export async function getClassificationRules(): Promise<ClassificationRule[]> {
  * currently considers active and where that came from, recent overlay
  * refresh/resync events, the last imported hands and their table
  * identifiers, and current watcher/import status. Meant to be copied and
- * pasted back to the maintainer when something "feels wrong" during play, without
- * the user needing to characterize the bug himself.
+ * pasted into a bug report when something "feels wrong" during play, without
+ * the user needing to characterize the bug themselves.
  */
 export async function getDiagnosticsReport(): Promise<string> {
   assertTauriAvailable();
@@ -512,8 +510,7 @@ export async function onHandsImported(callback: () => void): Promise<UnlistenFn>
  * Fires whenever one table's overlay window is shown or hidden, from whichever
  * window triggered it — including that overlay's own "Close" button. Emitted
  * by `overlay::manager` in Rust, so this is the single source of truth for
- * overlay visibility and no window has to keep a flag in sync by hand (Phase E
- * polish, a known issue). Carries the table id since "the overlay
+ * overlay visibility and no window has to keep a flag in sync by hand. Carries the table id: "the overlay
  * closed" is only half an answer once there is one per table.
  */
 export async function onOverlayVisibilityChanged(
@@ -554,7 +551,7 @@ export async function onOverlayDismissedChanged(
  * existed neither could see the other's toggle. That let a button's label say
  * the opposite of what it would do, which during live play left the overlay
  * capturing while the control offered to make it capture — swallowing clicks
- * intended for the table underneath (same bug class as a known issue).
+ * intended for the table underneath (same bug class as a visibility flag kept in sync by hand).
  */
 export async function onOverlayModeChanged(
   callback: (change: { tableId: number; mode: OverlayMode }) => void,
@@ -568,7 +565,7 @@ export async function onOverlayModeChanged(
 /**
  * Fires whenever the set of tracked PokerStars table windows changes — a
  * table opened, closed, was renamed or was minimized — so the HUD page's table
- * list stays live without polling. Replaced 's bare count broadcast, which
+ * list stays live without polling. Replaced an earlier bare count broadcast, which
  * existed only to power the "only one table gets a HUD" notice.
  */
 export async function onTrackedTablesChanged(
@@ -579,8 +576,8 @@ export async function onTrackedTablesChanged(
 
 /**
  * Fires whenever a seat template is calibrated by a drag, carrying the table
- * size it was saved for. A template is shared by every same-sized table
- *, and with one overlay per table the others have no other way to learn
+ * size it was saved for. A template is shared by every same-sized table,
+ * and with one overlay per table the others have no other way to learn
  * that a card just moved.
  */
 export async function onSeatTemplatesChanged(

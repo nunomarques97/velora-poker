@@ -9,7 +9,7 @@ fn setup_db() -> rusqlite::Connection {
 }
 
 /// A database that never saw a single import problem must report all-zero
-/// health instead of failing or inventing a number (, criterion 1).
+/// health instead of failing or inventing a number.
 #[test]
 fn empty_database_reports_zero_ingestion_health_without_failing() {
     let conn = setup_db();
@@ -27,7 +27,7 @@ fn empty_database_reports_zero_ingestion_health_without_failing() {
 /// pipeline writes them (`db::record_import_problems`), must show up counted
 /// by severity, with a real `firstSeenAt`/`lastSeenAt` and a non-empty,
 /// product-language explanation — never blank, never an in-memory number
-/// that a restart could lose (, criterion 1+2).
+/// that a restart could lose.
 #[test]
 fn a_recorded_reject_and_warn_appear_with_counts_and_explanations() {
     let conn = setup_db();
@@ -118,7 +118,7 @@ fn repeated_code_aggregates_count_and_brackets_first_and_last_seen() {
 }
 
 /// A code the explanation map has not caught up with must still fall into a
-/// generic, honest sentence — never an empty string (, criterion 2).
+/// generic, honest sentence — never an empty string.
 #[test]
 fn unknown_code_falls_back_to_a_non_empty_generic_explanation() {
     let conn = setup_db();
@@ -143,7 +143,7 @@ fn unknown_code_falls_back_to_a_non_empty_generic_explanation() {
 /// exactly the feature flags this test binary itself was compiled with — the
 /// same `#[cfg(feature = ...)]` gates the app's own classification/
 /// description-rules modules use, so a distributed (`--no-default-features`)
-/// build reports an empty list (, criterion 3).
+/// build reports an empty list.
 #[test]
 fn app_version_matches_cargo_toml_version_and_compiled_features() {
     let payload = commands::app_version();

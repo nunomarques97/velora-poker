@@ -2,8 +2,8 @@
 //!
 //! # Why this lives here and not in a query
 //!
-//! the notes §E established two things empirically
-//! against the user's real hand histories, using PokerStars' own
+//! Two things were established empirically against real hand histories,
+//! using PokerStars' own
 //! `*** SUMMARY ***` blind tags as ground truth:
 //!
 //! * The ring **must** be built from the players actually dealt into the hand.

@@ -1,4 +1,4 @@
-//! Seat-line parsing and the dealt-in decision, against the user's REAL
+//! Seat-line parsing and the dealt-in decision, against REAL
 //! hand-history text.
 //!
 //! Every fixture in this file is a verbatim hand from
@@ -21,7 +21,7 @@ fn hands(text: &str) -> Vec<velora_poker_lib::parser::ParsedHand> {
         .collect()
 }
 
-/// The defect this whole work unit starts from: a bounty tournament writes the
+/// The defect that motivated this file: a bounty tournament writes the
 /// bounty inside the same parentheses as the stack, so requiring `in chips)`
 /// matched nothing and the hand stored **no players at all** — 26 of 275 real
 /// hands (9.5%).
@@ -70,7 +70,7 @@ fn a_bounty_seat_that_also_says_sitting_out_still_parses() {
     );
 }
 
-/// Every trailing-content variant found across the user's 22 files parses,
+/// Every trailing-content variant found across 22 real hand-history files parses,
 /// including the plain forms that already worked — so a fix for the bounty case
 /// cannot regress the common case.
 #[test]
@@ -175,7 +175,7 @@ fn a_seat_moved_in_from_another_table_is_not_dealt_in() {
 
 /// The single most important guard in this file.
 ///
-/// `is sitting out` is **not** a dealt-in test. Across the user's real files,
+/// `is sitting out` is **not** a dealt-in test. Across a set of real files,
 /// 174 of the 197 seats carrying that marker were dealt in and played the hand
 /// normally — PokerStars writes the marker from the player's sit-out flag when
 /// the hand is written, not from whether they were dealt cards. Excluding on the

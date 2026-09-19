@@ -103,7 +103,7 @@ fn computes_stats_for_tournament_only_player() {
     // flop actually dealt to anyone) and correctly does NOT count toward the
     // WTSD denominator — `went_to_showdown` is what discriminates it from a
     // genuine all-in-preflop-then-showdown hand, both of which have zero
-    // flop-street action rows ( requirement 3 follow-up correction). Only
+    // flop-street action rows. Only
     // the showdown_allin fixture's flop counts, so this is 1/1 = 100%.
     assert_close(s.wtsd, 100.0, "TourneyHero wtsd");
     assert_close(s.wsd, 0.0, "TourneyHero wsd");
@@ -123,7 +123,7 @@ fn cash_and_tournament_hands_coexist_without_cross_contamination() {
     let hero_stats = stats::compute_player_stats(&conn, hero_id).unwrap();
     assert_close(hero_stats.vpip, 100.0, "hero vpip unaffected by tournaments");
 
-    let TourneyHero_id = player_id(&conn, "TourneyHero");
-    let TourneyHero_stats = stats::compute_player_stats(&conn, TourneyHero_id).unwrap();
-    assert_close(TourneyHero_stats.vpip, 50.0, "TourneyHero vpip unaffected by cash hands");
+    let tourney_hero_id = player_id(&conn, "TourneyHero");
+    let tourney_hero_stats = stats::compute_player_stats(&conn, tourney_hero_id).unwrap();
+    assert_close(tourney_hero_stats.vpip, 50.0, "TourneyHero vpip unaffected by cash hands");
 }

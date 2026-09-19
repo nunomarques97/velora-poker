@@ -20,7 +20,7 @@
   padding: 32px 36px 28px;
 }
 
-/*  (step 4) /  (step 2) — these two screens are the only ones of the
+/* Steps 4 and 2 — these two screens are the only ones of the
    flow that can be taller than the 800×600 floor (src-tauri/tauri.conf.json:
    16-19): step 4 with three items plus a failed check, and step 2 with the
    tutorial open on top of a detected/selected folder box, both pushed their
@@ -338,7 +338,7 @@
   margin-bottom: 8px;
 }
 
-/* ---  readiness gate (step 4) --- */
+/* --- Readiness gate (step 4) --- */
 
 .readinessIntro {
   font-size: 12.5px;
@@ -450,7 +450,7 @@
   min-width: 0;
 }
 
-/* Action-failure pattern of the notes: inline, 12px, --negative. */
+/* Action-failure pattern: inline, 12px, --negative. */
 .readinessErrorText {
   font-size: 12px;
   color: var(--negative);
@@ -565,14 +565,14 @@
   color: var(--negative);
 }
 
-/* the notes: the project's buttons carry no focus style (known debt) and a
+/* The project's buttons carry no focus style (known debt) and a
    new control has to bring its own. These are the controls of the readiness
    step; the ring uses the existing --accent token, no new colour. */
 /* The main window's floor is 800×600 (src-tauri/tauri.conf.json:16-19), and the
    readiness step is the tallest screen of the flow: at 900px and below its
    footer landed half-cut on the card's edge (three items plus a failed check).
-   The card gives back vertical padding instead — same wide scale
-   (the notes), just its lower rungs. Last in the file on purpose: these
+   The card gives back vertical padding instead — same wide scale,
+   just its lower rungs. Last in the file on purpose: these
    have to win over the base rules above. */
 @media (max-height: 900px) {
   .card {

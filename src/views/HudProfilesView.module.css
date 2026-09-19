@@ -123,7 +123,7 @@
 }
 
 /*
- * the live list of PokerStars tables being followed, one HUD each. It
+ * The live list of PokerStars tables being followed, one HUD each. It
  * replaced a single "Open Overlay" button that could not say which table it
  * meant — and, with two tables open, was silently wrong about one of them.
  */

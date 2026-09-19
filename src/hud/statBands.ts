@@ -16,7 +16,7 @@ import type { PlayerStats } from "../data/types";
  * fold-to-3-bet 64-71 green, which fixes the ramp's *direction* (low = red,
  * high = green) but not its cut-offs — a screenshot cannot yield those. The
  * numbers below are one defensible reading of that ramp, not a statistical
- * claim, and the maintainer should replace them with real ones.
+ * claim, and should be replaced with real ones.
  *
  * Purely cosmetic in both uses: a band never hides a value, never changes a
  * stat, and never feeds classification — the archetype colour still comes
@@ -43,7 +43,7 @@ export const STAT_BANDS: Record<keyof PlayerStats, StatBand> = {
   wsd: { low: 46, high: 56, scale: 100 },
 };
 
-/** Band colours, matching the accepted mock (the notes). */
+/** Band colours, matching the accepted reference mock. */
 export const BAND_LOW = "#e03a2b";
 export const BAND_MID = "#f5a623";
 export const BAND_HIGH = "#6fbf44";

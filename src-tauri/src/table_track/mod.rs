@@ -1,18 +1,16 @@
-//! Phase E (table auto-detection) — window-following.
+//! Table auto-detection and window-following.
 //!
 //! Two halves, deliberately kept separate:
 //!
 //! 1. Pure, OS-independent math (`to_relative`/`to_absolute`,
-//!    `overlay_bounds_for_table`) — unit-testable without a real window,
-//!    per the spec's exit criteria.
+//!    `overlay_bounds_for_table`) — unit-testable without a real window.
 //! 2. Windows-only detection/tracking (`win` submodule, `#[cfg(windows)]`)
 //!    that finds the PokerStars table window and keeps the overlay window
 //!    glued to it.
 //!
 //! The table window class name (`POKERSTARS_TABLE_CLASS_CANDIDATES` in
 //! `win.rs`) and the title check (`LOGGED_IN_TITLE_MARKER`) are confirmed
-//! against a read-only `EnumWindows` dump of the user's live client
-//! — see the notes decision .
+//! against a read-only `EnumWindows` dump of a live PokerStars client.
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -23,16 +21,15 @@ use std::sync::OnceLock;
 /// was minimized/restored. Emitted from the tracking loop so every window's
 /// view of "which tables am I following" updates live.
 ///
-///  replaced 's `table-count-changed` (payload: a bare `u32`). The count
-/// existed only to power an honest "N tables open, only one gets a HUD"
-/// notice; now every table gets its own overlay, so what the UI needs is the
-/// list itself, not a number to apologise for.
+/// Replaced the older `table-count-changed` (payload: a bare `u32`): every
+/// table gets its own overlay, so what the UI needs is the list itself, not
+/// a count.
 pub const TRACKED_TABLES_EVENT: &str = "tracked-tables-changed";
 
-/// One real, logged-in PokerStars table window Velora is currently following
-///. Before  this was three process-wide statics holding exactly one
-/// table's worth of state (`TRACKED_HWND`/`LAST_RECT`/`LAST_TABLE_NAME`), and
-/// every extra table window found by the enumeration was discarded.
+/// One real, logged-in PokerStars table window Velora is currently following.
+/// This used to be three process-wide statics holding exactly one table's
+/// worth of state (`TRACKED_HWND`/`LAST_RECT`/`LAST_TABLE_NAME`), and every
+/// extra table window found by the enumeration was discarded.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrackedTable {
@@ -116,7 +113,7 @@ pub fn overlay_bounds_for_table(table: WindowRect) -> WindowRect {
 }
 
 /// Which tracked table (if any) owns the window `hwnd` — the pure half of
-/// the  global-hotkey feature, kept separate from the actual
+/// the global-hotkey feature, kept separate from the actual
 /// `GetForegroundWindow` call so "does a foreground HWND resolve to the
 /// right table, or correctly resolve to nothing" is unit-testable without a
 /// real window or a global-hotkey test harness. `hwnd` is compared against
@@ -127,7 +124,7 @@ pub fn table_for_hwnd(tables: &[TrackedTable], hwnd: i64) -> Option<&TrackedTabl
     tables.iter().find(|t| t.hwnd == hwnd)
 }
 
-/// Debug evidence for the  window-following brief, surfaced via
+/// Debug evidence for window-following, surfaced via
 /// `get_table_detection_status` so it's reachable from Settings without
 /// needing to read a terminal: whether the WinEvent hooks registered, how
 /// often the callback has fired at all vs. specifically for the tracked
@@ -143,10 +140,10 @@ pub struct DebugSnapshot {
     pub table_integrity_level: Option<String>,
 }
 
-/// One entry in the  diagnostics resync log — every time a tracked table
+/// One entry in the diagnostics resync log — every time a tracked table
 /// window's rect was (re-)read and its own overlay window repositioned to
-/// match, whichever of the three call sites triggered it. `table_id` was added
-/// in with one overlay per table, "which table moved" is the first thing
+/// match, whichever of the three call sites triggered it. `table_id` matters
+/// because with one overlay per table, "which table moved" is the first thing
 /// this log has to answer.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -157,33 +154,33 @@ pub struct ResyncLogEntry {
     pub rect: WindowRect,
 }
 
-/// Extracts the PokerStars table name from a table window's title, so the
-///  multi-table investigation can scope "the active table" to whichever
+/// Extracts the PokerStars table name from a table window's title, so
+/// multi-table support can scope "the active table" to whichever
 /// table window the overlay is actually tracking, instead of a global
 /// most-recently-imported-hand query that has no notion of *which* table a
 /// hand came from (see `db::list_active_table_players_with_seats`).
 ///
-/// Confirmed real title (, a cash table): `"Session: 05:11 - Aegle IV -
+/// Confirmed real title (a cash table): `"Session: 05:11 - Aegle IV -
 /// No Limit Hold'em \u{20ac}0.01/\u{20ac}0.02 EUR - Logged In as
-/// TourneyHero"` — table name `"Aegle IV"` sits between a leading session
+/// <screen name>"` — table name `"Aegle IV"` sits between a leading session
 /// timer and a trailing game-description segment, right before the fixed
 /// `" - Logged In as "` suffix (`LOGGED_IN_TITLE_MARKER` in `win.rs`).
 /// Splitting on `" - "` and taking the second-to-last segment (before the
 /// game description) recovers it without hardcoding the "Session: mm:ss -"
 /// prefix, so it degrades gracefully if that prefix is absent.
 ///
-/// ## Tournament tables (, a known issue)
+/// ## Tournament tables
 ///
-/// Tournaments do not have a human table name at all. Checked against the
-/// user's own real hand histories, PokerStars writes the tournament id and
+/// Tournaments do not have a human table name at all. Checked against real
+/// hand histories, PokerStars writes the tournament id and
 /// the table number in the `Table '...'` line — `Table '4001646104 38' 8-max
 /// Seat #1 is the button` — so `hands.table_name` for a tournament is the
 /// literal string `"4001646104 38"`. The cash rule above ("the segment before
-/// the game description") cannot produce that, so before  every tournament
-/// table parsed to something matching no row, and its overlay rendered empty.
+/// the game description") cannot produce that, so without special handling
+/// every tournament table parsed to something matching no row, and its overlay rendered empty.
 ///
-/// **Verified against a real captured tournament table window title**
-/// (2026-09-13, live session). 's original guess — that the id/table pair
+/// **Verified against a real captured tournament table window title**. The
+/// original guess — that the id/table pair
 /// sits at the *start* of the title — was wrong: the real title is
 /// `"Session: 00:14 - Progressive KO €10 [6-Max] | €3.000 Gtd - 125/250 ante
 /// 30 - Tournament 4029218003 Table 24 - Logged In as ..."`, with the pair
@@ -227,9 +224,9 @@ fn tournament_table_name(prefix: &str) -> Option<String> {
 /// anchored to the start — and returns `"<id> <table>"`, matching the exact
 /// format already used in `hands.table_name` for tournament hands.
 ///
-/// 's original rule (`tournament_table_name_from_leading_digits` below)
+/// The original rule (`tournament_table_name_from_leading_digits` below)
 /// assumed the id/table pair sat at the very start of the title. Live
-/// tournament testing (2026-09-13, a known issue) confirmed that
+/// tournament testing confirmed that
 /// assumption was simply wrong for real tournament table windows: the real
 /// captured title is
 /// `"Session: 00:14 - Progressive KO €10 [6-Max] | €3.000 Gtd - 125/250 ante
@@ -257,7 +254,7 @@ fn tournament_table_name_from_keywords(prefix: &str) -> Option<String> {
 /// numbers, and a wrong name is worse than no name — it would scope an overlay
 /// to another table's hands. Kept as a fallback behind the keyword-anchored
 /// match above: this shape was never confirmed against a real captured
-/// window title ( in the notes), but nothing establishes it's
+/// window title, but nothing establishes it's
 /// impossible either, and removing it isn't in scope for this fix.
 fn tournament_table_name_from_leading_digits(prefix: &str) -> Option<String> {
     let mut words = prefix.split_whitespace();
@@ -321,7 +318,7 @@ pub fn expected_hook_count() -> u32 {
 pub fn toggle_hud_for_foreground_table() {}
 
 /// How many real PokerStars table windows are being tracked right now — each
-/// one has its own overlay .
+/// one has its own overlay.
 pub fn table_window_count() -> u32 {
     tracked_tables().len() as u32
 }
@@ -374,7 +371,7 @@ mod tests {
     fn extract_table_name_recovers_the_name_from_a_confirmed_real_title() {
         assert_eq!(
             extract_table_name(
-                "Session: 05:11 - Aegle IV - No Limit Hold'em \u{20ac}0.01/\u{20ac}0.02 EUR - Logged In as TourneyHero"
+                "Session: 05:11 - Aegle IV - No Limit Hold'em \u{20ac}0.01/\u{20ac}0.02 EUR - Logged In as HeroName"
             ),
             Some("Aegle IV".to_string())
         );
@@ -382,39 +379,37 @@ mod tests {
 
     #[test]
     fn extract_table_name_returns_none_without_a_recoverable_segment() {
-        assert_eq!(extract_table_name("Logged In as TourneyHero"), None);
+        assert_eq!(extract_table_name("Logged In as HeroName"), None);
         assert_eq!(extract_table_name("just one segment"), None);
         assert_eq!(extract_table_name(""), None);
     }
 
-    /// . The expected values here are not invented: they
-    /// are the exact `hands.table_name` strings in the user's own real
-    /// tournament hand histories (`Table '4001646104 38' 8-max ...`), which is
+    /// The expected values here are not invented: they are the exact
+    /// `hands.table_name` strings in real tournament hand histories (`Table '4001646104 38' 8-max ...`), which is
     /// what a tournament overlay has to match to find its own players.
     #[test]
     fn extract_table_name_recovers_a_tournament_id_and_table_number() {
         assert_eq!(
             extract_table_name(
-                "4001646104 38 - Blinds 100/200 - Hold'em No Limit - Logged In as TourneyHero"
+                "4001646104 38 - Blinds 100/200 - Hold'em No Limit - Logged In as HeroName"
             ),
             Some("4001646104 38".to_string())
         );
         assert_eq!(
-            extract_table_name("4022791123 4 - Logged In as TourneyHero"),
+            extract_table_name("4022791123 4 - Logged In as HeroName"),
             Some("4022791123 4".to_string())
         );
     }
 
-    /// a known issue follow-up (2026-09-13): live tournament testing found
-    /// 's start-anchored assumption was wrong — the real title carries the
-    /// id/table pair after several other segments, marked by the literal
-    /// words "Tournament"/"Table" rather than by position. This is the exact
-    /// title captured live tonight.
+    /// Live tournament testing found the start-anchored assumption was wrong —
+    /// the real title carries the id/table pair after several other segments,
+    /// marked by the literal words "Tournament"/"Table" rather than by
+    /// position. This is the exact title captured from a live table.
     #[test]
     fn extract_table_name_finds_the_tournament_pair_anywhere_in_the_title() {
         assert_eq!(
             extract_table_name(
-                "Session: 00:14 - Progressive KO \u{20ac}10 [6-Max] | \u{20ac}3.000 Gtd - 125/250 ante 30 - Tournament 4029218003 Table 24 - Logged In as TourneyHero"
+                "Session: 00:14 - Progressive KO \u{20ac}10 [6-Max] | \u{20ac}3.000 Gtd - 125/250 ante 30 - Tournament 4029218003 Table 24 - Logged In as HeroName"
             ),
             Some("4029218003 24".to_string())
         );
@@ -427,13 +422,13 @@ mod tests {
     fn the_tournament_rule_leaves_cash_titles_alone() {
         assert_eq!(
             extract_table_name(
-                "Session: 05:11 - Aegle IV - No Limit Hold'em \u{20ac}0.01/\u{20ac}0.02 EUR - Logged In as TourneyHero"
+                "Session: 05:11 - Aegle IV - No Limit Hold'em \u{20ac}0.01/\u{20ac}0.02 EUR - Logged In as HeroName"
             ),
             Some("Aegle IV".to_string())
         );
         // Two short numbers are not a tournament id and a table number.
         assert_eq!(
-            extract_table_name("12 34 - No Limit Hold'em - Logged In as TourneyHero"),
+            extract_table_name("12 34 - No Limit Hold'em - Logged In as HeroName"),
             Some("12 34".to_string()),
             "falls through to the cash rule, which reads the whole first segment"
         );
@@ -447,7 +442,7 @@ mod tests {
         // segment, the name is still the segment right before the game
         // description, one position earlier than the confirmed sample.
         assert_eq!(
-            extract_table_name("Orion II - No Limit Hold'em - Logged In as TourneyHero"),
+            extract_table_name("Orion II - No Limit Hold'em - Logged In as HeroName"),
             Some("Orion II".to_string())
         );
     }

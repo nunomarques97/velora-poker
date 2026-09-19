@@ -2,18 +2,17 @@
 //!
 //! ## Why window creation lives on its own thread
 //!
-//! Velora's single worst bug to date, –) was the overlay
-//! window existing as a native window while its WebView2 controller never
-//! finished initialising — no renderer process, nothing ever painted. Eight
-//! briefs of diagnosis ended with the fix in stop building the
-//! window with `WebviewWindowBuilder` from inside the `open_overlay` **command
+//! Velora's single worst bug to date was the overlay window existing as a
+//! native window while its WebView2 controller never finished initialising —
+//! no renderer process, nothing ever painted. The first fix was to stop
+//! building the window with `WebviewWindowBuilder` from inside the `open_overlay` **command
 //! handler** and declare it statically in `tauri.conf.json` instead, so Tauri
 //! creates it during its own startup bootstrap.
 //!
-//! Multi-table support needs windows created after startup, which is the
-//! pattern that brief diagnosed as broken. So the mechanism was checked
-//! against the actual Tauri source rather than assumed, and's
-//! conclusion turned out to be one step short of the real rule. Tauri
+//! Multi-table support needs windows created after startup, which looked
+//! like the broken pattern. So the mechanism was checked against the actual
+//! Tauri source rather than assumed, and "not after startup" turned out to be
+//! one step short of the real rule. Tauri
 //! 2.11.5's own doc comment on `WebviewWindowBuilder::new` says:
 //!
 //! > On Windows, this function deadlocks when used in a synchronous command
@@ -65,7 +64,7 @@
 //! lifecycle: a window that was built but turned out to have no HWND is
 //! unusable (it could never be hit-tested, so it could only ever eat the
 //! table's clicks), never enters the pool, and is destroyed on the spot rather
-//! than left behind for the life of the process — a known issue. A *pooled*
+//! than left behind for the life of the process. A *pooled*
 //! window is still never destroyed. See `create_window` for why that one call
 //! cannot deadlock this thread.
 //!
@@ -77,8 +76,8 @@
 //! skip-taskbar, no shadow — which each pooled window is cloned from via
 //! `WebviewWindowBuilder::from_config`, so those properties cannot drift
 //! between the config and the code. It also means the process still creates
-//! one overlay webview through Tauri's own startup bootstrap, the path Brief
-//! #8 proved reliable, before any dynamic one is built.
+//! one overlay webview through Tauri's own startup bootstrap, a path known to
+//! be reliable, before any dynamic one is built.
 
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender};
@@ -134,7 +133,7 @@ static POOL: Mutex<Vec<PoolSlot>> = Mutex::new(Vec::new());
 /// never be rebuilt.
 static NEXT_SLOT: AtomicU32 = AtomicU32::new(1);
 
-/// Tables whose HUD *content* the user collapsed by hand. No longer
+/// Tables whose HUD *content* the user collapsed by hand. Not
 /// consulted by `reconcile`'s window-assignment pass at all — a dismissed
 /// table's window stays up and positioned exactly like any other tracked
 /// table's, so the overlay's own frontend can render a "Show" pill on it
@@ -145,8 +144,7 @@ static DISMISSED: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 
 /// Diagnostics: how many overlay windows this process has built, how many
 /// times a pooled one was handed to a different table, and how many builds
-/// failed. Dynamic window creation is the one thing's history says to
-/// keep an eye on, so the counts are in the diagnostics report rather than
+/// failed. Dynamic window creation is the historically fragile part, so the counts are in the diagnostics report rather than
 /// only in a terminal.
 static WINDOWS_CREATED: AtomicU64 = AtomicU64::new(0);
 static WINDOWS_REUSED: AtomicU64 = AtomicU64::new(0);
@@ -176,7 +174,7 @@ pub fn start(app_handle: AppHandle, enabled: bool) {
                         // Turning the HUD back on clears every by-hand
                         // dismissal: the switch means "show my HUDs", and
                         // leaving one table silently opted out of that would
-                        // be the same silent-gap bug  was filed for.
+                        // be a silent gap in HUD coverage.
                         if let Ok(mut dismissed) = DISMISSED.lock() {
                             dismissed.clear();
                         }
@@ -189,7 +187,7 @@ pub fn start(app_handle: AppHandle, enabled: bool) {
                             dismissed.push(table_id);
                         }
                     }
-                    // the window itself is untouched by a dismissal now
+                    // The window itself is untouched by a dismissal
                     // — `wanted_table_ids` no longer excludes it, so there is
                     // nothing for `reconcile` to do here. Just tell every
                     // window (this table's own overlay included) that its
@@ -259,8 +257,7 @@ pub fn window_lifecycle_counts() -> (u64, u64, u64) {
 ///
 /// A full reconciliation rather than a stream of create/destroy deltas, so a
 /// window build that failed is simply retried on the next pass instead of
-/// leaving that one table permanently HUD-less — the failure the  notice
-/// existed to apologise for.
+/// leaving that one table permanently HUD-less.
 ///
 /// Every *decision* this pass makes lives in `overlay::plan`, which is pure and
 /// unit-tested; this function is only the part that has to touch real windows.
@@ -287,8 +284,8 @@ fn reconcile(app_handle: &AppHandle) {
     // that just opened instead of forcing a new one to be built. The planner
     // has already counted on that having happened.
     if !plan.released.is_empty() {
-        // Captured before each slot's `table_id` is cleared. Since  this
-        // fires only for a table that actually closed or for the kill switch
+        // Captured before each slot's `table_id` is cleared. This fires
+        // only for a table that actually closed or for the kill switch
         // going off — a plain per-table dismissal no longer reaches here at
         // all (see `OverlayRequest::Dismiss`, which emits this same event
         // itself, directly, since the window it's about is never released).
@@ -416,7 +413,7 @@ fn create_window(app_handle: &AppHandle, label: &str, table: &TrackedTable) {
     // Neither flag is cosmetic. An overlay appearing must never take the
     // foreground away from the table underneath it — with several tables
     // opening at once that would be a burst of focus changes mid-hand, the
-    // same class of bug as 's focus-stealing dot. `focus: false` makes the
+    // same class of bug as a focus-stealing click on a pagination dot. `focus: false` makes the
     // first show a `SW_SHOWNOACTIVATE`, and `focusable: false` is what makes
     // tao itself put `WS_EX_NOACTIVATE` in the window's computed style — so
     // tao *keeps* the bit when it re-applies styles, instead of dropping one
@@ -455,14 +452,14 @@ fn create_window(app_handle: &AppHandle, label: &str, table: &TrackedTable) {
             }
             // Without hit-testing this window would capture every click across
             // its whole footprint, including the ones meant for Fold/Call/Raise
-            // — the  lockout. So it is never shown. It must not be *kept*
+            // — locking the user out of the table. So it is never shown. It must not be *kept*
             // either: it is not in the pool, and since nothing here destroys a
             // pooled window, an unpooled one would never be destroyed by
             // anything else and would sit on the process for the rest of the
             // run. It is destroyed here instead, and the next
             // pass builds a fresh one under a new label.
             //
-            // This does not reopen 's create/destroy deadlock, for three
+            // This does not reopen the create/destroy deadlock, for three
             // reasons that are about *this* call rather than destroys in
             // general:
             //
@@ -474,7 +471,7 @@ fn create_window(app_handle: &AppHandle, label: &str, table: &TrackedTable) {
             //    "cannot use the `send_user_message` function"). Off the main
             //    thread nothing waits for a reply, so the overlay thread and
             //    the event loop cannot end up waiting on each other, which is
-            //    what  measured.
+            //    what the churn deadlock was.
             // 2. It is not nested inside a window creation. `build()` has
             //    already returned, so the webview's nested message pump — the
             //    mechanism that made churn re-enter window management — has

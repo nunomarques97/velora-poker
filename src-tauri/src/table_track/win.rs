@@ -1,4 +1,4 @@
-//! Windows-only table detection & window-following (Phase E).
+//! Windows-only table detection & window-following.
 //!
 //! `EnumWindows` finds the PokerStars table window once; `SetWinEventHook`
 //! (`EVENT_OBJECT_LOCATIONCHANGE` / `EVENT_SYSTEM_MOVESIZEEND`) then keeps
@@ -11,7 +11,7 @@
 //! capture, so the tracked HWND and the `AppHandle` needed to reposition the
 //! overlay live in process-wide statics, set once by `install_tracking`.
 //!
-//! ##  debug brief (2026-08-29): window-following fired zero updates
+//! ## Why window-following once fired zero updates
 //!
 //! Confirmed with a real table: detection worked (Settings showed
 //! "Detected"), but dragging the table left the overlay exactly where it
@@ -41,14 +41,14 @@
 //!
 //! Both are root-caused from source + documented Win32 behavior, not
 //! guessed. What's still a hypothesis, not evidence: whether Windows UIPI
-//! (cross-integrity-level hook/message blocking) plays any role on the
-//! user's machine — `debug_snapshot` below reports both processes'
+//! (cross-integrity-level hook/message blocking) plays any role on a given
+//! machine — `debug_snapshot` below reports both processes'
 //! integrity level so that can be read directly from Settings instead of
 //! guessed at.
 //!
-//! ## one tracked table became a registry of all of them
+//! ## One tracked table became a registry of all of them
 //!
-//! Until  this module held exactly one table's worth of state in
+//! Originally this module held exactly one table's worth of state in
 //! process-wide statics — `TRACKED_HWND`, `LAST_RECT`, `LAST_TABLE_NAME` —
 //! and `try_acquire_and_sync` picked `enumerate_table_windows().first()`,
 //! discarding every other real table window it had just found. Everything
@@ -93,7 +93,7 @@ use super::{
 use crate::db::{now_iso, now_played_at};
 use crate::overlay::manager;
 
-/// Confirmed against the user's live client via a read-only `EnumWindows`
+/// Confirmed against a live PokerStars client via a read-only `EnumWindows`
 /// dump: real table windows report class `GLFW30`. That's a generic
 /// GLFW-library class name shared by any GLFW-based window, so it alone
 /// over-matches — see `LOGGED_IN_TITLE_MARKER` below for the check that
@@ -102,7 +102,7 @@ const POKERSTARS_TABLE_CLASS_CANDIDATES: &[&str] = &["GLFW30"];
 
 /// Every confirmed real table title contains this marker, e.g. "Session:
 /// 05:11 - Aegle IV - No Limit Hold'em \u{20ac}0.01/\u{20ac}0.02 EUR - Logged
-/// In as TourneyHero". No lobby, tournament-lobby, or dialog title does
+/// In as <screen name>". No lobby, tournament-lobby, or dialog title does
 /// (confirmed via the same live-client dump). A positive requirement
 /// beats an exclusion list here: it doesn't need extending every time
 /// PokerStars ships a new non-table window type.
@@ -110,7 +110,7 @@ const LOGGED_IN_TITLE_MARKER: &str = " - Logged In as ";
 
 /// `EnumWindows` reads a callback's return value as "keep going": zero stops
 /// the enumeration. Named because the difference between the two is one
-/// character and, in `enum_windows_proc`, the whole  multi-table count.
+/// character and, in `enum_windows_proc`, the whole multi-table count.
 const CONTINUE_ENUMERATION: BOOL = BOOL(1);
 
 /// True if `title` belongs to a real, logged-in PokerStars table window.
@@ -178,7 +178,7 @@ pub fn table_name_for(table_id: u32) -> Option<String> {
     table_for(table_id).and_then(|t| t.name)
 }
 
-/// The  global-hotkey handler (default `Ctrl+Alt+H`, registered in
+/// The global-hotkey handler (default `Ctrl+Alt+H`, registered in
 /// `lib.rs`'s `setup()`): resolves "the" table to act on from OS foreground
 /// focus, not any Velora-side "active table" notion, so it always acts on
 /// whichever table the user is actually looking at with several open.
@@ -207,7 +207,7 @@ pub fn toggle_hud_for_foreground_table() {
 
 /// Last `RESYNC_LOG_CAP` overlay resync events (window acquired, WinEvent
 /// callback fired, or a poll tick), newest last — diagnostics evidence for
-/// the  investigation, so "is the overlay actually tracking a table
+/// multi-table debugging, so "is the overlay actually tracking a table
 /// window, and how often" is something the user can read from Settings
 /// instead of a claim to take on faith.
 pub fn resync_log() -> Vec<ResyncLogEntry> {
@@ -263,7 +263,7 @@ pub fn install_tracking(app_handle: AppHandle) {
     let _ = APP_HANDLE.set(app_handle.clone());
 
     // One hook per event, each with eventMin == eventMax (the documented
-    // way to hook exactly one event) — see the  doc comment above for
+    // way to hook exactly one event) — see the module doc comment above for
     // why a single hook spanning both events was wrong.
     for (name, event) in TRACKED_EVENTS.iter().copied() {
         let hook: HWINEVENTHOOK = unsafe {
@@ -378,7 +378,7 @@ fn reconcile_tables(source: &'static str) {
                         name: extract_table_name(&window.title),
                         rect: window.rect,
                         minimized: window.minimized,
-                        // stamped once, here, and never touched again —
+                        // Stamped once, here, and never touched again —
                         // the floor every "active hand for this table" query
                         // is bound by, so a hand from an earlier sitting of a
                         // reused table name can never resolve as this one's.
@@ -425,7 +425,7 @@ fn reconcile_tables(source: &'static str) {
 }
 
 /// Tells every window which tables are being followed right now, so the UI's
-/// table list updates live as tables open and close. Replaces 's bare count
+/// table list updates live as tables open and close. Replaces an older bare count
 /// broadcast: the list is what a UI showing one HUD per table actually needs.
 fn broadcast_tracked_tables() {
     let tables = tracked_tables();
@@ -466,7 +466,7 @@ unsafe extern "system" fn win_event_proc(
     let raw = hwnd.0 as isize;
 
     if event == EVENT_OBJECT_LOCATIONCHANGE || event == EVENT_SYSTEM_MOVESIZEEND {
-        // matched against every tracked table, not one global handle, and
+        // Matched against every tracked table, not one global handle, and
         // the update is pushed to that table's own overlay alone. This callback
         // runs on the main thread (a `WINEVENT_OUTOFCONTEXT` hook is delivered
         // through the message loop of the thread that installed it), so it may
@@ -551,9 +551,8 @@ struct EnumeratedWindow {
 }
 
 /// Every real, logged-in PokerStars table window currently open, in
-/// `EnumWindows` z-order (topmost first).  widened this from "the first
-/// match" to all of them so the count could be shown;  is what finally uses
-/// all of them — one tracked table, and one overlay, per entry.
+/// `EnumWindows` z-order (topmost first) — one tracked table, and one
+/// overlay, per entry.
 fn enumerate_table_windows() -> Vec<EnumeratedWindow> {
     let mut found: Vec<EnumeratedWindow> = Vec::new();
     unsafe {
@@ -599,9 +598,9 @@ unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL 
         rect,
         minimized: IsIconic(hwnd).as_bool(),
     });
-    // Keep enumerating:  needs the total, not just the first match. This
-    // used to return `BOOL(0)`, which stops `EnumWindows` — with that, only
-    // one table could ever be found, which is the whole gap  closes.
+    // Keep enumerating: every table is needed, not just the first match.
+    // This used to return `BOOL(0)`, which stops `EnumWindows` — with that,
+    // only one table could ever be found.
     CONTINUE_ENUMERATION
 }
 
@@ -618,7 +617,7 @@ fn table_process_pid(hwnd: HWND) -> Option<u32> {
 
 /// Windows integrity-level RID for the given open process handle (does not
 /// take ownership; caller closes `process` if it owns it). Used to check
-/// the  UIPI hypothesis: a lower-integrity Velora process can have its
+/// the UIPI hypothesis: a lower-integrity Velora process can have its
 /// `SetWinEventHook`/message delivery silently blocked by a
 /// higher-integrity (e.g. elevated "Run as Administrator") target process.
 fn process_integrity_level(process: HANDLE) -> Option<u32> {
@@ -688,7 +687,7 @@ mod tests {
     #[test]
     fn real_table_title_matches() {
         assert!(is_table_title(
-            "Session: 05:11 - Aegle IV - No Limit Hold'em \u{20ac}0.01/\u{20ac}0.02 EUR - Logged In as TourneyHero"
+            "Session: 05:11 - Aegle IV - No Limit Hold'em \u{20ac}0.01/\u{20ac}0.02 EUR - Logged In as HeroName"
         ));
     }
 
@@ -714,7 +713,7 @@ mod tests {
             .any(|c| c.eq_ignore_ascii_case("glfw30")));
     }
 
-    /// Regression test for the  root cause: `SetWinEventHook`'s
+    /// Regression test for the window-following root cause: `SetWinEventHook`'s
     /// eventMin/eventMax form an inclusive numeric range, so passing them
     /// in the wrong order silently creates a hook that never fires for
     /// either event. `install_tracking` now hooks each event individually

@@ -51,7 +51,7 @@ fn opportunities() -> PlayerStatsOpportunities {
     }
 }
 
-/// Real incident this guards against (learned the same day it's fixed): a
+/// Real incident this guards against: a
 /// build compiled with `strategic-analysis` but *without*
 /// `auto-classification` must still compute and render TENDENCIES/EXPLOITS/
 /// CONFIDENCE normally from raw stats — that path must be completely

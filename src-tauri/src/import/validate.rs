@@ -1,7 +1,7 @@
 //! Import-time integrity gate.
 //!
-//! Every check here corresponds to a defect the notes
-//! §G found by querying the stored database *after the fact*. The point of this
+//! Every check here corresponds to a defect that was found by querying the
+//! stored database *after the fact*. The point of this
 //! module is that the same questions are now asked **before** a hand is written,
 //! so a structurally broken hand is rejected and counted instead of landing in
 //! the database and being discovered months later.
@@ -14,8 +14,8 @@
 //! is still imported, because the data is usable and dropping it would lose more
 //! than it protects.
 //!
-//! Every rejecting check was run against the user's full real corpus (275
-//! stored hands, 22 files) and rejects **none** of them, so the gate cannot
+//! Every rejecting check was run against a full corpus of real hand histories
+//! (275 stored hands, 22 files) and rejects **none** of them, so the gate cannot
 //! silently eat a legitimate hand during a live session. That measurement is
 //! locked in by `tests/import_validation_tests.rs`.
 
@@ -60,8 +60,8 @@ pub fn check(hand: &ParsedHand) -> Vec<Problem> {
         ));
     }
 
-    // No dealt-in players at all. This is exactly the bounty-seat-line failure
-    // (§G.2): the hand imported fine, kept its actions, and stored nobody.
+    // No dealt-in players at all. This is exactly the bounty-seat-line failure:
+    // the hand imported fine, kept its actions, and stored nobody.
     if hand.seats.is_empty() {
         problems.push(Problem::reject(
             "no_dealt_in_players",

@@ -1,10 +1,10 @@
-//! Position derivation against the user's REAL hands, at every table size.
+//! Position derivation against REAL (anonymized) hands, at every table size.
 //!
 //! The expected values are not invented: PokerStars tags the blinds itself in
 //! the `*** SUMMARY ***` section, and `assert_blinds_match_pokerstars` checks
 //! the derivation against those tags rather than against a hand-written
-//! constant. the notes §E ran the same comparison
-//! across all 249 usable stored hands and found 249 correct.
+//! constant. The same comparison, run across 249 real stored hands, found
+//! all 249 correct.
 
 use std::collections::HashMap;
 use velora_poker_lib::parser::{parse_hand_block, split_hands, ParsedHand};

@@ -70,7 +70,7 @@ fn falls_back_to_recreational() {
     assert_eq!(result.classification, PlayerClassification::Recreational);
 }
 
-/// The real gap Nitty/Rock (Phase 1) closes: a genuine nit — VPIP 10%, PFR
+/// The real gap Nitty/Rock closes: a genuine nit — VPIP 10%, PFR
 /// 5% — used to fall into Recreational for lack of a matching rule. These
 /// are the exact stats `falls_back_to_recreational` used before this rule
 /// was added.
@@ -122,7 +122,7 @@ fn auto_classification_only_surfaces_with_feature_flag() {
         // Distinct from a genuine Unknown (below min_hands / no rule
         // matched): `available: false` tells the frontend PROFILE section to
         // show "unavailable in this build" rather than a normal Unknown
-        // badge, per Phase 1's flag-independence requirement.
+        // badge (the classification flag must stay independent of the rest).
         assert_eq!(result.classification, PlayerClassification::Unknown);
         assert_eq!(result.label, "Classification unavailable in this build");
         assert_eq!(result.color, "#6b7480");

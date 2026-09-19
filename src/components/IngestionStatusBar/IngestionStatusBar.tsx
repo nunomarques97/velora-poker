@@ -7,10 +7,10 @@ interface IngestionStatusBarProps {
 }
 
 /**
- * Persistent warning at the top of the main window (/) — never a toast
- * that disappears on its own. The product-profile priority on honesty about
- * errors ("mãos descartadas em silêncio" is the actual incident this guards
- * against) means a nonzero `handsRejected` stays visible, with a shortcut to
+ * Persistent warning at the top of the main window — never a toast
+ * that disappears on its own. Being honest about errors (hands silently
+ * dropped is the failure this guards against) means a nonzero
+ * `handsRejected` stays visible, with a shortcut to
  * the Settings section that explains why, until the count is genuinely zero
  * again on the next poll.
  */

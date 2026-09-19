@@ -28,7 +28,7 @@ import { PlayerHudCard } from "../hud/PlayerHudCard";
 import { PlayerProfileDrawer } from "../components/PlayerProfileDrawer/PlayerProfileDrawer";
 import styles from "./OverlayApp.module.css";
 
-/** Fractions (0..1) of the overlay window — see `HudPosition`/`SeatTemplate` docs (Phase E). */
+/** Fractions (0..1) of the overlay window — see `HudPosition`/`SeatTemplate` docs. */
 interface PositionMap {
   [key: string]: { x: number; y: number };
 }
@@ -55,9 +55,8 @@ const HOT_ZONE_PADDING = 8;
 const DRAG_THRESHOLD_PX = 4;
 
 /**
- * URGENT build (live session, 2026-09-13): the user reported the overlay's
- * own Reposition/Hide buttons block visibility of the table during live play.
- * Set to `false` for this build to stop rendering them — no settings toggle
+ * The overlay's own Reposition/Hide buttons block visibility of the table
+ * during live play. Set to `false` to stop rendering them — no settings toggle
  * yet, just this one flag. Everything the buttons drove (`toggleMode`,
  * `handleHide`, the `mode`/`hidden` state, the main window's own Reposition
  * control, the global hide hotkey) is untouched, so flipping this back to
@@ -66,8 +65,7 @@ const DRAG_THRESHOLD_PX = 4;
 const SHOW_REPOSITION_HIDE_BUTTONS = false;
 
 /**
- * URGENT build (2026-09-13, multi-tabling live, same night): the corner
- * Reposition button added right after the flag above turned out unnecessary
+ * The corner Reposition button turned out unnecessary
  * once dragging worked directly off the badge's own hot zone — see the long
  * comment at this button's render site for why. Off for now; the button,
  * its ref, and its hot-zone registration all stay in place.
@@ -92,9 +90,8 @@ const TABLE_ID: number | null = (() => {
 
 /**
  * Same centred ellipse the backend seeds `seat_templates` with for every
- * table size that has no hand-measured layout of its own (,
- * `ellipse_seat_template` in `src-tauri/src/db/mod.rs:518-527`, read-only —
- * never edit that file from here). Constants, angle convention and clamp
+ * table size that has no hand-measured layout of its own
+ * (`ellipse_seat_template` in `src-tauri/src/db/mod.rs`). Constants, angle convention and clamp
  * copied verbatim so a card that has no calibrated template still opens on
  * the ring instead of drifting from whatever the backend would have derived:
  * offset 0 (hero) at the bottom-centre, subsequent offsets sweeping the same
@@ -118,12 +115,11 @@ function ellipseSeatPosition(maxPlayersForSeat: number, seatOffset: number) {
 }
 
 /**
- * The position a card opens at when nothing else has claimed one yet
- * (, the notes a known issue / product-profile inacceptable #4).
+ * The position a card opens at when nothing else has claimed one yet.
  * Not the whole precedence chain by itself — see the comment at this
  * function's call sites for the full order — just the last two links:
  * derive a ring position from `seatOffset` + `maxPlayersForSeat` when both
- * are known, matching the backend's ellipse convention (); fall back to
+ * are known, matching the backend's ellipse convention; fall back to
  * the stacked grid only when one of them is `null` (no hero seat resolved
  * for this hand, or no table size read yet) — the one case a seat-based
  * layout genuinely cannot answer.
@@ -158,18 +154,18 @@ function TableOverlay({ tableId }: { tableId: number }) {
   const [positions, setPositions] = useState<PositionMap>({});
   const [autoCenterEnabled, setAutoCenterEnabled] = useState(false);
   const [maxPlayers, setMaxPlayers] = useState<number | null>(null);
-  // the overlay opens table-interactive. It is not a state the user has
+  // The overlay opens table-interactive. It is not a state the user has
   // to reach by pressing something first — interacting with the table is what
   // happens essentially all the time an overlay is open.
   const [mode, setMode] = useState<OverlayMode>("normal");
   /** Card currently being dragged — raised above its neighbours while it moves. */
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  // whether this table's HUD content is collapsed to a "Show" pill.
+  // Whether this table's HUD content is collapsed to a "Show" pill.
   // Deliberately a *content* flag, not a window-visibility one — the window
   // itself never hides for this, which is what makes a button in the same
   // spot possible at all (a genuinely hidden window can render nothing).
   const [hidden, setHidden] = useState(false);
-  // The player whose detail drawer is open, if any ( work unit 4 wiring).
+  // The player whose detail drawer is open, if any.
   // A ref-registered hot zone can only ever cover the card/control-bar rects
   // it knows about, so while the drawer is open — with its own backdrop and
   // content covering the whole window — reportHotZones below switches to a
@@ -177,11 +173,11 @@ function TableOverlay({ tableId }: { tableId: number }) {
   const [detailPlayer, setDetailPlayer] = useState<Player | null>(null);
 
   // `captured`/`pointerId`/`target`/`startClientX`/`startClientY` support the
-  // click-vs-drag threshold below (bug found 2026-09-13, badge rollout): a
+  // click-vs-drag threshold below: a
   // plain press is recorded here immediately, but pointer capture — the
   // thing that actually blocks a click from reaching the pressed element,
   // see `handlePointerMove` — is deferred until the pointer has genuinely
-  // moved. Before that fix, capturing on every pointerdown (regardless of
+  // moved. Capturing on every pointerdown (regardless of
   // movement) meant a player's on-table badge, now both the drag handle and
   // the click target on the same small element, could never be clicked: the
   // instant capture engaged, the native `click` this button relies on to
@@ -207,7 +203,7 @@ function TableOverlay({ tableId }: { tableId: number }) {
   // over fresh `players`/`autoCenterEnabled`/`maxPlayers` state — these refs
   // give handlePointerUp a way to read the latest values anyway, to decide
   // whether a drag should persist as a seat-mapping template or a manual
-  // per-player override (Phase E).
+  // per-player override.
   const playersRef = useRef<Player[]>([]);
   const autoCenterRef = useRef(false);
   const maxPlayersRef = useRef<number | null>(null);
@@ -221,17 +217,16 @@ function TableOverlay({ tableId }: { tableId: number }) {
     maxPlayersRef.current = maxPlayers;
   }, [maxPlayers]);
 
-  //  hot zones: the two things that must stay clickable while every other
+  // Hot zones: the two things that must stay clickable while every other
   // point on the overlay falls through to the table. Held as DOM refs rather
   // than derived from state because what the native hit test needs is where
   // these actually painted, not where we think they should be.
   const controlBarRef = useRef<HTMLDivElement | null>(null);
   const dotClusterRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const contentRefs = useRef<Map<string, HTMLElement>>(new Map());
-  // URGENT build (2026-09-13, multi-tabling live): the user's only way to
-  // unlock per-table dragging (the old center Reposition button) was removed
-  // a build earlier tonight along with Hide. This is its own small ref/hot
-  // zone, deliberately separate from `controlBarRef` — see `repositionCorner`
+  // The only way to unlock per-table dragging from the overlay (the old
+  // center Reposition button) is gated off along with Hide. This is its own
+  // small ref/hot zone, deliberately separate from `controlBarRef` — see `repositionCorner`
   // below for why it isn't just re-added to the old control bar.
   const repositionCornerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -266,22 +261,21 @@ function TableOverlay({ tableId }: { tableId: number }) {
         setPositions((prev) => {
           const next: PositionMap = { ...prev };
           allPlayers.forEach((player, index) => {
-            // keyed by the seat's offset from the hero, never its
+            // Keyed by the seat's offset from the hero, never its
             // absolute PokerStars seat number. "Auto-Center me" rotates the
             // display so the hero is the fixed screen anchor, so absolute
-            // seat N is not a fixed screen slot — which is why the user's
-            // own card kept landing in the wrong one.
+            // seat N is not a fixed screen slot — keying by it made the
+            // hero's own card land in the wrong one.
             const offsetKey = player.seatOffset != null ? String(player.seatOffset) : null;
             const fromTemplate = autoCenter && offsetKey ? seatMap[offsetKey] : undefined;
-            // Precedence (/; a user's own drag always wins in the end —
-            // product-profile priority 8, reversibility — because a drag
+            // Precedence (a user's own drag always wins in the end, because a drag
             // immediately writes `manual`/a seat template and both outrank
             // this on the very next refresh):
             //   1. `fromTemplate`   — Auto-Center seat template (calibrated or backend-derived)
             //   2. `manual[...]`    — a position the user dragged and saved for this player
             //   3. `next[...]`      — whatever this card is already showing on screen
             //   4. ellipse (inside `defaultPosition`) — derived from seatOffset + maxPlayers,
-            //      same convention as the backend's `ellipse_seat_template` ()
+            //      same convention as the backend's `ellipse_seat_template`
             //   5. grid (inside `defaultPosition`) — only when seatOffset or maxPlayers is null
             next[player.id] =
               fromTemplate ??
@@ -335,7 +329,7 @@ function TableOverlay({ tableId }: { tableId: number }) {
     };
   }, [tableId]);
 
-  // this table's own collapsed/expanded state — read once on mount
+  // This table's own collapsed/expanded state — read once on mount
   // (before any event has fired) and kept in sync afterwards, whichever of
   // the three triggers changed it: this window's own Hide/Show pill, the
   // main window's table list, or the global hotkey. A dedicated event
@@ -455,7 +449,7 @@ function TableOverlay({ tableId }: { tableId: number }) {
       if (!drag.captured || !persist || !pos) return;
 
       const player = playersRef.current.find((p) => p.id === drag.playerId);
-      // saved against the hero-relative offset, the same key the lookup
+      // Saved against the hero-relative offset, the same key the lookup
       // in `refresh` reads back. A player with no resolvable offset (a hand
       // with no hero, or no recorded table size) falls through to a manual
       // per-player position rather than writing a template under a key that
@@ -473,7 +467,7 @@ function TableOverlay({ tableId }: { tableId: number }) {
     const handlePointerUp = () => endDrag(true);
     // A cancelled pointer (OS gesture, the window losing the input capture)
     // never delivers a pointerup; without this the card would stay welded to
-    // the cursor — the "feels locked" half of a known issue.
+    // the cursor, which makes dragging feel locked.
     const handlePointerCancel = () => endDrag(false);
 
     // Subscribed once for the component's lifetime — re-subscribing on
@@ -500,7 +494,7 @@ function TableOverlay({ tableId }: { tableId: number }) {
     setMode(next);
   }
 
-  // optimistic and local first — the button the user just clicked
+  // Optimistic and local first — the button the user just clicked
   // has to react instantly, not wait on an IPC round trip — with the actual
   // backend call still made so the main window and the hotkey agree.
   function handleHide() {
@@ -516,7 +510,7 @@ function TableOverlay({ tableId }: { tableId: number }) {
   const repositioning = mode === "reposition";
   // The Jivaro model brings its own overlay chrome with it: the
   // control bar docks bottom-left with a wordmark, and a session strip runs
-  // beside it. Both are part of the design the user accepted, so they
+  // beside it. Both are part of that model's design, so they
   // follow the model rather than being global.
   const jivaro = profile?.visualModel === "jivaro";
 
@@ -532,7 +526,7 @@ function TableOverlay({ tableId }: { tableId: number }) {
             wordmark are new, so nothing about the native hit test changes. */}
         {jivaro && <span className={styles.dockLogo}>VELORA</span>}
         {hidden && (
-          // the whole point — a collapsed HUD leaves exactly this one
+          // The whole point — a collapsed HUD leaves exactly this one
           // small pill behind, in the same spot the control bar always sits,
           // so restoring it never means leaving the overlay.
           <button type="button" className={styles.controlButton} onClick={handleShow}>
@@ -540,9 +534,8 @@ function TableOverlay({ tableId }: { tableId: number }) {
           </button>
         )}
         {/*
-         * URGENT build (live session, 2026-09-13): the user reported the
-         * Reposition/Hide buttons block visibility of the table during live
-         * play. Gated off by SHOW_REPOSITION_HIDE_BUTTONS below rather than
+         * The Reposition/Hide buttons block visibility of the table during
+         * live play. Gated off by SHOW_REPOSITION_HIDE_BUTTONS below rather than
          * deleted — `toggleMode`/`handleHide`/`mode`/`repositioning` are all
          * still intact and still reachable from the main window's HUD
          * Profiles page and the global hotkey (see the effects above this
@@ -562,10 +555,9 @@ function TableOverlay({ tableId }: { tableId: number }) {
       </div>
 
       {/*
-       * URGENT build (2026-09-13, multi-tabling live): added earlier tonight
-       * as a corner-anchored, Reposition-only control, separate from the
-       * center `controlBar`. Confirmed unnecessary once the drag-vs-click
-       * threshold fix landed (`dragState` above) — the badge itself is
+       * A corner-anchored, Reposition-only control, separate from the
+       * center `controlBar`. Unnecessary given the drag-vs-click
+       * threshold (`dragState` above) — the badge itself is
        * already a registered hot zone, and pointer capture, once a
        * real drag starts, keeps the gesture routed to this window
        * regardless of the cursor leaving that zone (Win32 mouse capture
@@ -645,7 +637,7 @@ function TableOverlay({ tableId }: { tableId: number }) {
                 dragHandleProps={{
                   onPointerDown: (e) => {
                     if (e.button !== 0) return;
-                    // Bug found 2026-09-13 (badge rollout): this used to call
+                    // This used to call
                     // `setPointerCapture` immediately, which reliably blocked
                     // the badge's own native `click` from ever firing, since
                     // the badge is now both the drag handle and the click

@@ -102,10 +102,9 @@ fn table_regex() -> &'static Regex {
 /// `in chips`. PokerStars appends content there in several real formats, and
 /// requiring the paren silently dropped every seat of every bounty-tournament
 /// hand: the whole seat block failed to match, so the hand was imported with no
-/// players at all (26 of 275 stored hands, 9.5% — see
-/// the notes §G.2).
+/// players at all (26 of 275 stored hands, 9.5%).
 ///
-/// Every trailing variant found in the user's own 22 hand-history files
+/// Every trailing variant found in a corpus of 22 real hand-history files
 /// (1,599 seat lines), all covered by `tests/parser_seat_line_tests.rs`:
 ///
 /// ```text
@@ -583,7 +582,7 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
     // player took at least one action (a posted blind or ante counts — every
     // dealt-in player produces at least one) or carries a real description in
     // the summary section. Checked independently against all 1,599 seat lines in
-    // the user's 22 hand-history files: the two signals agreed on every one,
+    // a corpus of 22 real hand-history files: the two signals agreed on every one,
     // identifying the same 1,571 dealt in and 28 not.
     //
     // Deliberately *not* the `is sitting out` marker: 174 of the 197 seats

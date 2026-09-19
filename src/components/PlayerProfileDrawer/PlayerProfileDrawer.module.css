@@ -162,7 +162,7 @@
   color: var(--accent-strong);
 }
 
-/* Rule-based conclusion lines (; restructured Phase 0+1) — shared by the
+/* Rule-based conclusion lines — shared by the
    Tendencies, Exploits, and Confidence sections. An empty list renders
    `.descriptionEmpty` instead, never a blank section. */
 .descriptionList {
@@ -195,7 +195,7 @@
   color: var(--text-tertiary);
 }
 
-/* Per-conclusion confidence tier badge (Phase 0+1) — replaces the raw
+/* Per-conclusion confidence tier badge — replaces the raw
    percentage that used to sit next to each description line; the CONFIDENCE
    section shows one of these per conclusion, never a single player-wide
    score. */

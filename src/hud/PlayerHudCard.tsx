@@ -12,12 +12,12 @@ import { JivaroHudCard } from "./JivaroHudCard";
 import styles from "./PlayerHudCard.module.css";
 
 /**
- * Sample-size confidence shading (Phase E). Stat values fade toward
+ * Sample-size confidence shading. Stat values fade toward
  * `MIN_STAT_OPACITY` as a player's hand count drops toward zero, reaching full
  * opacity at the active profile's `min_hands` — the same threshold that
  * already gates archetype classification, reused deliberately as the single
- * confidence anchor rather than computing each stat's own denominator (spec:
- * simplicity over precision for a purely cosmetic signal).
+ * confidence anchor rather than computing each stat's own denominator
+ * (simplicity over precision for a purely cosmetic signal).
  *
  * Purely visual: it never hides a value and never gates classification.
  */
@@ -30,12 +30,12 @@ function sampleConfidence(hands: number, minHands: number): number {
 }
 
 /**
- * On-table badge only (user request, live, 2026-09-13): the badge's ring
+ * On-table badge only: the badge's ring
  * color reads stack depth instead of classification, since there's no
  * stack-row text left on a badge to carry that read. Same hex values as
  * `.bbShort`/`.bbMedium`/`.bbDeep` in PlayerHudCard.module.css, but NOT the
- * same boundary as `bbDepthTier` (statFormat.ts, `< 20`/`< 35`) — the user
- * asked for this specific badge to treat exactly 20bb as red ("lower or
+ * same boundary as `bbDepthTier` (statFormat.ts, `< 20`/`< 35`) — this
+ * specific badge treats exactly 20bb as red ("lower or
  * equal to 20"), one bb different from the existing stack-row tiering. Not a
  * fix to `bbDepthTier` itself; that stat-row convention is unchanged.
  */
@@ -47,10 +47,10 @@ function badgeStackColor(stackBb: number | undefined): string {
 }
 
 /**
- * user toggle (live, 2026-09-13): the badge above was built for MTT
+ * Build-time toggle: the badge above was built for MTT
  * multi-tabling; single-table sessions want the normal full Velora card
- * back. Not a persisted setting — the user swaps this by session type and
- * asks for a rebuild each time (same pattern as SHOW_REPOSITION_* in
+ * back. Not a persisted setting — it is swapped by session type with a
+ * rebuild each time (same pattern as SHOW_REPOSITION_* in
  * OverlayApp.tsx), so a flip here plus one rebuild is all switching back to
  * badge mode for the next MTT session takes.
  */
@@ -63,8 +63,8 @@ interface PlayerHudCardProps {
   /**
    * Overlay usage passes drag handlers down; main-app previews leave it off.
    * These land on the card root, so the whole card is the drag surface — it
-   * used to be only the 64px avatar ring, which made repositioning fiddly
-   * (Phase E polish, a known issue). Only the pagination dots opt out.
+   * used to be only the 64px avatar ring, which made repositioning fiddly.
+   * Only the pagination dots opt out.
    */
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
   /**
@@ -132,11 +132,9 @@ export function PlayerHudCard({
   const color = classification?.color ?? "#6b7480";
   const initials = player.name.slice(0, 2).toUpperCase();
 
-  // URGENT build (2026-09-13, multi-tabling live): the user's own "for
-  // now" call — the on-table card shrinks to just this badge, full stats
-  // moving behind a click into the existing PlayerProfileDrawer. Not a
-  // persisted design decision (the notes), and deliberately not a new
-  // prop/setting: `dragHandleProps` is already overlay-only (see its own doc
+  // When enabled, the on-table card shrinks to just this badge, full stats
+  // moving behind a click into the existing PlayerProfileDrawer. Deliberately
+  // not a new prop/setting: `dragHandleProps` is already overlay-only (see its own doc
   // comment above — main-app previews, e.g. the HUD Profiles page, never
   // pass it), so reusing its presence here means that preview keeps showing
   // full cards, unaffected, exactly as configuring stat pages there needs.
@@ -146,7 +144,7 @@ export function PlayerHudCard({
     return (
       <div
         className={`${styles.badgeCard} ${styles[profile.visualModel] ?? ""} ${styles.draggable}`}
-        // user request (live, same build, color twist): two-tone —
+        // Two-tone —
         // outer ring reads stack depth (badgeStackColor, the same
         // red/blue/green tiers `.bbShort`/`.bbMedium`/`.bbDeep` use for the
         // full card's stack row), center circle reads classification/profile
@@ -162,7 +160,7 @@ export function PlayerHudCard({
           type="button"
           ref={contentRef}
           className={styles.badge}
-          // Bug fix (2026-09-13): no `stopPropagation` here, unlike the full
+          // No `stopPropagation` here, unlike the full
           // card's content button below — the badge IS the whole drag
           // surface (there's no separate ring/padding area outside it to
           // grab, the way the full card has), so the wrapper's
@@ -186,7 +184,7 @@ export function PlayerHudCard({
 
   const pages = profile.statPages.length > 0 ? profile.statPages : [];
   const activePage = pages[pageIndex] ?? pages[0];
-  // / `resolve_for_player` already decided what may be shown (same
+  // `resolve_for_player` already decided what may be shown (same
   // contract JivaroHudCard's `tint` reads). A manual override always carries
   // `isOverride`; the automatic archetype only ever arrives when this build
   // has `auto-classification` compiled in — otherwise it comes back as the

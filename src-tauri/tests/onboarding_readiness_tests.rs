@@ -15,7 +15,7 @@ fn english_fixture_folder_reports_parsed_hands_and_is_english() {
 
     assert!(readiness.folder.exists);
     // `hand_file_count` is a pass-through of `settings::validate_hand_history_dir`
-    // (criterion 2) — this test asserts against its output, not a recomputed
+    // — this test asserts against its output, not a recomputed
     // count, so it only pins the lower bound the one file guarantees.
     assert!(readiness.folder.hand_file_count >= 1);
     assert_eq!(readiness.folder.parsed_hand_count, 1);
@@ -36,7 +36,7 @@ fn english_fixture_folder_reports_parsed_hands_and_is_english() {
 
 /// A file with a real PokerStars header/table/seat block (so it parses into
 /// at least one hand) but whose action lines use no English verb at all —
-/// the case  exists for: never guess "English" off a checkbox, catch the
+/// the case this check exists for: never guess "English" off a checkbox, catch the
 /// client's real language from the text itself.
 #[test]
 fn non_english_client_fixture_is_english_false_with_a_reason() {

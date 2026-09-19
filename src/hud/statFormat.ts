@@ -47,7 +47,7 @@ export function formatBb(stackBb: number): string {
 
 /**
  * Stack-depth color tier for the BB readout, same cutoffs on every HUD
- * model (user decision): under 20bb is short/red, 20-35bb is medium/blue,
+ * model: under 20bb is short/red, 20-35bb is medium/blue,
  * 35bb or more is deep/green.
  */
 export type BbDepthTier = "bbShort" | "bbMedium" | "bbDeep";

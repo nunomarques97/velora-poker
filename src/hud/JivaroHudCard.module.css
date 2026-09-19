@@ -1,7 +1,6 @@
 /*
- * The Jivaro visual model, from the accepted mock
- * the notes. Sizes here are the mock's measured
- * ones: an 80px ring, a 168px info card, and a 16px overlap so the two read as
+ * The Jivaro visual model, from the accepted reference mock. Sizes here are
+ * the mock's measured ones: an 80px ring, a 168px info card, and a 16px overlap so the two read as
  * a single object rather than a ring beside a label.
  *
  * Deliberately its own stylesheet: `PlayerHudCard.module.css` carries three
@@ -197,7 +196,7 @@
 }
 
 /* --- stat-page pager (temporary, see JivaroHudCard.tsx) ---
-   Carried over from the shipped models 's click-anywhere-to-cycle
+   Carried over from the shipped models until a click-anywhere-to-cycle interaction
    replaces it. The geometry repeats the lessons those models paid for: the
    4px dot stays 4px and the hit target is an out-of-flow transparent
    ::after, grown vertically but capped horizontally at half the 4px gap so

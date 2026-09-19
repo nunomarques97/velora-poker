@@ -5,8 +5,7 @@ use rusqlite::Connection;
 use serde::Serialize;
 
 /// No gap between two consecutive imported hands longer than this closes the
-/// current session and opens a new one. Not user-facing in v1 (see
-/// the notes).
+/// current session and opens a new one. Not user-facing in v1.
 const SESSION_GAP_SECONDS: i64 = 30 * 60;
 
 const PLAYED_AT_FORMAT: &str = "%Y-%m-%dT%H:%M:%S";
@@ -24,8 +23,8 @@ pub struct SessionSummary {
     /// Net cash result in `currency`, summed from the hero's cash hands only.
     /// `None` whenever the session has no cash hand with a known hero result
     /// — in particular, always `None` for a tournament-only session. Never a
-    /// fabricated or estimated tournament result (see spec: PokerStars hand
-    /// history has no buy-in/finish/payout to compute one from).
+    /// fabricated or estimated tournament result (PokerStars hand history has
+    /// no buy-in/finish/payout to compute one from).
     pub net_result_cash: Option<f64>,
     pub currency: Option<String>,
 }

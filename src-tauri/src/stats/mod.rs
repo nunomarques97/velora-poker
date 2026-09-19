@@ -103,7 +103,7 @@ struct Accumulator {
     folded_to_steal: i64,
 }
 
-/// A player is in a steal position (the notes §3) if
+/// A player is in a steal position if
 /// their `player_hands.position` label is `CO`, `BTN`, or `SB` — the seats
 /// from which an unanswered open is conventionally read as attacking the
 /// blinds rather than a standard open. `SB` counts even though it's also a
@@ -132,8 +132,7 @@ fn compute_accumulator(conn: &Connection, player_id: i64) -> rusqlite::Result<Ac
     let mut acc = Accumulator::default();
     let mut showdown_by_hand: HashMap<i64, bool> = HashMap::new();
     // The scored player's own position per hand — a wider SELECT on the
-    // query this function already runs, not a new query
-    // (the notes step 1).
+    // query this function already runs, not a new query.
     let mut position_by_hand: HashMap<i64, String> = HashMap::new();
 
     {
@@ -199,7 +198,7 @@ fn compute_accumulator(conn: &Connection, player_id: i64) -> rusqlite::Result<Ac
     // new piece of plumbing this feature needs, beyond widening a query
     // already run above: `fold_to_steal%`'s opportunity depends on the
     // *raiser's* position, and the raiser is frequently not the player being
-    // scored (the notes step 2).
+    // scored.
     let mut hand_positions: HashMap<i64, HashMap<i64, String>> = HashMap::new();
     {
         let mut pos_stmt = conn.prepare(
@@ -284,7 +283,7 @@ fn evaluate_hand(
     // `facing_3bet`/`facing_4bet`'s one-shot consume-on-next-action shape, but
     // is independent of them — a squeeze can and does co-occur with a direct
     // 3bet/4bet-facing flag on the very same re-raise action, since they read
-    // the same event two different ways (see stat-contracts.md).
+    // the same event two different ways.
     let mut facing_squeeze = false;
     // True exactly while the most recent raise (the one that brought
     // `raise_count` to its current value) was itself a genuine steal attempt
@@ -328,7 +327,7 @@ fn evaluate_hand(
             }
             // steal_attempt%'s opportunity is this exact RFI/Limp gate,
             // narrowed by the player's own position — a strict subset, not a
-            // parallel mechanism (position-contracts.md §3/§5).
+            // parallel mechanism.
             if own_position.is_some_and(is_steal_position) {
                 acc.steal_attempt_opportunities += 1;
                 if action.action_type == "raise" {

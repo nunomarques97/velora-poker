@@ -33,7 +33,7 @@ export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: Player
   const exploits = descriptions.filter((d) => d.category === "exploit");
   const [saving, setSaving] = useState(false);
   const classification = player.classification;
-  // /, same gate as PlayersView and the HUD cards: an archetype may be
+  // Same gate as PlayersView and the HUD cards: an archetype may be
   // shown only when this build produced one (a manual override, or an
   // automatic match). `available: false` is the build having no classifier at
   // all; a genuine `unknown` is the classifier having nothing to say yet. The
@@ -134,8 +134,7 @@ export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: Player
             /* Available, but nothing matched: below a rule's own hand minimum, or
                no rule covers these stats. Said in words instead of a grey
                "Unknown" badge, so it can never be read as this build's
-               "unavailable" state — the two are different facts (DESIGN.md
-               §7.4 vs §7.5). */
+               "unavailable" state — the two are different facts. */
             <div className={styles.descriptionEmpty}>
               No archetype yet — {player.hands.toLocaleString()} tracked hand
               {player.hands === 1 ? "" : "s"} is under every rule&apos;s own hand minimum, or no

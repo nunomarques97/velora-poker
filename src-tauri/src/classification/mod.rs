@@ -51,7 +51,7 @@ pub struct ClassificationResult {
     /// build" here, vs. a normal Unknown badge when `available` is true.
     /// TENDENCIES/EXPLOITS/CONFIDENCE never read this field — they come from
     /// `description_rules`, gated by the separate `strategic-analysis` flag,
-    /// and must render unaffected either way (Phase 1 flag-independence).
+    /// and must render unaffected either way (flag independence).
     pub available: bool,
 }
 

@@ -8,8 +8,8 @@ pub mod hittest;
 pub mod manager;
 pub mod plan;
 
-/// Label of the overlay window declared statically in `tauri.conf.json`. Since
-///  it is a *prototype*, never shown: every per-table overlay window is
+/// Label of the overlay window declared statically in `tauri.conf.json`. It
+/// is a *prototype*, never shown: every per-table overlay window is
 /// cloned from its config with a new label and URL — see `manager` for why it
 /// is still declared at all.
 pub const OVERLAY_PROTOTYPE_LABEL: &str = "overlay";
@@ -64,8 +64,8 @@ pub fn app_handle() -> Option<AppHandle> {
 /// window. The main window's "Open/Close Overlay" button previously kept a
 /// local React flag that went stale the moment the overlay was closed from
 /// its own in-overlay "Close" button, so the label advertised the opposite of
-/// what the next click would do (Phase E polish, a known issue).  added
-/// the table id: with one overlay per table, "the overlay closed" is only half
+/// what the next click would do. The payload carries the table id because,
+/// with one overlay per table, "the overlay closed" is only half
 /// an answer.
 pub const OVERLAY_VISIBILITY_EVENT: &str = "overlay-visibility-changed";
 
@@ -89,10 +89,9 @@ pub const OVERLAY_DISMISSED_EVENT: &str = "overlay-dismissed-changed";
 /// actually enters it, and the overlay keeps swallowing the clicks meant for
 /// Fold/Call/Raise on a real-money table.
 ///
-///  renamed this from `overlay-click-through-changed` and widened its
-/// payload from a bool to the mode, because "click-through" is no longer a
-/// single window-wide flag — see `hittest`.  widened it again to
-/// `OverlayModeChange`, so an overlay can tell a mode change of its own from
+/// Formerly `overlay-click-through-changed` with a bool payload; it carries
+/// the mode because "click-through" is no longer a single window-wide flag —
+/// see `hittest`. The payload is `OverlayModeChange`, so an overlay can tell a mode change of its own from
 /// one belonging to another table.
 pub const OVERLAY_MODE_EVENT: &str = "overlay-mode-changed";
 
@@ -100,11 +99,11 @@ pub const OVERLAY_MODE_EVENT: &str = "overlay-mode-changed";
 ///
 /// The overlay opens in `Normal` and should essentially always be there:
 /// interacting with the table is what happens all the time an overlay is
-/// open, while repositioning cards is occasional setup. Before  the
-/// overlay opened capturing every click across its whole footprint, so
-/// nothing on the table could be clicked until the user found and pressed
-/// "Lock" — backwards, and the cause of the / lockout when the same
-/// flag then made the overlay's own controls unreachable.
+/// open, while repositioning cards is occasional setup. The overlay used to
+/// open capturing every click across its whole footprint, so nothing on the
+/// table could be clicked until the user found and pressed "Lock" —
+/// backwards, and the cause of a lockout when the same flag then made the
+/// overlay's own controls unreachable.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum OverlayMode {
@@ -201,7 +200,7 @@ pub struct HotZone {
 /// re-reports on every layout change (cards moving, pages flipping, its
 /// tracked table resizing), so a rect never outlives the control it describes.
 ///
-/// Scoped per overlay since with one global list, the last table to
+/// Scoped per overlay: with one global list, the last table to
 /// report would decide where every *other* table's overlay stopped swallowing
 /// clicks.
 pub fn set_hot_zones(

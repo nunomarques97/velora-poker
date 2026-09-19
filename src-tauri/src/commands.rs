@@ -39,7 +39,7 @@ pub struct PlayerPayload {
     pub hands: i64,
     pub stats: PlayerStats,
     /// Structured rule results for the player profile drawer's
-    /// TENDENCIES/EXPLOITS/CONFIDENCE sections (Phase 0+1), sorted by
+    /// TENDENCIES/EXPLOITS/CONFIDENCE sections, sorted by
     /// confidence descending. Empty when the `strategic-analysis` build flag
     /// is off, or when no rule cleared its opportunity floor — the drawer
     /// shows each section's own empty state for either case, never a blank
@@ -48,14 +48,14 @@ pub struct PlayerPayload {
     pub descriptions: Vec<RuleResult>,
     pub classification: ClassificationResult,
     pub snapshot: Option<PlayerSnapshotPayload>,
-    /// Free-text note the user wrote about this player (Phase E), or
+    /// Free-text note the user wrote about this player, or
     /// `None` when none has been written. Rendered in the player profile
     /// drawer and the Players list only — deliberately *not* on the HUD
-    /// overlay in v1, to protect overlay compactness (spec,  precedent).
+    /// overlay in v1, to protect overlay compactness.
     pub note: Option<String>,
     /// This player's absolute PokerStars seat number at the currently active
     /// table — `None` for the all-time roster (`get_players`), populated for
-    /// `get_active_table_players` (Phase E seat mapping).
+    /// `get_active_table_players` (seat mapping).
     pub seat: Option<i64>,
     /// The same seat rotated so the hero sits at offset 0 — the key a
     /// saved HUD card position is actually stored under, because
@@ -65,13 +65,13 @@ pub struct PlayerPayload {
     pub seat_offset: Option<i64>,
 }
 
-/// `include_note` controls whether the player's free-text note is fetched
-/// (Phase E). It is `false` for exactly one caller,
+/// `include_note` controls whether the player's free-text note is fetched.
+/// It is `false` for exactly one caller,
 /// `get_active_table_players`, and that is deliberate: the overlay never
 /// renders notes, so fetching one there would add a per-player query to the
-/// hot overlay-refresh path for a field nothing reads. That path is also under
-/// a live-verification embargo, so its query surface must stay
-/// exactly as it was before . Every other caller passes `true`.
+/// hot overlay-refresh path for a field nothing reads. That path was verified
+/// live, so its query surface is kept deliberately minimal. Every other
+/// caller passes `true`.
 fn build_player_payload(
     conn: &rusqlite::Connection,
     rules: &[classification::ClassificationRule],
@@ -191,16 +191,16 @@ pub fn get_players_page(
 /// Each overlay window passes the id of the table it was created for, and its
 /// roster comes from that table's parsed name and nothing else. The one case
 /// that needs a decision is a tracked table whose window title didn't parse
-/// (`extract_table_name` returned `None` — the open tournament-title risk,
-/// a known issue):
+/// (`extract_table_name` returned `None` — e.g. an unrecognised tournament
+/// title):
 ///
-/// - With a single table tracked, the pre- global "latest hand anywhere"
+/// - With a single table tracked, the global "latest hand anywhere"
 ///   fallback is kept. There is no other table for it to leak from, and
 ///   showing the right players beats showing none.
-/// - With two or more, that fallback becomes the  bug itself: every
-///   unparsed table would render whichever table played the most recent hand.
-///   Those tables render empty instead, which is 's designed-safe failure
-///   — never another table's players.
+/// - With two or more, that fallback becomes a bug: every unparsed table
+///   would render whichever table played the most recent hand. Those tables
+///   render empty instead, which is the designed-safe failure — never another
+///   table's players.
 fn table_scope(table_id: u32) -> Option<TableScope> {
     match table_track::table_name_for(table_id) {
         Some(name) => Some(TableScope::Named(name)),
@@ -233,9 +233,9 @@ impl TableScope {
 /// table* — what the live overlay renders, as opposed to `get_players`' full
 /// all-time roster (used by the Players list and HUD profile views).
 ///
-///  scoped this to the tracked table window's name so that a hand
-/// completing on a *different* open table could not flip which players' cards
-/// render here.  makes that scope per-overlay rather than process-wide:
+/// Scoped to the tracked table window's name so that a hand completing on a
+/// *different* open table cannot flip which players' cards render here. The
+/// scope is per-overlay rather than process-wide:
 /// `table_id` identifies the caller's own table, so N overlays each show N
 /// different rosters. See `table_scope` for the unparsed-title case.
 #[tauri::command]
@@ -247,11 +247,11 @@ pub fn get_active_table_players(
         return Ok(Vec::new());
     };
     let scope = table_scope.name().map(|s| s.to_string());
-    // bounds "the active hand" to no earlier than this table window's
+    // Bounds "the active hand" to no earlier than this table window's
     // own first appearance, so a reused table name can never resolve to a
     // hand from an earlier sitting. `None` only if the table closed between
     // `table_scope` above and this lookup — vanishingly rare, and the
-    // pre- unbounded behavior for that instant is harmless since the
+    // unbounded behavior for that instant is harmless since the
     // overlay for a closed table is being torn down anyway.
     let since = table_track::table_for(table_id).map(|t| t.first_seen_at);
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
@@ -300,7 +300,7 @@ pub fn get_active_table_players(
 }
 
 /// This overlay's own table's max-players count (2/6/9-max) — the key the
-/// seat-mapping template is looked up by (Phase E). `None` until at
+/// seat-mapping template is looked up by. `None` until at
 /// least one hand has been imported at that table. Same per-table scoping as
 /// `get_active_table_players`.
 #[tauri::command]
@@ -311,7 +311,7 @@ pub fn get_active_table_max_players(
     let Some(scope) = table_scope(table_id) else {
         return Ok(None);
     };
-    // /a known issue: bounded by this table window's own first
+    // Bounded by this table window's own first
     // appearance, same as `get_active_table_players`, so a reused table name
     // can never resolve to a stale sitting's max-players format either.
     let since = table_track::table_for(table_id).map(|t| t.first_seen_at);
@@ -368,7 +368,7 @@ pub fn clear_player_color_override(
     build_player_payload(&conn, &rules, id, name, hands, None, None, true)
 }
 
-/// Saves the free-text note for one player (Phase E) and returns the
+/// Saves the free-text note for one player and returns the
 /// refreshed player, so the caller can update its list/drawer in place the
 /// same way the colour-override commands above do. A blank note clears it.
 #[tauri::command]
@@ -552,10 +552,10 @@ pub async fn pick_folder_dialog(app_handle: tauri::AppHandle) -> Option<String> 
 /// `parse_action_desc` matches (see that module's `desc == "folds"` /
 /// `desc == "checks"` / `strip_prefix("calls "/"raises "/"posts ...")`
 /// branches). Checking the sample file's raw text for these — instead of any
-/// general-purpose language detection — is 's whole "client language"
+/// general-purpose language detection — is the whole "client language"
 /// signal: a PokerStars client running in another language never produces
 /// these strings, so the hand's action lines silently fail to parse into
-/// `actions` (TECHNOLOGY.md S2 fixes this as the method; no i18n library).
+/// `actions` (deliberately this method; no i18n library).
 const ENGLISH_ACTION_VERBS: [&str; 5] = ["folds", "checks", "calls", "raises", "posts"];
 
 #[derive(Debug, Serialize)]
@@ -579,7 +579,7 @@ pub struct OnboardingFolderReadiness {
 pub struct OnboardingClientLanguageReadiness {
     /// Whether a test-parse was actually attempted. `false` whenever there
     /// was no folder, no `.txt` file, or the sample file could not be read —
-    ///  requires the verdict to come from a real test-parse, never a
+    /// the verdict must come from a real test-parse, never a
     /// guess, so those cases report "not checked" rather than a fabricated
     /// `false`.
     pub checked: bool,
@@ -621,7 +621,7 @@ fn most_recent_txt_file(dir: &Path) -> Option<PathBuf> {
 }
 
 /// How many hands `PokerStarsParser` actually parses (`Ok(_)`) out of `text`
-/// — the real hand count  asks for.
+/// — the real hand count, not a guess from file size or line counts.
 fn count_parsed_hands(text: &str) -> i64 {
     PokerStarsParser
         .parse(text)
@@ -819,9 +819,9 @@ pub struct AppSettingsPayload {
     pub onboarding_complete: bool,
     pub poker_room: Option<String>,
     pub overlay_enabled: bool,
-    /// user-declared confirmation that PokerStars' own "Auto-Center"
-    /// table option is on — required for automatic seat-mapping templates
-    /// (Phase E); cannot be detected, only asked for in Settings.
+    /// User-declared confirmation that PokerStars' own "Auto-Center"
+    /// table option is on — required for automatic seat-mapping templates;
+    /// cannot be detected, only asked for in Settings.
     pub auto_center_enabled: bool,
 }
 
@@ -832,7 +832,7 @@ pub fn get_app_settings(state: State<AppState>) -> Result<AppSettingsPayload, St
         db::get_setting(&conn, settings::SETTING_ONBOARDING_COMPLETE).map_err(|e| e.to_string())?
             == Some("true".to_string());
     let poker_room = db::get_setting(&conn, settings::SETTING_POKER_ROOM).map_err(|e| e.to_string())?;
-    // unset means on. HUD overlays are automatic now — the setting is a
+    // Unset means on. HUD overlays are automatic now — the setting is a
     // kill switch, not the record of an "Open Overlay" click — so a fresh
     // install must show HUDs, not wait to be asked.
     let overlay_enabled = db::get_setting(&conn, settings::SETTING_OVERLAY_ENABLED)
@@ -999,8 +999,7 @@ pub struct TrackedTableStatus {
     pub overlay_visible: bool,
     /// Whether the user dismissed this table's overlay by hand (its own
     /// "Hide" button) and hasn't brought it back since — distinct from
-    /// `overlay_visible: false` while a window is merely still starting up
-    ///.
+    /// `overlay_visible: false` while a window is merely still starting up.
     pub dismissed: bool,
 }
 
@@ -1046,8 +1045,8 @@ pub fn set_overlays_enabled(state: State<AppState>, enabled: bool) -> Result<(),
 }
 
 /// Collapses one table's HUD content from the overlay's own "Hide" button,
-/// leaving every other table alone. Not the kill switch, and —  —
-/// not a window hide either: the window stays up and positioned, only its
+/// leaving every other table alone. Not the kill switch, and not a window
+/// hide either: the window stays up and positioned, only its
 /// content collapses to a "Show" pill in the same spot, so restoring it
 /// never requires leaving the overlay. Comes back when the switch is cycled,
 /// that table window is closed and reopened, or `show_overlay` is called.
@@ -1157,8 +1156,7 @@ pub fn set_overlay_hot_zones(
 /// window, which mirrors whichever table that player is sitting at — there is
 /// no table-specific component to store. The same player showing up at two
 /// tables at once gets the same card position at both, which is the same
-/// deliberate sharing `seat_templates` already has across same-sized tables
-///.
+/// deliberate sharing `seat_templates` already has across same-sized tables.
 ///
 /// `x`/`y` are clamped to 0..1 on write. One real row had drifted to
 /// `x = 1.104`, which would have parked that player's card
@@ -1191,7 +1189,7 @@ pub fn get_hud_positions(state: State<AppState>) -> Result<Vec<HudPositionPayloa
 }
 
 // ---------------------------------------------------------------------
-// Seat-mapping templates (Phase E)
+// Seat-mapping templates
 // ---------------------------------------------------------------------
 
 #[derive(Debug, Serialize)]
@@ -1206,7 +1204,7 @@ pub struct SeatTemplatePayload {
 
 /// One max-players size's calibrated seat layout, `x`/`y` as fractions
 /// (0..1) of the overlay/table window — same coordinate scheme as
-/// `hud_positions`. Keyed by hero-relative seat offset .
+/// `hud_positions`. Keyed by hero-relative seat offset.
 #[tauri::command]
 pub fn get_seat_templates(
     state: State<AppState>,
@@ -1251,7 +1249,7 @@ pub fn save_seat_template(
 }
 
 // ---------------------------------------------------------------------
-// Table window detection status (Phase E)
+// Table window detection status
 // ---------------------------------------------------------------------
 
 #[derive(Debug, Serialize)]
@@ -1259,11 +1257,11 @@ pub fn save_seat_template(
 pub struct TableDetectionStatusPayload {
     pub detected: bool,
     /// How many real, logged-in PokerStars table windows are open right now.
-    /// Since  each one has its own overlay, so this is simply how many HUDs
-    /// are running — it is no longer the count behind an apology.
+    /// Each one has its own overlay, so this is simply how many HUDs are
+    /// running.
     pub table_window_count: u32,
-    /// Debug evidence added for the  window-following brief — lets the
-    /// user confirm from Settings (no terminal needed) whether the
+    /// Debug evidence for window-following — lets the user confirm from
+    /// Settings (no terminal needed) whether the
     /// WinEvent hooks registered and are firing, whether the 1.5s poll
     /// fallback loop is alive, and whether the two processes' Windows
     /// integrity levels differ (the UIPI hypothesis).
@@ -1298,11 +1296,9 @@ pub fn get_table_detection_status() -> TableDetectionStatusPayload {
 // Diagnostics — self-serve "Copy Diagnostics" for the user
 // ---------------------------------------------------------------------
 
-/// Plain-text diagnostics dump the user can paste back to the maintainer when
-/// something "feels wrong" during play without needing to characterize the
-/// bug himself first ('s own framing: a non-technical user hitting a
-/// reasonable limit on precision). Covers exactly the four things 's
-/// brief asked for: which table(s)/hand the overlay currently considers
+/// Plain-text diagnostics dump the user can paste into a bug report when
+/// something "feels wrong" during play, without needing to characterize the
+/// bug themselves first. Covers four things: which table(s)/hand the overlay currently considers
 /// active and where that came from, the last ~20 overlay refresh/resync
 /// events, the last ~10 imported hands and their table identifiers, and
 /// current watcher/import status.
@@ -1321,7 +1317,7 @@ pub fn get_diagnostics_report(
     let tables = table_track::tracked_tables();
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
 
-    // Ingestion integrity (work unit 2). Recomputed from the data on every
+    // Ingestion integrity. Recomputed from the data on every
     // report, so it cannot go stale or claim a clean database that isn't.
     out.push_str("-- Ingestion integrity --\n");
     match db::integrity_counters(&conn) {
@@ -1336,7 +1332,7 @@ pub fn get_diagnostics_report(
                 out.push_str("All four counters are zero — no known ingestion corruption.\n");
             } else {
                 out.push_str(
-                    "One or more counters is non-zero — please send this report to the maintainer.\n",
+                    "One or more counters is non-zero — please include this report in a bug report.\n",
                 );
             }
         }
@@ -1529,12 +1525,12 @@ pub fn get_diagnostics_report(
         }
     ));
 
-    // the facts that decide whether a click lands on the table or on
+    // The facts that decide whether a click lands on the table or on
     // Velora. "Hot zones" are the rectangles that stay clickable in normal
     // mode — an overlay's control bar plus one per visible card's pagination
     // dots — so a count of 0 while that overlay is up and showing cards is
     // itself the symptom, rather than something to infer from behaviour. Per
-    // overlay , because "the mode" is no longer one value.
+    // overlay, because "the mode" is not one value.
     out.push_str("-- Overlay interaction --\n");
     let probe = overlay::hit_test_probe();
     if probe.overlays.is_empty() {
@@ -1562,7 +1558,7 @@ pub fn get_diagnostics_report(
 // Ingestion health + app version
 // ---------------------------------------------------------------------
 
-/// One import-integrity finding, ready for the UI (/): the raw
+/// One import-integrity finding, ready for the UI: the raw
 /// severity/code/detail the parser produced, plus a product-language
 /// `explanation` and when it was first/last seen.
 #[derive(Debug, Serialize)]
@@ -1577,7 +1573,7 @@ pub struct IngestionProblemPayload {
     pub last_seen_at: String,
 }
 
-/// `get_ingestion_health`'s payload (, work unit 2). Every field is
+/// `get_ingestion_health`'s payload. Every field is
 /// computed from `hands`/`import_problems` on every call — nothing here is
 /// an in-memory counter, so a restart never loses or resets it.
 #[derive(Debug, Serialize)]
@@ -1593,8 +1589,7 @@ pub struct IngestionHealthPayload {
 /// Product-language explanation for one import-integrity code: what
 /// failed and what the user loses, without parser vocabulary in the visible
 /// text. A code this map has not caught up with still gets an honest,
-/// non-empty sentence — never a blank string (product-profile priority 4,
-/// "honesty about errors").
+/// non-empty sentence — never a blank string.
 fn problem_explanation(code: &str) -> &'static str {
     match code {
         "missing_hand_id" => {
@@ -1664,8 +1659,7 @@ fn problem_explanation(code: &str) -> &'static str {
 /// import, no watcher), so it can be called as often as Settings/the status
 /// line want without side effects. Every number comes from `hands`/
 /// `import_problems` on this call — `handsRejected`/`handsWithWarnings` are
-/// never derived from an in-memory counter, which would reset on restart
-/// (, criterion 1).
+/// never derived from an in-memory counter, which would reset on restart.
 pub fn ingestion_health(conn: &rusqlite::Connection) -> Result<IngestionHealthPayload, String> {
     let hands_imported = db::count_hands(conn).map_err(|e| e.to_string())?;
     let hands_rejected =
@@ -1700,17 +1694,17 @@ pub fn ingestion_health(conn: &rusqlite::Connection) -> Result<IngestionHealthPa
 }
 
 /// Tauri wrapper around `ingestion_health`: read-only status the Settings
-/// "Ingestão" section and the main-window status line () poll on demand.
+/// "Ingestão" section and the main-window status line poll on demand.
 #[tauri::command]
 pub fn get_ingestion_health(state: State<AppState>) -> Result<IngestionHealthPayload, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     ingestion_health(&conn)
 }
 
-/// `get_app_version`'s payload: the build's own version string plus
-/// which optional, ToS-sensitive features were compiled in.
-/// `features` is empty on a distributed build — the only place a tester can
-/// tell the two builds apart without asking anyone ( consumes this).
+/// `get_app_version`'s payload: the build's own version string plus which
+/// optional, ToS-sensitive features were compiled in. `features` is empty on
+/// a distributed build — the only place a tester can tell the two builds
+/// apart without asking anyone.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppVersionPayload {

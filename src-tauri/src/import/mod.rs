@@ -44,7 +44,7 @@ pub fn import_text(conn: &mut Connection, text: &str) -> Result<ImportSummary, S
             Ok(hand) => {
                 summary.seats_not_dealt_in += hand.skipped_seats.len() as i64;
 
-                // Integrity gate (work unit 2, requirement 5). A hand that fails
+                // Integrity gate. A hand that fails
                 // never reaches the database, and never fails silently: it is
                 // logged here and counted into the persisted totals below, which
                 // the Settings → Diagnostics report reads back.

@@ -76,18 +76,18 @@ fn computes_hero_statistics() {
     assert_close(s.pfr, 75.0, "hero pfr");
     assert_no_opportunity(s.three_bet, "hero three_bet");
     assert_close(s.fold_to_three_bet, 50.0, "hero fold_to_three_bet");
-    // Phase 2, stat 2 (RFI%/Limp%): Hero is the button in all four fixtures
+    // RFI%/Limp%: Hero is the button in all four fixtures
     // and always acts first preflop in this 3-max table, so all four hands
     // are RFI/limp opportunities for Hero — raises in 3 (showdown, cbet_fold,
     // fold_to_3bet) and limps in 1 (limped_multiway).
     assert_close(s.rfi, 75.0, "hero rfi");
     assert_close(s.limp, 25.0, "hero limp");
-    // Phase 2, stat 3 (Cold Call%): Hero is always the opener (button acting
+    // Cold Call%: Hero is always the opener (button acting
     // first in these 3-max fixtures) or the limper, and never faces a raise
     // before having voluntarily acted themselves — no cold-call opportunity
     // ever arises for Hero across these four hands.
     assert_no_opportunity(s.cold_call, "hero cold_call");
-    // Phase 2, stat 4 (Squeeze%/Fold-to-Squeeze%): Hero never faces a raise
+    // Squeeze%/Fold-to-Squeeze%: Hero never faces a raise
     // before acting (same reason cold_call has no opportunity), and never
     // raises into a spot with a live caller behind them, so neither stat has
     // an opportunity across these four hands.
@@ -99,8 +99,8 @@ fn computes_hero_statistics() {
     assert_close(s.wtsd, 33.3, "hero wtsd");
     assert_close(s.wsd, 0.0, "hero wsd");
     // steal_attempt%: Hero (BTN, a steal position at this 3-max table, where
-    // there's no CO label — the position set degrades to {BTN, SB} exactly
-    // as position-contracts.md §4 describes) is first-in in all 4 fixtures:
+    // there's no CO label — the position set degrades to {BTN, SB}) is
+    // first-in in all 4 fixtures:
     // raises in 3 (showdown, cbet_fold, fold_to_3bet), limps in 1
     // (limped_multiway) — same 3/4 split as rfi/limp above, since every
     // steal_attempt opportunity here is also an RFI/Limp opportunity.
@@ -127,7 +127,7 @@ fn computes_villain_statistics() {
     // spot across these four fixtures — correctly `None`, not a fabricated 0%.
     assert_no_opportunity(s.rfi, "villain rfi");
     assert_no_opportunity(s.limp, "villain limp");
-    // Phase 2, stat 3 (Cold Call%): unlike RFI/Limp (gated on nobody having
+    // Cold Call%: unlike RFI/Limp (gated on nobody having
     // voluntarily entered), Cold Call%'s opportunity is gated on Villain's
     // own first voluntary action, and requires a prior raise — a condition
     // Hero's every-hand open satisfies. Villain faces that open cold in three
@@ -135,7 +135,7 @@ fn computes_villain_statistics() {
     // exactly one (cbet_fold): 1/3 = 33.3%. The fourth hand (limped_multiway)
     // has no preflop raise at all, so it contributes no opportunity.
     assert_close(s.cold_call, 33.3, "villain cold_call");
-    // Phase 2, stat 4: Villain is always the first to respond to Hero's open
+    // Squeeze%: Villain is always the first to respond to Hero's open
     // in these fixtures, so nobody has ever called ahead of Villain's own
     // turn — every one of Villain's cold-call opportunities has
     // called_since_last_raise == false, so none of them is also a squeeze
@@ -175,12 +175,12 @@ fn computes_robot_statistics() {
     // voluntary entry — same as Villain, never a genuine RFI/limp spot here.
     assert_no_opportunity(s.rfi, "robot rfi");
     assert_no_opportunity(s.limp, "robot limp");
-    // Phase 2, stat 3 (Cold Call%): Robot faces Hero's open cold in the same
+    // Cold Call%: Robot faces Hero's open cold in the same
     // three hands as Villain, but always declines by re-raising instead of
     // calling (3-betting in showdown/fold_to_3bet, folding in cbet_fold) —
     // 0/3 opportunities converted, a real 0.0%, not "no opportunity".
     assert_close(s.cold_call, 0.0, "robot cold_call");
-    // Phase 2, stat 4: in hand_cbet_fold, Villain calls Hero's open before
+    // Squeeze%: in hand_cbet_fold, Villain calls Hero's open before
     // Robot's turn — a genuine squeeze opportunity for Robot (raise_count>=1
     // AND a caller since the last raise), declined by folding rather than
     // re-raising, hence a real 0.0%, not "no opportunity". Robot is never
@@ -191,7 +191,7 @@ fn computes_robot_statistics() {
     assert_close(s.c_bet, 100.0, "robot c_bet");
     assert_no_opportunity(s.fold_to_c_bet, "robot fold_to_c_bet");
     // Robot bets/raises postflop every time but never calls, so the ratio has
-    // no denominator ( requirement 2) rather than reporting the raw count.
+    // no denominator rather than reporting the raw count.
     assert_no_opportunity(s.aggression_factor, "robot aggression_factor");
     assert_close(s.wtsd, 50.0, "robot wtsd");
     assert_close(s.wsd, 100.0, "robot wsd");
@@ -206,7 +206,7 @@ fn computes_robot_statistics() {
     assert_close(s.fold_to_steal, 33.3, "robot fold_to_steal");
 }
 
-///  requirement 3 follow-up correction: an all-in preflop action alone
+/// Regression: an all-in preflop action alone
 /// does not mean the flop was dealt. `hand_allin_preflop_folded.txt` (Hero
 /// shoves preflop, everyone folds — no flop, no showdown) must NOT count
 /// toward `saw_flop_hands`; `hand_allin_preflop_showdown.txt` (Hero shoves
@@ -238,12 +238,11 @@ fn all_in_preflop_only_counts_toward_saw_flop_when_the_hand_reaches_showdown() {
     );
 }
 
-/// Phase 2, stat 1 (4-bet%/fold-to-4-bet%): the clean, non-pileup spot.
+/// 4-bet%/fold-to-4-bet%: the clean, non-pileup spot.
 /// Hero opens, Villain 3-bets, Robot folds facing what would be their own
-/// 4-bet, Hero 4-bets back, Villain calls. Hand-verified against three real
-/// hands in the live DB (hand_ids 22, 24, 27 — see the notes);
-/// this fixture reproduces hand 27's shape (the opener returning to 4-bet)
-/// deterministically for regression coverage.
+/// 4-bet, Hero 4-bets back, Villain calls. Hand-verified against real hand
+/// histories; this fixture reproduces the shape of the opener returning to
+/// 4-bet deterministically for regression coverage.
 #[test]
 fn four_bet_and_fold_to_four_bet_in_a_clean_non_pileup_spot() {
     let mut conn = setup_db();
@@ -272,15 +271,14 @@ fn four_bet_and_fold_to_four_bet_in_a_clean_non_pileup_spot() {
     assert_close(robot_stats.four_bet, 0.0, "robot four_bet");
 }
 
-/// Phase 2, stat 1 follow-up: the documented pileup gap (stat-contracts.md,
-/// "Residual pileup case"). Hero opens, Villain 3-bets, Robot 4-bets (a
+/// 4-bet% follow-up: the known "residual pileup" gap. Hero opens, Villain 3-bets, Robot 4-bets (a
 /// THIRD player, not Hero) before action returns to Hero — so Hero's fold is
 /// still filed under fold-to-3-bet (their `facing_3bet` flag was set by
 /// Villain's 3-bet and never consumed before their own next action), even
 /// though by then they are genuinely folding to a 4-bet. Hero never gets a
 /// four_bet_opportunity at all (raise_count is already 3, past the `==2`
-/// check, by the time it's their turn). Matches real hands 22 and 24 in the
-/// live DB, hand-verified the same way.
+/// check, by the time it's their turn). Matches real hand histories,
+/// hand-verified the same way.
 #[test]
 fn fold_to_three_bet_absorbs_the_openers_pileup_response_not_fold_to_four_bet() {
     let mut conn = setup_db();
@@ -304,15 +302,14 @@ fn fold_to_three_bet_absorbs_the_openers_pileup_response_not_fold_to_four_bet() 
     assert_close(robot_stats.four_bet, 100.0, "robot four_bet");
 }
 
-/// Phase 2, stat 2 (RFI%/Limp%): the case the maintainer explicitly asked to flag —
+/// RFI%/Limp%: an explicitly flagged edge case —
 /// a player who limps behind another limper is not "first to voluntarily
 /// act" and must be excluded entirely, not counted as a 0%-RFI limp. Also
 /// exercises the isolation-raise-over-limps case (mirrors the 4-bet unit's
 /// "raise that isn't really the first-in decision" pattern): the BB's raise
 /// here happens only after Fish has already limped, so it must not count as
 /// an RFI either, for the same `entered_pot` reason. Hand-verified against
-/// real DB hands 1 and 3 (see the notes); this fixture
-/// reproduces that shape deterministically.
+/// real hand histories; this fixture reproduces that shape deterministically.
 #[test]
 fn limping_behind_a_limper_and_raising_over_limps_are_both_excluded_from_rfi() {
     let mut conn = setup_db();
@@ -344,12 +341,12 @@ fn limping_behind_a_limper_and_raising_over_limps_are_both_excluded_from_rfi() {
     assert_no_opportunity(robot_stats.limp, "robot limp");
 }
 
-/// Phase 2, stat 2 follow-up: the walk case the maintainer asked about. A walk is
+/// RFI%/Limp% follow-up: the walk case. A walk is
 /// NOT "no opportunity for anyone" — every player who folds before the
 /// walk completes genuinely had (and declined) an RFI/limp opportunity;
 /// only the player who wins by walk (no action row at all, since they were
-/// never required to act) gets none. Hand-verified against real DB hand 2
-/// (see the notes); this fixture reproduces it.
+/// never required to act) gets none. Hand-verified against a real hand
+/// history; this fixture reproduces it.
 #[test]
 fn a_walk_gives_every_folder_a_declined_opportunity_but_the_walked_to_player_none() {
     let mut conn = setup_db();
@@ -375,15 +372,15 @@ fn a_walk_gives_every_folder_a_declined_opportunity_but_the_walked_to_player_non
     assert_no_opportunity(robot_stats.limp, "robot limp (won the walk, never acted)");
 }
 
-/// Phase 2, stat 3 (Cold Call%): the two "declined" opportunities excluded
+/// Cold Call%: the two "declined" opportunities excluded
 /// from RFI/Limp (facing an open cold, facing a 3-bet cold) both feed this
 /// stat instead. Hero cold-calls Fish's open (raise_count==1 at Hero's
 /// turn, Hero's first voluntary action) and Robot cold-calls Villain's
 /// 3-bet (raise_count==2, Robot's first voluntary action — their forced BB
 /// post doesn't count) in the same hand; Villain instead declines their own
 /// cold-call opportunity by 3-betting rather than calling. Hand-verified
-/// against real DB hands (see the notes); this fixture
-/// reproduces both shapes deterministically.
+/// against real hand histories; this fixture reproduces both shapes
+/// deterministically.
 #[test]
 fn cold_call_credits_the_first_voluntary_call_of_a_raise_whether_open_or_3bet() {
     let mut conn = setup_db();
@@ -412,13 +409,11 @@ fn cold_call_credits_the_first_voluntary_call_of_a_raise_whether_open_or_3bet() 
     assert_no_opportunity(fish_stats.cold_call, "fish cold_call (opener, not a cold call)");
 }
 
-/// Phase 2, stat 3 follow-up: the excluded case the maintainer explicitly asked to
-/// flag — a player who limps first and is later raised over does NOT get a
+/// Cold Call% follow-up: an explicitly flagged excluded case — a player who limps first and is later raised over does NOT get a
 /// cold-call opportunity when they call that raise, because their first
 /// voluntary action was already the limp. Mirrors the RFI/Limp unit's
 /// limp-behind-a-limp fixture shape, but with an isolation raise the limper
-/// then calls instead of folds. Hand-verified against real DB hands (see
-/// the notes).
+/// then calls instead of folds. Hand-verified against real hand histories.
 #[test]
 fn calling_a_raise_after_already_limping_is_excluded_from_cold_call() {
     let mut conn = setup_db();
@@ -441,15 +436,15 @@ fn calling_a_raise_after_already_limping_is_excluded_from_cold_call() {
     assert_no_opportunity(robot_stats.cold_call, "robot cold_call (raised, not facing a raise)");
 }
 
-/// Phase 2, stat 4 (Squeeze%/Fold-to-Squeeze%): a squeeze is specifically a
+/// Squeeze%/Fold-to-Squeeze%: a squeeze is specifically a
 /// re-raise that comes after at least one live caller — narrower than "any
 /// raise while raise_count >= 1", which Cold Call% already tracks. Fish
 /// opens, Hero cold-calls (the caller a squeeze requires), Villain re-raises
 /// over both of them (the squeeze itself), Robot folds facing the same
 /// raise_count >= 1 spot Cold Call% covers (but with no caller since
 /// Villain's raise, so it's not a squeeze opportunity for Robot), and Fish —
-/// the original opener — folds to the squeeze. Hand-verified against real DB
-/// hands (see the notes).
+/// the original opener — folds to the squeeze. Hand-verified against real
+/// hand histories.
 #[test]
 fn squeeze_credits_a_re_raise_after_a_live_caller_and_the_opener_folds_to_it() {
     let mut conn = setup_db();
@@ -485,7 +480,7 @@ fn squeeze_credits_a_re_raise_after_a_live_caller_and_the_opener_folds_to_it() {
     assert_no_opportunity(robot_stats.squeeze, "robot squeeze (no caller since Villain's raise)");
 }
 
-/// Squeeze% follow-up: the excluded case the maintainer explicitly asked to flag — a
+/// Squeeze% follow-up: an explicitly flagged excluded case — a
 /// direct re-raise with no caller in between is not a squeeze, for either the
 /// re-raiser or the original raiser, even though it satisfies the same
 /// raise_count >= 1 gate Cold Call%/Squeeze% share. Reuses hand_3bet_showdown
@@ -514,7 +509,7 @@ fn a_direct_re_raise_with_no_caller_in_between_is_not_a_squeeze() {
     assert_no_opportunity(hero_stats.fold_to_squeeze, "hero fold_to_squeeze (direct 3-bet, not a squeeze)");
 }
 
-/// steal_attempt%/fold_to_steal% at heads-up (position-contracts.md §2/§4):
+/// steal_attempt%/fold_to_steal% at heads-up:
 /// `labels_for(2)` returns only `BTN`/`BB`, collapsing the small blind into
 /// the button. `BTN` still matches the steal-position set by plain string
 /// membership, no special-casing needed — Hero's button open counts as a
@@ -536,18 +531,18 @@ fn steal_attempt_and_fold_to_steal_at_heads_up() {
     assert_close(villain_stats.fold_to_steal, 100.0, "villain fold_to_steal (BB folds to the button open)");
 }
 
-/// position-contracts.md §4's isolation-raise exclusion, applied to
+/// The isolation-raise exclusion, applied to
 /// fold_to_steal% specifically: a raise from a steal position (BTN here)
 /// after a limp is an isolation raise, not a steal, because the raiser's own
 /// `entered_pot` was already true when they acted — the same reason it's
 /// excluded from `steal_attempt_opportunities`. The blinds folding to it must
 /// NOT be credited with a fold_to_steal opportunity. Fish (CO) limps first,
 /// Hero (BTN) isolates, Villain (SB) and Robot (BB) both fold — regression
-/// coverage for a bug caught during Phase 0 wiring verification: an earlier
-/// version of this gate checked only "raise_count == 1 and the raiser is in
-/// a steal position," which wrongly counted this shape (the live-DB
-/// verification run came back 56,027 fold_to_steal opportunities against the
-/// design doc's 50,355 simulated figure until this fixture exposed why).
+/// coverage for a bug caught during verification against real data: an
+/// earlier version of this gate checked only "raise_count == 1 and the raiser
+/// is in a steal position," which wrongly counted this shape (it overcounted
+/// fold_to_steal opportunities on a real database by roughly 11% until this
+/// fixture exposed why).
 #[test]
 fn a_raise_over_a_limp_from_a_steal_position_is_not_a_steal_for_fold_to_steal() {
     let mut conn = setup_db();
@@ -579,7 +574,7 @@ fn player_with_no_hands_reports_no_opportunity_for_every_stat() {
     let conn = setup_db();
     // No import performed; any player id is guaranteed to have zero hands, so
     // every stat's denominator is zero and must report "no opportunity"
-    // (`None`) rather than a fabricated 0.0 ( requirement 1).
+    // (`None`) rather than a fabricated 0.0.
     let s = stats::compute_player_stats(&conn, 999).unwrap();
     assert_no_opportunity(s.vpip, "vpip");
     assert_no_opportunity(s.pfr, "pfr");

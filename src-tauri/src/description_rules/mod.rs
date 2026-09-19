@@ -7,7 +7,7 @@ use crate::stats::{PlayerStats, PlayerStatsOpportunities};
 /// play against it. A "Calling Station" tendency and a "Recreational"
 /// classification are different layers and can both be true of the same
 /// player at once — this enum never competes with `classification`'s single
-/// best-match archetype (Phase 1, see the notes).
+/// best-match archetype.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum RuleCategory {
@@ -18,9 +18,8 @@ pub enum RuleCategory {
 /// UI-facing confidence band. Bands split the 0..100 `confidence_pct` range
 /// produced by `confidence_tier` below: High from 100 opportunities up
 /// (>=50%), Medium from 40 (>=20%), Low from the 10-opportunity floor,
-/// InsufficientData below that floor (no conclusion is shown at all). These
-/// bands are new with Phase 1 — not something the user specified — picked
-/// to track common poker-tracker convention, not re-derived math.
+/// InsufficientData below that floor (no conclusion is shown at all). The
+/// bands track common poker-tracker convention, not re-derived math.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ConfidenceTier {
@@ -52,8 +51,8 @@ fn evidence(stat_name: &str, value: Option<f64>, opportunities: i64) -> Evidence
     }
 }
 
-/// Structured replacement for the old bare `{ text, confidence }` pair
-/// (Phase 0+1). `confidence_pct`/`confidence_tier` are per-conclusion, never
+/// Structured replacement for the old bare `{ text, confidence }` pair.
+/// `confidence_pct`/`confidence_tier` are per-conclusion, never
 /// a single global player score — a player can be shown as both a strong
 /// Tendency and a low-confidence Exploit at once.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -69,10 +68,10 @@ pub struct RuleResult {
 
 /// `min(100, round(opportunities / 200 * 100))` — the exact formula every
 /// rule used before this refactor, now encapsulated behind one function
-/// (Phase 1) instead of being inlined at 22 call sites, so it can be revised
-/// later without touching every rule. `opportunities` is always the rule's
-/// own named confidence-basis count, never `hands` as a fallback — the
-/// caller passes whichever field/`min()` the spec table names. Below 10
+/// instead of being inlined at 22 call sites, so it can be revised later
+/// without touching every rule. `opportunities` is always the rule's own
+/// named confidence-basis count, never `hands` as a fallback — the caller
+/// passes whichever field/`min()` the rule's definition names. Below 10
 /// opportunities there isn't enough data to show a conclusion at all.
 pub fn confidence_tier(opportunities: i64) -> (Option<u8>, ConfidenceTier) {
     if opportunities < 10 {
@@ -116,43 +115,27 @@ fn push(
     });
 }
 
-/// Batch 1 + batch 2 of the notes — the same
-/// 22 rules shipped before this refactor, unchanged trigger conditions and
-/// unchanged confidence math (Phase 1: restructuring the result shape only,
-/// not the rules). Batch 3's `squeeze`/`fold_to_squeeze` rules were added in
-/// Phase 3 round 1 (Cold Call%/Squeeze%/Fold-to-Squeeze% round) — the two
-/// squeeze rules' condition/text come verbatim from the spec's existing
-/// batch 3 table; `fold_to_squeeze`'s rule has no prior spec row and was
-/// added that round, mirroring `fold_to_three_bet`'s threshold/style.
-/// `four_bet`/`rarely-4bets`/`fold_to_four_bet`/`cold_call`'s rules were
-/// added in Phase 3 round 2 — all four condition/text pairs are transcribed
-/// verbatim from the spec's existing batch 3 table (including `cold_call`'s
-/// row, which already existed there; the round's own brief believed it
-/// didn't and asked for a new row, but the existing one already matched the
-/// requested threshold/text exactly, so it was reused rather than
-/// duplicated — flagged in that round's report-back, not silently
-/// resolved). Phase 3 round 3 added the first two *composite* rules —
-/// `cold-calls-wide-folds-to-cbets` and `aggressive-preflop-folds-to-reraise`
-/// — each combining two already-computed stats into one read instead of
-/// thresholding a single stat; both reuse their component rules' existing
-/// thresholds verbatim (never a new calibration) and use the minimum of
-/// their contributing opportunity counts as the confidence basis, since a
-/// composite read is only as strong as its weaker leg. The position work
-/// unit added `steal_attempt`/`fold_to_steal` to `PlayerStats`/
-/// `PlayerStatsOpportunities` (the notes) but no rule
-/// used them yet; this round adds the four rules the spec table already
-/// named for them (`steals-too-often`/`rarely-steals`/`overfolds-to-steals`/
-/// `defends-blinds-too-wide`), condition/basis/text transcribed verbatim, no
-/// new calibration. The rest of batch 3 (donk_bet, check_raise, and the
-/// other derived stats) is still a separate, later work unit — do not add a
-/// rule here that needs a stat not already in `PlayerStats`/
-/// `PlayerStatsOpportunities`.
+/// Evaluates every description rule against a player's stats. Batches 1 and
+/// 2 are the original 22 single-stat rules. Batch 3 adds rules for the
+/// derived stats: `squeeze`/`fold_to_squeeze` (the latter mirroring
+/// `fold_to_three_bet`'s threshold/style), `four_bet`/`rarely-4bets`/
+/// `fold_to_four_bet`/`cold_call`, the steal rules (`steals-too-often`/
+/// `rarely-steals`/`overfolds-to-steals`/`defends-blinds-too-wide`), and the
+/// first two *composite* rules — `cold-calls-wide-folds-to-cbets` and
+/// `aggressive-preflop-folds-to-reraise` — each combining two
+/// already-computed stats into one read instead of thresholding a single
+/// stat. Composite rules reuse their component rules' existing thresholds
+/// verbatim (never a new calibration) and use the minimum of their
+/// contributing opportunity counts as the confidence basis, since a
+/// composite read is only as strong as its weaker leg. The rest of batch 3
+/// (donk_bet, check_raise, and the other derived stats) is not implemented
+/// yet — do not add a rule here that needs a stat not already in
+/// `PlayerStats`/`PlayerStatsOpportunities`.
 ///
 /// Every trigger, confidence basis, and conclusion string below is
-/// transcribed verbatim from the spec table — the wording was specifically
-/// reviewed against 's hard rule against inferring villain range
-/// composition from frequency alone, so do not reword any text field even
-/// for style.
+/// deliberate — the wording was specifically reviewed against the hard rule
+/// against inferring villain range composition from frequency alone, so do
+/// not reword any text field even for style.
 pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<RuleResult> {
     use RuleCategory::{Exploit, Tendency};
 
@@ -496,9 +479,7 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
     // --- batch 3 (continued): four_bet, fold_to_four_bet, cold_call ---
     //
     // `four_bet`'s confidence basis is `faced_3bet_opportunities`, not a
-    // separate `four_bet_opportunities` counter — that's the spec's own call
-    // (the notes, "### four_bet / fold_to_four_bet"):
-    // `four_bet` reuses the exact `facing_3bet` event already computed for
+    // separate `four_bet_opportunities` counter, by design: `four_bet` reuses the exact `facing_3bet` event already computed for
     // `fold_to_three_bet`, so its opportunity population *is*
     // `faced_3bet_opportunities`. Not a bug, not changed here.
     if let Some(fb) = stats.four_bet {
@@ -550,9 +531,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
         );
     }
 
-    // --- batch 3 (continued): steal_attempt, fold_to_steal (position work
-    // unit). Condition/basis/text transcribed verbatim from the spec table
-    // ("Steals too often"/"Rarely steals"/"Overfolds to steals"/"Defends
+    // --- batch 3 (continued): steal_attempt, fold_to_steal. Condition/
+    // basis/text are fixed by the rule definitions ("Steals too often"/"Rarely steals"/"Overfolds to steals"/"Defends
     // blinds too wide") — no new calibration, the stats and their
     // opportunity denominators already exist in PlayerStats/
     // PlayerStatsOpportunities, this only wires them into the rule engine.
@@ -615,8 +595,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
         );
     }
 
-    // --- batch 3 (composite): relational rules combining two stats (Phase 3
-    // round 3). A composite rule is only as strong as its weaker leg, so its
+    // --- batch 3 (composite): relational rules combining two stats. A
+    // composite rule is only as strong as its weaker leg, so its
     // confidence basis is the *minimum* of its contributing opportunity
     // counts, never the first stat's or an average — same principle
     // `combative-preflop` and `bets-flop-wont-back-it-up` already use above.
@@ -689,11 +669,10 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
 }
 
 /// Resolves the rule results the HUD popup should show: the full rule engine
-/// when compiled with `strategic-analysis` (user's own personal builds
-/// only), otherwise an empty list — same flag-off shape as
+/// when compiled with `strategic-analysis` (an opt-in build feature),
+/// otherwise an empty list — same flag-off shape as
 /// `classification::resolve_for_player`. This function never inspects the
-/// `auto-classification` feature — Phase 1's flag-independence requirement —
-/// so TENDENCIES/EXPLOITS/CONFIDENCE compute identically whether or not
+/// `auto-classification` feature, so TENDENCIES/EXPLOITS/CONFIDENCE compute identically whether or not
 /// automatic classification is compiled into this build.
 pub fn descriptions_for_player(
     stats: &PlayerStats,

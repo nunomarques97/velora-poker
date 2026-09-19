@@ -24,7 +24,7 @@ type ReadinessStatus = "checking" | "green" | "red" | "skipped";
 
 const OTHER_ROOMS = ["GGPoker", "888poker", "partypoker", "iPoker"];
 
-// the exact cost of each skip, written once so the copy can never drift
+// The exact cost of each skip, written once so the copy can never drift
 // from the button that triggers it — a skip button never renders without its
 // cost right next to it.
 const SKIP_COSTS = {
@@ -158,7 +158,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
 
-  // ---  readiness gate (step 4) ---
+  // --- Readiness gate (step 4) ---
   const [readiness, setReadiness] = useState<OnboardingReadinessPayload | null>(null);
   const [readinessLoading, setReadinessLoading] = useState(false);
   const [readinessError, setReadinessError] = useState<string | null>(null);
@@ -265,7 +265,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
 
   const bestCandidate = candidates && candidates.length > 0 ? candidates[0] : null;
 
-  // ---  readiness derivation ---
+  // --- Readiness derivation ---
   const folderOk = readiness ? readiness.folder.exists && readiness.folder.parsedHandCount > 0 : false;
   const languageOk = readiness ? readiness.clientLanguage.checked && readiness.clientLanguage.isEnglish : false;
   const autoCenterOk = readiness ? readiness.autoCenter.enabled : false;
@@ -289,12 +289,12 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   if (languageStatus === "red") blockingLabels.push("PokerStars language");
   if (autoCenterStatus === "red") blockingLabels.push("Auto-Center");
 
-  //  criterion 3: "green, or explicitly skipped" is the whole gate.
+  // "Green, or explicitly skipped" is the whole gate.
   // Deliberately NOT conditioned on `readiness !== null`: a failed
   // `get_onboarding_readiness` leaves the payload null, the three items red,
   // and — with that extra condition — the user who skipped all three stuck
-  // behind a permanently dead "Open Velora" with no way out (attempt 1's
-  // rejection). `folderOk`/`languageOk`/`autoCenterOk` are already false
+  // behind a permanently dead "Open Velora" with no way out.
+  // `folderOk`/`languageOk`/`autoCenterOk` are already false
   // without a payload, so nothing can turn green without real backend data.
   const allReady = !stillChecking && blockingLabels.length === 0;
 
@@ -329,7 +329,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
 
   return (
     <div className={styles.overlay}>
-      {/* / on steps 2 and 4 the card becomes a column with a pinned
+      {/* On steps 2 and 4 the card becomes a column with a pinned
           action row (see OnboardingFlow.module.css). Every other step keeps the
           card's own scroll, untouched. */}
       <div

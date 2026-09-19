@@ -1,5 +1,5 @@
 // `pub` (not private) so integration tests in `src-tauri/tests/` can call the
-// pure onboarding-readiness computation (, `commands::onboarding_readiness`)
+// pure onboarding-readiness computation (`commands::onboarding_readiness`)
 // directly, without going through a live Tauri `State`.
 pub mod commands;
 mod overlay;
@@ -60,7 +60,7 @@ pub fn run() {
         .manage(app_state)
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        // global HUD toggle hotkey. One shortcut is ever registered, so
+        // Global HUD toggle hotkey. One shortcut is ever registered, so
         // the handler doesn't need to discriminate by which one fired — see
         // `table_track::toggle_hud_for_foreground_table` for what it does
         // and why resolving "the" table from OS foreground focus, not any
@@ -135,7 +135,7 @@ pub fn run() {
             if let Some(dir) = configured_dir {
                 let dir_path = std::path::PathBuf::from(&dir);
                 if dir_path.is_dir() {
-                    // this backlog import used to run
+                    // This backlog import used to run
                     // right here, synchronously, on the same thread that's
                     // still inside `setup()` — for a hand-history folder
                     // built up over real play that can take the better part
@@ -193,40 +193,37 @@ pub fn run() {
                 }
             }
 
-            // / the `overlay` window
-            // declared in `tauri.conf.json` is created here by Tauri's own
-            // batch window-bootstrap and stays hidden forever. Since  it is
-            // a *prototype*: every real per-table overlay is cloned from its
+            // The `overlay` window declared in `tauri.conf.json` is created
+            // here by Tauri's own batch window-bootstrap and stays hidden
+            // forever. It is a *prototype*: every real per-table overlay is cloned from its
             // config at runtime by `overlay::manager`, on that module's own
             // thread. Building windows from a plain thread is one of the three
             // patterns Tauri documents as safe on Windows; building them from
             // a *synchronous command handler* — which is what the old
-            // `open_overlay` did — is the one it documents as deadlocking, and
-            // is what spent eight rounds diagnosing. See
+            // `open_overlay` did — is the one it documents as deadlocking. See
             // `overlay::manager`'s header for the citation.
 
-            // PHASE E (2026-08-28): table window-following. Installs a
+            // Table window-following. Installs a
             // `SetWinEventHook` on the main thread — the same thread that
             // runs Tauri's window message loop, which is what pumps the
             // hook's `WINEVENT_OUTOFCONTEXT` callback — plus a low-frequency
             // polling fallback that reconciles the tracked-table registry
             // against the table windows that actually exist (app started
             // before the tables opened, tables opened or closed since).
-            // an overlay decides click-through per-pixel from a list of
+            // An overlay decides click-through per-pixel from a list of
             // hot zones instead of one window-wide WS_EX_TRANSPARENT flag, so
             // the table stays clickable while the overlay's own control bar
-            // and pagination dots never stop being reachable. per
-            // overlay window, since there are now as many as there are tables.
+            // and pagination dots never stop being reachable. Tracked per
+            // overlay window, since there are as many as there are tables.
             overlay::install(&app_handle);
 
             let app_state = app.state::<AppState>();
             let overlays_enabled = {
                 let conn = app_state.conn.lock().expect("db lock poisoned");
-                // HUDs are automatic, so the default for a fresh install
-                // is on — the setting only exists as a kill switch. Before
-                //  this was written by an explicit "Open Overlay" click and
-                // defaulted to off, which as a default now would mean a new
-                // user opens a table and sees nothing.
+                // HUDs are automatic, so the default for a fresh install is
+                // on — the setting only exists as a kill switch. Defaulting
+                // to off would mean a new user opens a table and sees
+                // nothing.
                 db::get_setting(&conn, settings::SETTING_OVERLAY_ENABLED)
                     .ok()
                     .flatten()
@@ -237,7 +234,7 @@ pub fn run() {
 
             table_track::install_tracking(app_handle.clone());
 
-            // default, hardcoded for now — no settings UI to change it
+            // Default, hardcoded for now — no settings UI to change it
             // yet. Registration failure (e.g. another app already owns this
             // combination) is logged, not fatal: every other feature works
             // fine without the hotkey, so it must not block startup.

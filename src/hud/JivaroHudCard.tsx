@@ -11,8 +11,7 @@ import {
 import styles from "./JivaroHudCard.module.css";
 
 /**
- * The Jivaro visual model (the notes), built from the accepted mock
- * at the notes.
+ * The Jivaro visual model, built from the accepted reference mock.
  *
  * It is a separate component rather than another branch inside
  * `PlayerHudCard`, because its DOM is genuinely different: the three existing
@@ -24,7 +23,7 @@ import styles from "./JivaroHudCard.module.css";
  * Everything below the presentation is shared with them: the same stat pages,
  * the same `min_hands` gate, and the same classification colour resolved by
  * `classification::resolve_for_player` (so the automatic archetype is absent
- * in distributed builds and a manual override always renders —).
+ * in distributed builds and a manual override always renders).
  */
 
 /** Arc ticks per stat. 9 reads as a scale at the ring's real 80px size. */
@@ -151,8 +150,8 @@ export function JivaroHudCard({
           </span>
           {pages.length > 1 && (
             // The four-dot pager is carried over unchanged from the shipped
-            // models on purpose:  replaces it with click-anywhere-to-cycle
-            // as a separate task, and until that lands this model has to page
+            // models on purpose: a click-anywhere-to-cycle interaction is meant
+            // to replace it, and until that lands this model has to page
             // the same way the other three do. It sits on the header row
             // rather than in the ring's bottom gap, which the hand count owns
             // in this design.

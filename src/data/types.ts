@@ -28,7 +28,7 @@ export type RuleCategory = "tendency" | "exploit";
 
 export type ConfidenceTier = "high" | "medium" | "low" | "insufficientData";
 
-/** One stat that fed a `RuleResult`'s conclusion (Phase 0+1). */
+/** One stat that fed a `RuleResult`'s conclusion. */
 export interface Evidence {
   statName: string;
   value: number | null;
@@ -36,8 +36,8 @@ export interface Evidence {
 }
 
 /**
- * Structured rule result for the HUD click-popup / player profile drawer
- * (, Tier 3; restructured Phase 0+1). Replaces the old bare
+ * Structured rule result for the HUD click-popup / player profile drawer.
+ * Replaces the old bare
  * `{ text, confidence }` pair — `confidencePct`/`confidenceTier` are
  * per-conclusion, never a single global player score.
  */
@@ -61,7 +61,7 @@ export interface ClassificationResult {
    * from a genuine Unknown (below `minHands`, or no rule matched). The
    * PROFILE section must render "Classification unavailable in this build"
    * rather than a normal Unknown badge when this is false. TENDENCIES/
-   * EXPLOITS/CONFIDENCE never read this field (Phase 1 flag-independence).
+   * EXPLOITS/CONFIDENCE never read this field (they are independent of the build flag).
    */
   available: boolean;
 }
@@ -81,7 +81,7 @@ export interface Player {
   stats: PlayerStats;
   /**
    * Structured rule results for the player profile drawer's TENDENCIES/
-   * EXPLOITS/CONFIDENCE sections (Phase 0+1), sorted by confidence
+   * EXPLOITS/CONFIDENCE sections, sorted by confidence
    * descending. Empty when the `strategic-analysis` build flag is off, or
    * when no rule cleared its opportunity floor — each section renders its
    * own empty state for either case, never a blank or fabricated line.
@@ -162,7 +162,7 @@ export interface HudProfile {
 }
 
 /**
- * Phase E: `x`/`y` are fractions (0..1) of the overlay window, not
+ * `x`/`y` are fractions (0..1) of the overlay window, not
  * absolute screen pixels — the overlay window itself tracks the PokerStars
  * table window, so a saved fraction stays correct as the table moves/resizes.
  */
@@ -191,7 +191,7 @@ export interface AppSettings {
   onboardingComplete: boolean;
   pokerRoom: string | null;
   overlayEnabled: boolean;
-  /** user-declared confirmation that PokerStars' "Auto-Center" table option is on — required for automatic seat-mapping templates. */
+  /** User-declared confirmation that PokerStars' "Auto-Center" table option is on — required for automatic seat-mapping templates. */
   autoCenterEnabled: boolean;
 }
 
@@ -220,8 +220,8 @@ export interface ImportStatus {
 }
 
 /**
- * One import-integrity finding, mirrors `commands::IngestionProblemPayload`
- * (/). `severity` is `"reject"` or `"warn"`; `count` and the
+ * One import-integrity finding, mirrors `commands::IngestionProblemPayload`.
+ * `severity` is `"reject"` or `"warn"`; `count` and the
  * `firstSeenAt`/`lastSeenAt` bracket are aggregated across every hand that hit
  * this exact `code`, recomputed from `import_problems` on every call — never
  * an in-memory counter that a restart could lose or reset.
@@ -238,7 +238,7 @@ export interface IngestionProblem {
 
 /**
  * Mirrors `commands::IngestionHealthPayload`, the `get_ingestion_health`
- * response (/). Every count is a real, always-present number computed
+ * response. Every count is a real, always-present number computed
  * from `hands`/`import_problems` — zero is a genuine "nothing rejected", not
  * a placeholder. `lastImportAt` is the only nullable field: `null` means no
  * import activity (hand or problem) has ever been recorded.
@@ -252,7 +252,7 @@ export interface IngestionHealth {
 }
 
 /**
- *  onboarding gate ( backend,  frontend). Mirrors
+ * Onboarding readiness gate. Mirrors
  * `commands::OnboardingFolderReadiness` field-for-field — `parsedHandCount`
  * is a real test-parse result, never the file count.
  */

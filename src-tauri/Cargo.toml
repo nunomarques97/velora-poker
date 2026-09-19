@@ -1,8 +1,10 @@
 [package]
 name = "velora-poker"
 version = "0.1.0"
-description = "Velora Poker desktop application"
-authors = ["Velora Poker"]
+description = "Windows desktop poker HUD for PokerStars hand histories"
+authors = ["Nuno Marques"]
+license = "MIT"
+repository = "https://github.com/nunomarques97/velora-poker"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -49,19 +51,17 @@ tempfile = "3"
 # asked for. Manual per-player color overrides are explicitly allowed and are
 # NOT gated by this flag; see classification::resolve_for_player.
 #
-# This flag exists so the automatic classifier's output only reaches
-# serialization (and therefore the frontend) in the user's own personal
-# builds. Distributed/tester builds MUST be built WITHOUT it — do not enable
-# it by default, and do not remove this gate as "dead code" without a maintainer
-# decision, since it is load-bearing for TOS compliance, not leftover cruft.
+# This flag keeps the automatic classifier's output out of serialization (and
+# therefore out of the frontend) unless explicitly enabled. Builds meant for
+# PokerStars play should be compiled WITHOUT it. Do not enable it by default,
+# and do not remove this gate as "dead code": it is load-bearing for ToS
+# compliance, not leftover cruft.
 auto-classification = []
 
-# the player-description engine (the notes)
-# is Tier 3 — prescriptive advice ("3-bet him wider"), not descriptive
-# labeling like `auto-classification`, so it carries the higher ToS/account
-# risk and gets its own flag rather than reusing that one. The user
-# accepted that risk explicitly for his own personal builds; distributed
-# / tester builds MUST be built WITHOUT it. When off, `description_rules`'s
-# output is simply empty, same as `auto-classification`'s flag-off behavior.
+# The player-description engine produces prescriptive advice ("3-bet him
+# wider"), not descriptive labeling like `auto-classification`, so it carries
+# a higher ToS/account risk and gets its own flag rather than reusing that one.
+# Off by default. When off, `description_rules`'s output is simply empty, same
+# as `auto-classification`'s flag-off behavior.
 strategic-analysis = []
 

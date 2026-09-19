@@ -2,20 +2,19 @@
 //!
 //! ## Why this exists
 //!
-//! Until  the overlay had exactly one knob for "can the user click through
+//! Originally the overlay had exactly one knob for "can the user click through
 //! me": `set_ignore_cursor_events`, applied to the whole window and left there
 //! until something toggled it back. That is all-or-nothing, and both of its
 //! states are wrong for real play:
 //!
 //! - ignore_cursor_events(true) — the table underneath is clickable, but
 //!   nothing of Velora's is: the overlay's own control bar became unreachable
-//!   by a real click, which is exactly how / locked the user out
-//!   mid-session, and the HUD cards' pagination dots were dead too.
+//!   by a real click, which locked the user out mid-session, and the HUD cards' pagination dots were dead too.
 //! - ignore_cursor_events(false) — the dots and the control bar work, but the
 //!   overlay swallows every click across its whole footprint, including the
 //!   fully transparent areas over Fold/Call/Raise.
 //!
-//! What  needs is that same decision made *per point*: click-through
+//! What is needed is that same decision made *per point*: click-through
 //! everywhere except a handful of small rectangles the frontend keeps up to
 //! date (its control bar, and each visible card's pagination-dot cluster).
 //!
@@ -55,7 +54,7 @@
 //! Same class of native work as `table_track::win`'s `SetWinEventHook`: one
 //! polling thread started once at startup, driven by process-wide statics.
 //!
-//! ## one instance became a registry
+//! ## One instance became a registry
 //!
 //! This started as a single global instance — one HWND, one mode, one hot-zone
 //! list — because there was only ever one overlay window to hit-test against.
@@ -133,7 +132,7 @@ const CURSOR_POLL: Duration = Duration::from_millis(16);
 static OVERLAYS: Mutex<Vec<OverlayHitState>> = Mutex::new(Vec::new());
 static TRACKER_STARTED: AtomicBool = AtomicBool::new(false);
 
-// Diagnostics, surfaced in the  report. "Is the tracker alive, and what is
+// Diagnostics, surfaced in the diagnostics report. "Is the tracker alive, and what is
 // it deciding" is the first question any regression here starts with, and
 // behaviour alone cannot answer it — an overlay that swallows clicks looks
 // identical whether the tracker died, the hot zones went stale, or the style
@@ -322,8 +321,7 @@ fn apply_style(hwnd: HWND, click_through: bool) {
 
 impl OverlayHitState {
     /// Whether a point in *this* overlay's client area falls in one of its own
-    /// hot zones — never another overlay's, which before  was not a
-    /// distinction the code could make.
+    /// hot zones — never another overlay's.
     fn claims_point(&self, x: i32, y: i32) -> bool {
         self.zones.iter().any(|z| z.contains(x, y))
     }
@@ -394,8 +392,8 @@ mod tests {
         remove(label);
     }
 
-    /// 's whole reason for existing: before it, one global zone list and
-    /// one global mode meant table B's cards decided whether table A's overlay
+    /// The reason the registry exists: one global zone list and one global
+    /// mode meant table B's cards decided whether table A's overlay
     /// swallowed a click.
     #[test]
     fn overlays_do_not_share_hot_zones_or_modes() {

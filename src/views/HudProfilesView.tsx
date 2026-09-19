@@ -48,12 +48,12 @@ export function HudProfilesView({ onSelectPlayer }: HudProfilesViewProps) {
   const [activeProfile, setActiveProfileState] = useState<HudProfile | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [totalPlayers, setTotalPlayers] = useState(0);
-  // there is no "the overlay" any more. Every real table window gets its
+  // There is no single "the overlay". Every real table window gets its
   // own HUD automatically, so what this page shows is which tables are being
   // followed, plus one switch to turn the whole lot off.
   const [overlaysEnabled, setOverlaysEnabledState] = useState(true);
   const [tables, setTables] = useState<TrackedTableStatus[]>([]);
-  // a secondary copy of the overlays' own control. Each overlay opens
+  // A secondary copy of the overlays' own control. Each overlay opens
   // table-interactive and its control bar is reachable by a real click in
   // every mode, so this is a convenience, never the only way back. It acts on
   // every overlay at once, since a card layout is calibrated across tables.
@@ -350,7 +350,7 @@ function TrackedTables({
                   ? "HUD on"
                   : "starting…"}
           </span>
-          {/* the only way back for a table dismissed via
+          {/* The only way back for a table dismissed via
               the overlay's own "Hide" used to be the global switch (every
               table) or closing and reopening PokerStars' own window. */}
           {table.dismissed && !table.minimized && (

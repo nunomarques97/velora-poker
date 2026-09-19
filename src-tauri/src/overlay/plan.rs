@@ -5,8 +5,8 @@
 //! — there is no event loop, no WebView2, and the module's own header records
 //! why calling those APIs from the wrong thread deadlocks Windows. So the only
 //! verification the pooling logic ever had was a human opening and closing real
-//! PokerStars tables, which is slow, and which found the  deadlock
-//! only after it had already shipped.
+//! PokerStars tables, which is slow, and which found the create/destroy
+//! deadlock only after it had already shipped.
 //!
 //! This module is the half of that logic which is just arithmetic on a list:
 //! which tables should have a HUD, which pool slot each one gets, whether that
@@ -100,7 +100,7 @@ impl ReconcilePlan {
 /// The tables that should have a *window* right now: every tracked table,
 /// unless the global kill switch is off (then none).
 ///
-/// a by-hand per-table dismissal no longer appears here. It used to
+/// A by-hand per-table dismissal does not appear here. It used to
 /// (`dismissed: &[u32]`, filtered out like the kill switch), which meant
 /// "Hide" released the actual window — and a released window can't render a
 /// "Show" button of its own, which is exactly why bringing the HUD back
@@ -126,7 +126,7 @@ pub fn wanted_table_ids(tracked: &[u32], enabled: bool) -> Vec<u32> {
 /// Two rules carry the weight here, and both come from measured failures:
 ///
 /// * **At most one window is built per pass.** Rapid webview creation is what
-///   wedged the event loop  — creating a webview runs a nested message
+///   wedged the event loop — creating a webview runs a nested message
 ///   pump, so a burst of builds re-enters window management inside window
 ///   management. Extra tables are deferred to later passes, a poll tick apart.
 /// * **An idle pooled window is always preferred to a new one**, which is what
@@ -244,7 +244,7 @@ mod tests {
         assert!(plan.released.is_empty());
     }
 
-    /// The  deadlock in one assertion: four tables opening at once must not
+    /// The create/destroy deadlock in one assertion: four tables opening at once must not
     /// stack four webview builds into one pass. Three of them wait a tick.
     #[test]
     fn a_burst_of_tables_builds_exactly_one_window_and_defers_the_rest() {
@@ -319,7 +319,7 @@ mod tests {
 
     /// A settled pool builds nothing and re-points nothing; every pass is just
     /// a bounds sync. If this ever regressed into repeated builds it would be
-    /// the  wedge again, one poll tick at a time.
+    /// the event-loop wedge again, one poll tick at a time.
     #[test]
     fn a_settled_pool_only_syncs_bounds() {
         let pool = vec![SlotState::serving("overlay1", 1), SlotState::serving("overlay2", 2)];
@@ -351,7 +351,7 @@ mod tests {
 
     /// The swap that the whole pool design exists for: one table closes and
     /// another opens in the same pass, and the freed window is handed straight
-    /// over. Under the pre- destroy/create model this pass was a destroy
+    /// over. Under the old destroy/create model this pass was a destroy
     /// plus a build — the churn that wedged the event loop on the 24th window.
     #[test]
     fn a_window_freed_this_pass_is_reused_in_the_same_pass() {
@@ -475,8 +475,8 @@ mod tests {
     }
 
     /// Every wanted table is accounted for in the plan, in order — a table
-    /// silently missing from the pass is the  bug (a second table with no
-    /// HUD and nothing saying so).
+    /// silently missing from the pass is a real past bug (a second table with
+    /// no HUD and nothing saying so).
     #[test]
     fn every_wanted_table_appears_in_the_plan() {
         let pool = vec![SlotState::serving("overlay1", 1), SlotState::idle("overlay2")];

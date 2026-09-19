@@ -145,8 +145,8 @@ fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
         -- hand, not PokerStars' absolute seat number. PokerStars'
         -- "Auto-Center me" rotates the table display so the hero is always at
         -- the same screen anchor, which means absolute seat N is not a fixed
-        -- screen slot — only the offset from the hero is. Rows written before
-        --  held absolute seats and are cleared once by
+        -- screen slot — only the offset from the hero is. Rows written by older
+        -- versions held absolute seats and are cleared once by
         -- `migrate_seat_templates_to_hero_relative`.
         CREATE TABLE IF NOT EXISTS seat_templates (
             max_players INTEGER NOT NULL,
@@ -157,7 +157,7 @@ fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             PRIMARY KEY (max_players, seat_offset)
         );
 
-        -- Import-time integrity findings (work unit 2, requirement 5). One row
+        -- Import-time integrity findings. One row
         -- per (hand, check) so a re-import of the same file replaces rather than
         -- accumulates. A rejected hand has no `hands` row, so this table is the
         -- only record that it was seen at all.
@@ -197,19 +197,19 @@ fn migrate_schema(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-/// Work unit 2: reparse every stored hand and repair the rows the old parser
-/// wrote wrongly.
+/// Reparses every stored hand and repairs the rows the old parser wrote
+/// wrongly.
 ///
-/// Three defects, all measured in the notes, were
+/// Three defects, all measured against a real stored database, were
 /// write-time corruption rather than read-time misinterpretation, so fixing the
 /// parser alone would have left the existing database wrong forever:
 ///
 /// * bounty-tournament seat lines never matched, so 26 of 275 hands (9.5%)
 ///   stored **no players at all**, stranding 226 action rows and creating 26
-///   players that had never been seen to play a hand (§G.2);
-/// * 28 seats that were never dealt in were stored as dealt-in players (§G.3);
+///   players that had never been seen to play a hand;
+/// * 28 seats that were never dealt in were stored as dealt-in players;
 /// * `player_hands.position` was NULL in all 1,498 rows because nothing ever
-///   wrote it (§B.2).
+///   wrote it.
 ///
 /// All 275 hands retain their complete original text in `hands.raw_text`, so the
 /// repair is a reparse rather than a re-read of files that may be gone.
@@ -361,8 +361,7 @@ pub fn run_ingestion_repair(conn: &Connection) -> rusqlite::Result<RepairReport>
     Ok(report)
 }
 
-/// Pulls any already-stored card position back inside the 0..1 fraction range
-/// (, a known issue).
+/// Pulls any already-stored card position back inside the 0..1 fraction range.
 ///
 /// One real `hud_positions` row held `x = 1.104`, dated before the clamp in
 /// `set_hud_position` existed — enough to park that player's card off the
@@ -385,7 +384,7 @@ fn clamp_stored_positions(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-/// Phase E (table auto-detection): `hud_positions.x`/`y` changed
+/// Table auto-detection: `hud_positions.x`/`y` changed
 /// meaning from absolute screen pixels to fractions (0..1) of the overlay
 /// window, which now tracks the PokerStars table window instead of sitting
 /// at a fixed screen location. Any row saved before this migration holds a
@@ -411,13 +410,12 @@ fn migrate_hud_positions_to_relative(conn: &Connection) -> rusqlite::Result<()> 
 /// old key was simply wrong: "Auto-Center me" rotates the table display so
 /// the hero is always the fixed screen anchor, so absolute seat N is not a
 /// stable screen slot — confirmed live, with Auto-Center correctly
-/// configured the user's own card still landed in the wrong slot.
+/// configured the hero's own card still landed in the wrong slot.
 ///
 /// Rows written under the old key hold a number that is meaningless as an
 /// offset, and unlike a stale row that simply never matches, one of these
 /// *does* match — it would place cards at confidently wrong positions the
-/// moment the overlay opens, which is the opposite of 's requirement that
-/// opening the overlay just works. So this clears the table exactly once,
+/// moment the overlay opens, when opening the overlay should just work. So this clears the table exactly once,
 /// the same one-time, settings-flag-guarded shape
 /// `migrate_hud_positions_to_relative` uses for the same reason (a column's
 /// meaning changed, not its type). The user re-drags one layout per table
@@ -437,21 +435,21 @@ fn migrate_seat_templates_to_hero_relative(conn: &Connection) -> rusqlite::Resul
 /// The 6-max card layout a brand-new database starts with, as
 /// `(max_players, seat_offset, x, y)` — hero-relative seat offsets and
 /// fractions of the overlay window, exactly like any row the user drags into
-/// place (see `seat_templates` in `init_schema` and).
+/// place (see `seat_templates` in `init_schema`).
 ///
-/// Measured, not derived: these are the user's own calibrated rows, read
-/// out of his local database after he dragged one 6-max layout by hand.
+/// Measured, not derived: these are real calibrated rows, read out of a
+/// local database after one 6-max layout was dragged into place by hand.
 /// Before this existed, `seat_templates` started empty on every install and
 /// the first table showed six cards stacked in `OverlayApp`'s fallback grid
 /// in the top-left corner until the user dragged each one out — a first-run
-/// experience nobody but the user could have fixed for themselves.
+/// experience that only dragging by hand could fix.
 ///
 /// Only 6-max is measured. Every other table size from 2 to 10 seats ships
 /// with a *derived* layout instead (`ellipse_seat_template`) — a
 /// centred ellipse fitted to these six points, clamped so it can never place
 /// a card off the overlay window. It is a calibrated approximation, not a
-/// second measured table: still far better than the alternative it replaced
-/// (the notes #24), which was every size but 6-max starting with no
+/// second measured table: still far better than the alternative it replaced,
+/// which was every size but 6-max starting with no
 /// template at all and scattering its first table's cards across
 /// `OverlayApp`'s fallback grid.
 ///
@@ -513,8 +511,7 @@ const ELLIPSE_MAX: f64 = 0.92;
 /// `ELLIPSE_RADII`/`ELLIPSE_START_DEG`) for a table size with no
 /// hand-measured layout. Not part of `BUILTIN_SEAT_TEMPLATES` itself because
 /// `f64::sin`/`cos` are not `const fn` in stable Rust — this runs once per
-/// seat, per seed call, straight from `std`, no crate beyond it (TECHNOLOGY.md
-/// S2).
+/// seat, per seed call, straight from `std`, no crate beyond it.
 fn ellipse_seat_template(max_players: i64, seat_offset: i64) -> (f64, f64) {
     let step_deg = 360.0 / max_players as f64;
     let theta = (ELLIPSE_START_DEG + seat_offset as f64 * step_deg).to_radians();
@@ -528,9 +525,9 @@ fn ellipse_seat_template(max_players: i64, seat_offset: i64) -> (f64, f64) {
 
 /// Seeds the built-in seat layout: the six measured 6-max rows above, plus a
 /// derived-ellipse row for every offset of every other table size from 2 to
-/// 10 seats inclusive ( — before this, every size but 6-max started with
-/// no template at all and its first table scattered cards in
-/// `OverlayApp`'s fallback grid, the notes #24). `INSERT OR IGNORE` on
+/// 10 seats inclusive (before this, every size but 6-max started with no
+/// template at all and its first table scattered cards in `OverlayApp`'s
+/// fallback grid). `INSERT OR IGNORE` on
 /// the `(max_players, seat_offset)` primary key throughout, so a user who has
 /// dragged that seat keeps their own position forever and a user who has not
 /// gets the default back if they somehow clear it — the same never-overwrite
@@ -666,7 +663,7 @@ pub fn record_import_problems(
 /// `(severity, code, count, most recent detail, first detected_at, last
 /// detected_at)` for every distinct finding, worst first. Drives the
 /// Settings → Diagnostics integrity section and `commands::ingestion_health`
-/// (/) — `first_seen_at`/`last_seen_at` are `MIN`/`MAX(detected_at)` so a
+/// — `first_seen_at`/`last_seen_at` are `MIN`/`MAX(detected_at)` so a
 /// restart never loses when a code first/last showed up, unlike an in-memory
 /// counter.
 pub fn import_problem_summary(
@@ -695,8 +692,8 @@ pub fn import_problem_summary(
 /// (`"reject"` or `"warn"`). Deliberately `COUNT(DISTINCT hand_id)`, not
 /// `COUNT(*)`: a hand can carry more than one problem row of the same
 /// severity, and `commands::ingestion_health`'s `handsRejected`/
-/// `handsWithWarnings` must count hands, not problem rows (, criterion 1
-/// — read from `import_problems`, never from an in-memory counter that a
+/// `handsWithWarnings` must count hands, not problem rows (read from
+/// `import_problems`, never from an in-memory counter that a
 /// restart would lose).
 pub fn import_problem_hand_count(conn: &Connection, severity: &str) -> rusqlite::Result<i64> {
     conn.query_row(
@@ -862,8 +859,8 @@ fn escape_like(term: &str) -> String {
 /// back to `id` only to break exact ties), not insertion order: a cold-start
 /// backlog import walks the filesystem in OS directory order, not
 /// chronological order, so the highest-`id` hand right after that import is
-/// not reliably the most recently played one (see — this is what
-/// let stale/mismatched rosters through briefly on cold start). The subquery
+/// not reliably the most recently played one (this is what once let
+/// stale/mismatched rosters through briefly on cold start). The subquery
 /// resolves the latest hand via `idx_hands_played_at` and only then joins
 /// full hand counts for that handful of players, so this stays cheap even
 /// with a large all-time `players`/`player_hands` table (import history
@@ -930,11 +927,11 @@ pub fn relative_seat(seat: i64, hero_seat: i64, max_seats: i64) -> Option<i64> {
 
 /// Same player set as `list_active_table_players`, plus each player's seat
 /// in the current hand — needed to look up their seat-mapping template
-/// (Phase E). A separate query rather than widening `PlayerRow`
+/// A separate query rather than widening `PlayerRow`
 /// everywhere: "seat" is only meaningful in the active-table context, not
 /// the all-time roster `list_players` serves.
 ///
-/// `table_name`:  multi-table fix. `None` keeps the pre- behavior
+/// `table_name`: multi-table scoping. `None` keeps the original behavior
 /// (latest hand *anywhere*) — used when no table window is currently
 /// tracked (cold start, non-Windows, or the title didn't parse), so the
 /// existing single-table experience is unchanged in that case. `Some(name)`
@@ -942,11 +939,10 @@ pub fn relative_seat(seat: i64, hero_seat: i64, max_seats: i64) -> Option<i64> {
 /// that table*, so a hand completing on a different simultaneously-open
 /// table (multi-tabling) can no longer flip which players' cards the
 /// overlay renders out from under whichever table it's actually
-/// positioned over — see the notes  for the confirmed root
-/// cause. `(?1 IS NULL OR hands.table_name = ?1)` lets one query serve both
+/// positioned over. `(?1 IS NULL OR hands.table_name = ?1)` lets one query serve both
 /// cases without duplicating the SQL.
 ///
-/// `since`:  fix. PokerStars reuses table *names* from a pool, so
+/// `since`: recency floor. PokerStars reuses table *names* from a pool, so
 /// `table_name = ?1` alone can resolve to a hand from an earlier sitting of
 /// the same name — hours or days old, indistinguishable from a fresh one.
 /// `Some(table.first_seen_at)` (on the same clock as `played_at`, see
@@ -995,10 +991,10 @@ pub fn list_active_table_players_with_seats(
         })?
         .collect::<Result<Vec<_>, _>>()?;
 
-    // resolved here rather than by the caller so there is exactly one
+    // Resolved here rather than by the caller so there is exactly one
     // place that knows how a stored HUD position is keyed. Both inputs come
     // from the same hand the seats above came from. `since` passed through
-    // unchanged — a known issue — so a reused table name reopening at a
+    // unchanged so a reused table name reopening at a
     // different max-players format can never briefly borrow a stale sitting's
     // seat count before its own first hand deals.
     let max_seats = active_table_max_players(conn, table_name, since)?;
@@ -1015,17 +1011,17 @@ pub fn list_active_table_players_with_seats(
 }
 
 /// `max_seats` of the current active table (same latest-hand definition and
-/// `table_name` scoping as `list_active_table_players_with_seats` —).
+/// `table_name` scoping as `list_active_table_players_with_seats`).
 ///
-/// `since`: same / recency floor as `list_active_table_players_with_seats`
+/// `since`: same recency floor as `list_active_table_players_with_seats`
 /// and `active_hand_info` — `Some(table.first_seen_at)` excludes a hand from
 /// an earlier sitting of a reused table name; `None` for a caller with no
-/// specific table to bound by. Fixes a known issue: before this bound
+/// specific table to bound by. Before this bound
 /// existed, a table name reused at a *different* max-players format (e.g. a
 /// 6-max name later reused for a 3-max sitting) could still momentarily
 /// resolve the stale sitting's seat count until a fresh hand dealt and
 /// refreshed it — a possible wrong-slot seat-position glitch, not a data leak
-/// (player identities were already bounded by).
+/// (player identities were already bounded).
 pub fn active_table_max_players(
     conn: &Connection,
     table_name: Option<&str>,
@@ -1042,7 +1038,7 @@ pub fn active_table_max_players(
     .optional()
 }
 
-/// One row of the  diagnostics report's "recently imported hands" list —
+/// One row of the diagnostics report's "recently imported hands" list —
 /// each hand's own identity plus which table it belongs to, so a user
 /// pasting the report shows whether recent hands are landing on the table
 /// the overlay is scoped to or a different one (multi-tabling).
@@ -1075,11 +1071,11 @@ pub fn recent_hands(conn: &Connection, limit: i64) -> rusqlite::Result<Vec<Recen
     Ok(rows)
 }
 
-/// The active-table hand's own identity ( diagnostics) — same scoping
+/// The active-table hand's own identity (for diagnostics) — same scoping
 /// rule as `list_active_table_players_with_seats`, but returning the hand
 /// itself rather than its players, so the report can show exactly which
 /// hand/table/tournament Velora currently considers "active" and let the
-/// user compare that against what he's actually looking at.
+/// user compare that against what they are actually looking at.
 pub struct ActiveHandInfo {
     pub hand_id: String,
     pub table_name: Option<String>,
@@ -1087,7 +1083,7 @@ pub struct ActiveHandInfo {
     pub played_at: Option<String>,
 }
 
-/// `since`: same  recency floor as `list_active_table_players_with_seats`
+/// `since`: same recency floor as `list_active_table_players_with_seats`
 /// — `Some(table.first_seen_at)` excludes a hand from an earlier sitting of a
 /// reused table name; `None` for a caller with no specific table to bound by.
 pub fn active_hand_info(
@@ -1180,7 +1176,7 @@ pub fn set_player_color_override(
     Ok(())
 }
 
-/// One free-text note per player (Phase E). Stored in its own table
+/// One free-text note per player. Stored in its own table
 /// rather than as a `players` column so the note is optional data hanging off
 /// a player, exactly like `player_color_overrides` — a player with no note has
 /// no row at all, and `ON DELETE CASCADE` cleans up with the player.
@@ -1194,7 +1190,7 @@ pub fn get_player_note(conn: &Connection, player_id: i64) -> rusqlite::Result<Op
 }
 
 /// Upserts a player's note, overwriting any previous one (v1 is one note per
-/// player, no history — see the spec's out-of-scope list). A blank note
+/// player, no history). A blank note
 /// deletes the row instead of storing an empty string, so "cleared" and
 /// "never written" are the same state everywhere downstream.
 pub fn set_player_note(conn: &Connection, player_id: i64, note: &str) -> rusqlite::Result<()> {
@@ -1232,7 +1228,7 @@ pub fn get_hud_position(conn: &Connection, player_id: i64) -> rusqlite::Result<O
 }
 
 /// Forces a stored card position into the 0..1 fraction range every reader
-/// assumes (, a known issue).
+/// assumes.
 ///
 /// A real `hud_positions` row had drifted to `x = 1.104`, which would place
 /// that player's card past the right edge of every overlay it ever appeared
@@ -1269,7 +1265,7 @@ pub struct SeatTemplateRow {
 }
 
 /// One calibrated card position for a given *hero-relative* seat, keyed by
-/// table size (Phase E seat mapping, ; re-keyed in) — set once per
+/// table size — set once per
 /// max-players count and reused automatically on every future table of that
 /// size. See `relative_seat` for why the key is an offset and not
 /// PokerStars' absolute seat number.
@@ -1395,7 +1391,7 @@ mod tests {
         assert_eq!(get_seat_template(&conn, 6, 3).unwrap(), Some((0.36757288, 0.13304348)));
     }
 
-    ///  acceptance criterion 3 — the only objective control that the
+    /// The only objective control that the
     /// derived ellipse actually follows the real 6-max data's own convention:
     /// generate the ellipse for 6 players and check each point lands within
     /// 0.06 (euclidean, in window-fraction units) of the corresponding
@@ -1435,9 +1431,9 @@ mod tests {
         let conn = test_conn();
         seed_builtin_seat_templates(&conn).unwrap();
 
-        // the user's real pool is 100% MTT, typically 9-max — every
-        // size from 2 to 10 seats must now start with a full set of derived
-        // positions rather than the empty table the notes #24 describes.
+        // Real play is often MTT, typically 9-max — every size from 2 to 10
+        // seats must start with a full set of derived positions rather than
+        // an empty table.
         for max_players in [2, 3, 4, 5, 7, 8, 9, 10] {
             let rows = list_seat_templates(&conn, max_players).unwrap();
             assert_eq!(
@@ -1538,7 +1534,7 @@ mod tests {
         assert_eq!(get_player_note(&conn, b).unwrap(), None);
     }
 
-    /// one real row had drifted to `x = 1.104`, which
+    /// One real row had drifted to `x = 1.104`, which
     /// parks that player's card past the right edge of every overlay it ever
     /// appears on — invisible, and impossible to drag back because there is
     /// nothing left on screen to grab.
@@ -1629,7 +1625,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------
-    // seat templates are keyed by the hero-relative seat
+    // Seat templates are keyed by the hero-relative seat
     // -----------------------------------------------------------------
 
     #[test]
@@ -1677,7 +1673,7 @@ mod tests {
         }
     }
 
-    /// The  regression: the same physical table arrangement must resolve
+    /// Regression: the same physical table arrangement must resolve
     /// to the same layout regardless of which absolute seat the hero happens
     /// to be dealt into. Two hands, same 6-max size, hero two seats apart,
     /// everyone else keeping the same distance from him.
@@ -1790,7 +1786,7 @@ mod tests {
     #[test]
     fn seat_templates_hero_relative_migration_renames_the_column_and_clears_stale_rows() {
         let conn = Connection::open_in_memory().unwrap();
-        // A pre- database: the old column name, holding absolute seats.
+        // An older database: the old column name, holding absolute seats.
         conn.execute_batch(
             "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
              CREATE TABLE seat_templates (

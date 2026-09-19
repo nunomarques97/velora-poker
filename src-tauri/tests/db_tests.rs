@@ -1,6 +1,6 @@
 use velora_poker_lib::{db, import};
 
-/// An older import (e.g. the user's original mock/test-data batch) with a
+/// An older import (e.g. an original mock/test-data batch) with a
 /// roster ("Villain", "Robot") that has nothing to do with the table played
 /// most recently.
 const OLD_MOCK_HAND: &str = include_str!("fixtures/hand_cbet_fold.txt");
@@ -32,7 +32,7 @@ Seat 2: Regular1 (small blind) folded on the Flop
 Seat 3: Regular2 (big blind) folded before Flop
 "#;
 
-///  regression: an old sitting at a table *name* PokerStars later reuses —
+/// Regression: an old sitting at a table *name* PokerStars later reuses —
 /// finished well before the table window Velora is tracking now was ever
 /// opened.
 const OLD_SITTING_HAND: &str = r#"PokerStars Hand #400000000001: Hold'em No Limit ($0.25/$0.50 USD) - 2026/08/20 10:00:00 ET
@@ -60,7 +60,7 @@ Seat 2: OldOpponentA (small blind) folded on the Flop
 Seat 3: OldOpponentB (big blind) folded before Flop
 "#;
 
-///  regression: the *same table name* reopened later, a fresh sitting
+/// Regression: the *same table name* reopened later, a fresh sitting
 /// with a different roster — what the reopened table window actually shows.
 const FRESH_SITTING_HAND: &str = r#"PokerStars Hand #400000000002: Hold'em No Limit ($0.25/$0.50 USD) - 2026/08/20 15:00:00 ET
 Table 'Reused Table' 3-max Seat #1 is the button
@@ -87,7 +87,7 @@ Seat 2: NewOpponentA (small blind) folded on the Flop
 Seat 3: NewOpponentB (big blind) folded before Flop
 "#;
 
-///  multi-table investigation: a hand at "Table Alpha", 3-max.
+/// Multi-table scenario: a hand at "Table Alpha", 3-max.
 const TABLE_ALPHA_HAND: &str = r#"PokerStars Hand #300000000001: Hold'em No Limit ($0.25/$0.50 USD) - 2026/08/20 22:00:00 ET
 Table 'Table Alpha' 3-max Seat #1 is the button
 Seat 1: Hero ($48.50 in chips)
@@ -113,10 +113,10 @@ Seat 2: Regular1 (small blind) folded on the Flop
 Seat 3: Regular2 (big blind) folded before Flop
 "#;
 
-///  multi-table investigation: a *different, simultaneously open* table
+/// Multi-table scenario: a *different, simultaneously open* table
 /// ("Table Beta", 6-max) whose hand finishes a few minutes *after* Table
-/// Alpha's — simulating the user multi-tabling (four tournament lobbies
-/// were confirmed open at once in). Before the  fix, completing this
+/// Alpha's — simulating a user multi-tabling (several tournament tables open
+/// at once). Before table-name scoping was added, completing this
 /// hand would make Table Beta's roster the *only* one
 /// `list_active_table_players_with_seats` could return, even for an overlay
 /// still sitting on Table Alpha's window.
@@ -193,7 +193,7 @@ fn active_table_players_empty_when_no_hands_imported() {
     assert!(db::list_active_table_players(&conn).unwrap().is_empty());
 }
 
-/// regression: a cold-start backlog import walks the filesystem in
+/// Regression: a cold-start backlog import walks the filesystem in
 /// OS directory order, not chronological order, so files can be imported (and
 /// therefore get their `hands.id` assigned) out of play order. The active
 /// table must be resolved by `played_at`, not by insertion order — otherwise
@@ -222,10 +222,10 @@ fn active_table_players_uses_play_order_not_insertion_order() {
     );
 }
 
-///  root-cause regression: without a table-name scope, a hand completing
+/// Root-cause regression: without a table-name scope, a hand completing
 /// on a *different* simultaneously-open table (Table Beta, played later)
 /// hijacks the globally-latest-hand query away from Table Alpha — this is
-/// the pre- behavior, kept as a test so nobody "fixes" the fallback path
+/// the pre-scoping behavior, kept as a test so nobody "fixes" the fallback path
 /// into silently ignoring `table_name` again.
 #[test]
 fn unscoped_active_table_players_follows_whichever_table_played_most_recently() {
@@ -245,7 +245,7 @@ fn unscoped_active_table_players_follows_whichever_table_played_most_recently() 
     );
 }
 
-///  fix: scoping by the tracked table's name keeps each table's own
+/// Scoping by the tracked table's name keeps each table's own
 /// roster stable regardless of what's happening on a different,
 /// simultaneously-open table — the actual behavior `get_active_table_players`
 /// now relies on via `table_track::active_table_name()`.
@@ -307,7 +307,7 @@ fn scoped_active_table_players_is_empty_for_a_table_with_no_hands_yet() {
     assert_eq!(db::active_table_max_players(&conn, Some("Table Gamma"), None).unwrap(), None);
 }
 
-///  regression: PokerStars reuses table *names* from a pool, so
+/// Regression: PokerStars reuses table *names* from a pool, so
 /// `table_name = ?` alone cannot tell an old sitting apart from a fresh one.
 /// Simulates the actual bug — the tracked table window was first seen at
 /// 12:00, *after* the old sitting (10:00) finished, and no fresh hand has
@@ -365,10 +365,10 @@ fn active_hand_includes_a_sitting_newer_than_the_tracked_tables_own_first_seen_a
     assert_eq!(hand.hand_id, "400000000002");
 }
 
-/// a fresh database seeds every table size from 2 to 10 seats, not just
-/// the six measured 6-max rows — the user's real pool is 100% MTT,
-/// typically 9-max, so a 9-max table must never fall back to `OverlayApp`'s
-/// stacking grid (the notes #24).
+/// A fresh database seeds every table size from 2 to 10 seats, not just
+/// the six measured 6-max rows — multi-table tournaments are typically
+/// 9-max, so a 9-max table must never fall back to `OverlayApp`'s
+/// stacking grid.
 #[test]
 fn nine_max_table_is_seeded_with_nine_distinct_seat_offsets() {
     let conn = setup_db();
@@ -386,7 +386,7 @@ fn nine_max_table_is_seeded_with_nine_distinct_seat_offsets() {
     );
 }
 
-/// seeding runs on every `db::open`, not just the first — a user who
+/// Seeding runs on every `db::open`, not just the first — a user who
 /// dragged a seat on a derived (non-6-max) table size must keep that position
 /// forever, exactly like the already-covered 6-max case.
 #[test]
@@ -411,9 +411,9 @@ fn seeding_never_overwrites_a_users_dragged_position_on_a_derived_table_size() {
     );
 }
 
-/// , acceptance criteria 4 and 7 — the bound, *and* the one place where
-/// those two criteria contradict each other, resolved here in code rather
-/// than only in a report.
+/// The on-screen bound for seeded seat positions, *and* the one place where
+/// two requirements on those positions contradict each other, resolved here
+/// in code.
 ///
 /// A seat card is anchored at its top-left corner, so a position too close to
 /// an edge draws part of the card outside the overlay window. Hence two
@@ -422,15 +422,15 @@ fn seeding_never_overwrites_a_users_dragged_position_on_a_derived_table_size() {
 /// - **Hard bound — every size 2..=10, 6-max included:** `0.0 < x,y < 1.0`.
 ///   Outside this a card is born off the overlay entirely. Nothing may ever
 ///   be seeded there, measured or derived.
-/// - **Safe margin `0.02..=0.92`** — what criterion 4 asks for, literally,
+/// - **Safe margin `0.02..=0.92`** — the intended margin
 ///   "for every size 2..10". Every *derived* position satisfies it by
 ///   construction (`db::ellipse_seat_template` clamps to it). Exactly one
 ///   seeded position does not, and cannot be made to: the hand-measured
 ///   `BUILTIN_SEAT_TEMPLATES` row `(6, 1)` is `x = 0.01080431`, and
-///   criterion 1 requires the six measured rows to stay byte-for-byte
-///   identical. Criteria 1 and 4 cannot both hold literally for 6-max;
-///   criterion 1 wins, because those six points are the live-measured
-///   calibration every derived layout is fitted against and a real
+///   the six measured rows must stay byte-for-byte identical. The margin and
+///   the measured rows cannot both hold literally for 6-max; the measured
+///   rows win, because those six points are the live-measured
+///   calibration every derived layout is fitted against, and a real
 ///   client does render a seat there.
 ///
 /// So the safe margin is asserted as a guarantee of the *generator*, and the
@@ -474,14 +474,14 @@ fn every_table_size_stays_on_screen_and_only_the_measured_six_max_row_leaves_the
         outside_safe_margin,
         vec![(6, 1, 0.01080431, 0.49984758)],
         "the hand-measured 6-max row (6, 1) is the only seeded position allowed outside \
-         the {SAFE_MIN}..={SAFE_MAX} safe margin (criterion 1 freezes the measured rows \
+         the {SAFE_MIN}..={SAFE_MAX} safe margin (the measured rows are frozen \
          byte-for-byte); every derived position must be inside it"
     );
 }
 
-/// a known issue: a reused table name reopening before a fresh hand deals
+/// A reused table name reopening before a fresh hand deals
 /// must not resolve `max_seats` from an earlier sitting either — the same
-///  recency floor `active_hand_info`/`list_active_table_players_with_seats`
+/// recency floor `active_hand_info`/`list_active_table_players_with_seats`
 /// already apply. Without `since`, this would still return the old sitting's
 /// `3`, which is merely correct by coincidence here (both sittings share the
 /// same size); the real-world failure this bound prevents is a name reused at

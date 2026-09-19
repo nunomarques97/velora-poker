@@ -15,11 +15,11 @@ pub struct ImportState {
     pub parser_status: String,
 }
 
-/// One entry in the  diagnostics refresh log — every time an overlay asked
+/// One entry in the diagnostics refresh log — every time an overlay asked
 /// for its table's players, what table it resolved to, and how many players
 /// came back. Kept so a user's "Copy Diagnostics" dump shows exactly what
-/// each overlay has been rendering and when, without needing him to
-/// characterize the bug himself. `table_id` was added in with several
+/// each overlay has been rendering and when, without needing them to
+/// characterize the bug themselves. `table_id` matters because with several
 /// overlays refreshing into one log, the entries interleave and the table's
 /// own id is what tells them apart.
 #[derive(Debug, Clone)]

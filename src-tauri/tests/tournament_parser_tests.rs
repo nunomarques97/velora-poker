@@ -79,13 +79,13 @@ fn parses_seats_and_starting_stacks() {
     let hand = parser.parse(SHOWDOWN_ALLIN)[0].as_ref().unwrap().clone();
 
     assert_eq!(hand.seats.len(), 9);
-    let TourneyHero = hand
+    let hero_seat = hand
         .seats
         .iter()
         .find(|s| s.player_name == "TourneyHero")
         .expect("TourneyHero seat");
-    assert_eq!(TourneyHero.seat_number, 2);
-    assert_eq!(TourneyHero.starting_stack, 1500.0);
+    assert_eq!(hero_seat.seat_number, 2);
+    assert_eq!(hero_seat.starting_stack, 1500.0);
 
     // Non-ASCII player names must round-trip correctly.
     let unicode_name = hand
@@ -237,12 +237,12 @@ fn detects_folded_players_including_didnt_bet_suffix() {
     let hand = parser.parse(SHOWDOWN_ALLIN)[0].as_ref().unwrap().clone();
 
     // "folded before Flop (didn't bet)" must still be recognized as folded.
-    let bali = hand.results.get("Opponent14").expect("Opponent14 result");
-    assert!(!bali.went_to_showdown);
-    assert!(!bali.won_at_showdown);
+    let opp14 = hand.results.get("Opponent14").expect("Opponent14 result");
+    assert!(!opp14.went_to_showdown);
+    assert!(!opp14.won_at_showdown);
 
-    let mines = hand.results.get("Opponent7").expect("Opponent7 result");
-    assert!(!mines.went_to_showdown);
+    let opp7 = hand.results.get("Opponent7").expect("Opponent7 result");
+    assert!(!opp7.went_to_showdown);
 }
 
 #[test]

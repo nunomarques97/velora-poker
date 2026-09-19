@@ -10,7 +10,7 @@
 }
 
 /*
- * each column is floored at the width of the widest
+ * Each column is floored at the width of the widest
  * thing it has to show. The two that broke hold unbreakable single words —
  * "Tournament" and the "DURATION" header — which overflowed their cell at the
  * 800px window floor and ate the gap beside them. That is what read as

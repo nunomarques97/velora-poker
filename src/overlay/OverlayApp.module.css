@@ -31,7 +31,7 @@
 }
 
 /*
- * reposition mode captures the whole window, so nothing on the table is
+ * Reposition mode captures the whole window, so nothing on the table is
  * clickable while it lasts. That is a mode the user must be able to see they
  * are in without clicking anything to find out.
  */
@@ -41,10 +41,9 @@
 }
 
 /*
- * URGENT build (2026-09-13, multi-tabling live): a minimal, corner-anchored
- * per-table drag-unlock, deliberately not part of `.controlBar` above (kept
- * out of the middle of the table on purpose — that's what the user
- * reported blocking his view tonight). Small font/padding and low resting
+ * A minimal, corner-anchored per-table drag-unlock, deliberately not part of
+ * `.controlBar` above (kept out of the middle of the table on purpose — a
+ * control there blocks the view of the table). Small font/padding and low resting
  * opacity so it stays out of the way when not needed; full opacity while
  * active so it's unambiguous the whole window is capturing clicks.
  */
@@ -81,7 +80,7 @@
 }
 
 /*
- * shown only while no player cards have anything to
+ * Shown only while no player cards have anything to
  * render yet (waiting for the current hand to finish and the first hand's
  * data to arrive) — small and out of the way rather than a splash, in the
  * same dark/blurred style as .controlButton, so an empty overlay reads as
@@ -169,7 +168,7 @@
   padding: 0 9px;
   height: 34px;
   /* Both docked pieces are absolutely positioned (the bar has to keep its own
-     element and ref, which is what the native hot test registers —), so
+     element and ref, which is what the native hot test registers), so
      the strip cannot flex around the bar. This caps the bar instead: its
      widest content is the wordmark plus "Reposition" plus "Hide", and
      `.sessionStrip` starts clear of that. Measured on the live overlay, where
