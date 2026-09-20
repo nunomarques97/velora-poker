@@ -19,6 +19,18 @@ fn badge_is_a_builtin_profile_with_its_own_visual_model() {
     assert!(!badge.stat_pages.is_empty());
 }
 
+/// A fresh install lands on the badge model.
+#[test]
+fn a_new_database_starts_on_the_badge_model() {
+    let conn = db::open(std::path::Path::new(":memory:")).expect("open db");
+    hud::seed_builtin_profiles(&conn).expect("seed");
+
+    let active = hud::get_active_profile(&conn).expect("active profile");
+
+    assert_eq!(active.id, "badge");
+    assert_eq!(active.visual_model, "badge");
+}
+
 /// Seeding is idempotent and additive: a database created before the badge
 /// existed gains it on the next start, without touching the active profile.
 #[test]

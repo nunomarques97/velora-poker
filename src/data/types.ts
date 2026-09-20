@@ -28,7 +28,7 @@ export type RuleCategory = "tendency" | "exploit";
 
 export type ConfidenceTier = "high" | "medium" | "low" | "insufficientData";
 
-/** One stat that fed a `RuleResult`'s conclusion. */
+/** One stat that fed a `RuleResult`. */
 export interface Evidence {
   statName: string;
   value: number | null;
@@ -44,7 +44,10 @@ export interface Evidence {
 export interface RuleResult {
   ruleId: string;
   category: RuleCategory;
-  conclusion: string;
+  /** What the opponent does. Never carries advice. */
+  observation: string;
+  /** What to do about it, addressed to the reader. Never carries the read. */
+  advice: string;
   confidencePct: number | null;
   confidenceTier: ConfidenceTier;
   evidence: Evidence[];

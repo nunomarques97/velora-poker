@@ -171,23 +171,76 @@
   padding: 0;
 }
 
-.descriptionItem {
+.readItem {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 0;
+  gap: 10px;
+  padding: 12px 0;
   border-bottom: 1px solid var(--border-subtle);
 }
 
-.descriptionItem:last-child {
+.readItem:last-child {
   border-bottom: none;
 }
 
-.descriptionText {
+/* Pairs each read with its advice at a glance when a player has several. */
+.readIndex {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.readBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.readLabel {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-bottom: 3px;
+}
+
+.readLabelSep {
+  color: var(--border-strong);
+}
+
+/* The tier reuses the `.tier-*` colours the badge used, as text rather than
+   a pill: the label row already carries the category, and a second pill next
+   to it competed with the reading order. */
+.readTier {
+  background: none;
+  padding: 0;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+}
+
+.readObservation {
   font-size: 13px;
   line-height: 1.5;
   color: var(--text-primary);
+  margin-bottom: 9px;
+}
+
+.readAdvice {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--accent-strong);
 }
 
 .descriptionEmpty {
@@ -195,38 +248,21 @@
   color: var(--text-tertiary);
 }
 
-/* Per-conclusion confidence tier badge — replaces the raw
-   percentage that used to sit next to each description line; the CONFIDENCE
-   section shows one of these per conclusion, never a single player-wide
-   score. */
-.confidenceBadge {
-  flex-shrink: 0;
-  font-size: 10.5px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: 2px 8px;
-  border-radius: 999px;
-}
-
+/* Confidence tier colours, used as text inside a read's label row. */
 .tier-high {
   color: #57b88b;
-  background: rgba(87, 184, 139, 0.14);
 }
 
 .tier-medium {
   color: #d9b44a;
-  background: rgba(217, 180, 74, 0.14);
 }
 
 .tier-low {
   color: var(--text-tertiary);
-  background: var(--bg-surface-alt);
 }
 
 .tier-insufficientData {
   color: var(--text-tertiary);
-  background: var(--bg-surface-alt);
 }
 
 /* Free-text player note. Same surface/border tokens as the other

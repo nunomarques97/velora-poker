@@ -57,54 +57,73 @@ const CBETS_ALMOST_ALWAYS: &str = "cbets-almost-always";
 const CALLING_STATION: &str = "calling-station";
 const PASSIVE_POSTFLOP: &str = "passive-postflop";
 
-const LOOSE_PASSIVE_TEXT: &str =
-    "Loose-passive — calls wide, rarely raises. Value bet, don't bluff.";
-const RARELY_3BETS_TEXT: &str = "Rarely 3-bets — when he does, it's premium. Respect it.";
-const CBETS_ALMOST_ALWAYS_TEXT: &str =
-    "C-bets nearly every flop — low information. Float or raise more.";
-const CALLING_STATION_TEXT: &str =
-    "Reaches showdown often, wins little there. Value bet thin, don't bluff.";
-const PASSIVE_POSTFLOP_TEXT: &str = "Mostly calls postflop, rarely raises. Bet thin for value.";
+const LOOSE_PASSIVE_OBSERVATION: &str = "Loose-passive: calls wide, rarely raises.";
+const LOOSE_PASSIVE_ADVICE: &str = "Value bet, don't bluff.";
+const RARELY_3BETS_OBSERVATION: &str = "Rarely 3-bets; when he does, it's premium.";
+const RARELY_3BETS_ADVICE: &str = "Respect his 3-bets.";
+const CBETS_ALMOST_ALWAYS_OBSERVATION: &str = "C-bets nearly every flop, which is low information.";
+const CBETS_ALMOST_ALWAYS_ADVICE: &str = "Float or raise him more.";
+const CALLING_STATION_OBSERVATION: &str = "Reaches showdown often, wins little there.";
+const CALLING_STATION_ADVICE: &str = "Value bet thin, don't bluff.";
+const PASSIVE_POSTFLOP_OBSERVATION: &str = "Mostly calls postflop, rarely raises.";
+const PASSIVE_POSTFLOP_ADVICE: &str = "Bet thin for value.";
 
 const SQUEEZES_AGGRESSIVELY: &str = "squeezes-aggressively";
 const RARELY_SQUEEZES: &str = "rarely-squeezes";
 const FOLDS_A_LOT_TO_SQUEEZES: &str = "folds-a-lot-to-squeezes";
 
-const SQUEEZES_AGGRESSIVELY_TEXT: &str = "Squeezes often when there's a raise and a caller ahead of him — his squeezes aren't always premium, you can continue lighter into them.";
-const RARELY_SQUEEZES_TEXT: &str =
-    "Almost never squeezes — safe to cold-call in front of him without fear of getting blown off the hand.";
-const FOLDS_A_LOT_TO_SQUEEZES_TEXT: &str =
-    "Folds a lot when squeezed after someone else's cold call — squeeze him light for profit.";
+const SQUEEZES_AGGRESSIVELY_OBSERVATION: &str = "Squeezes often when there's a raise and a caller ahead of him, and his squeezes aren't always premium.";
+const SQUEEZES_AGGRESSIVELY_ADVICE: &str = "Continue lighter into his squeezes.";
+const RARELY_SQUEEZES_OBSERVATION: &str = "Almost never squeezes.";
+const RARELY_SQUEEZES_ADVICE: &str =
+    "Cold-call safely in front of him without fear of getting blown off the hand.";
+const FOLDS_A_LOT_TO_SQUEEZES_OBSERVATION: &str =
+    "Folds a lot when squeezed after someone else's cold call.";
+const FOLDS_A_LOT_TO_SQUEEZES_ADVICE: &str = "Squeeze him light for profit.";
 
 const FOUR_BETS_AGGRESSIVELY: &str = "4bets-aggressively";
 const RARELY_4BETS: &str = "rarely-4bets";
 const FOLDS_A_LOT_TO_4BETS: &str = "folds-a-lot-to-4bets";
 const COLD_CALLS_TOO_MUCH: &str = "cold-calls-too-much";
 
-const FOUR_BETS_AGGRESSIVELY_TEXT: &str = "4-bets often when 3-bet — his 4-bets aren't automatically premium, look for a spot to continue.";
-const RARELY_4BETS_TEXT: &str = "Almost never 4-bets — when he does, it's about as strong as it gets. Fold anything but the top of your range.";
-const FOLDS_A_LOT_TO_4BETS_TEXT: &str =
-    "Gives up his 3-bets to a 4-bet often — 4-bet bluff him more.";
-const COLD_CALLS_TOO_MUCH_TEXT: &str = "Flats raises a lot instead of 3-betting or folding — a wide, hard-to-pin-down range. Bet for value freely postflop.";
+const FOUR_BETS_AGGRESSIVELY_OBSERVATION: &str =
+    "4-bets often when 3-bet, and his 4-bets aren't automatically premium.";
+const FOUR_BETS_AGGRESSIVELY_ADVICE: &str = "Look for a spot to continue against his 4-bets.";
+const RARELY_4BETS_OBSERVATION: &str =
+    "Almost never 4-bets; when he does, it's about as strong as it gets.";
+const RARELY_4BETS_ADVICE: &str = "Fold anything but the top of your range.";
+const FOLDS_A_LOT_TO_4BETS_OBSERVATION: &str = "Gives up his 3-bets to a 4-bet often.";
+const FOLDS_A_LOT_TO_4BETS_ADVICE: &str = "4-bet bluff him more.";
+const COLD_CALLS_TOO_MUCH_OBSERVATION: &str =
+    "Flats raises a lot instead of 3-betting or folding: a wide, hard-to-pin-down range.";
+const COLD_CALLS_TOO_MUCH_ADVICE: &str = "Bet for value freely postflop.";
 
 const STEALS_TOO_OFTEN: &str = "steals-too-often";
 const RARELY_STEALS: &str = "rarely-steals";
 const OVERFOLDS_TO_STEALS: &str = "overfolds-to-steals";
 const DEFENDS_BLINDS_TOO_WIDE: &str = "defends-blinds-too-wide";
 
-const STEALS_TOO_OFTEN_TEXT: &str = "Opens light from the cutoff/button/small blind — defend your blinds wider and punish his late opens.";
-const RARELY_STEALS_TEXT: &str =
-    "Rarely opens from late position — when he does, it's real. Give it more respect than a normal open.";
-const OVERFOLDS_TO_STEALS_TEXT: &str =
-    "Folds his blinds to a steal almost every time — steal against him relentlessly.";
-const DEFENDS_BLINDS_TOO_WIDE_TEXT: &str =
-    "Defends his blinds very wide against steals — don't bother stealing light, he'll fight back.";
+const STEALS_TOO_OFTEN_OBSERVATION: &str = "Opens light from the cutoff, button, or small blind.";
+const STEALS_TOO_OFTEN_ADVICE: &str = "Defend your blinds wider and punish his late opens.";
+const RARELY_STEALS_OBSERVATION: &str = "Rarely opens from late position; when he does, it's real.";
+const RARELY_STEALS_ADVICE: &str = "Give it more respect than a normal open.";
+const OVERFOLDS_TO_STEALS_OBSERVATION: &str = "Folds his blinds to a steal almost every time.";
+const OVERFOLDS_TO_STEALS_ADVICE: &str = "Steal against him relentlessly.";
+const DEFENDS_BLINDS_TOO_WIDE_OBSERVATION: &str = "Defends his blinds very wide against steals.";
+const DEFENDS_BLINDS_TOO_WIDE_ADVICE: &str =
+    "Don't bother stealing light against him; he'll fight back.";
 
 const COLD_CALLS_WIDE_FOLDS_TO_CBETS: &str = "cold-calls-wide-folds-to-cbets";
 const AGGRESSIVE_PREFLOP_FOLDS_TO_RERAISE: &str = "aggressive-preflop-folds-to-reraise";
 
-const COLD_CALLS_WIDE_FOLDS_TO_CBETS_TEXT: &str = "Cold-calls a wide range but folds too often to continuation bets — bet him off pots after he flats preflop, don't need a real hand.";
-const AGGRESSIVE_PREFLOP_FOLDS_TO_RERAISE_TEXT: &str = "3-bets/squeezes with a wide range but gives up when re-raised back — 4-bet or re-raise his preflop aggression light, he folds too much.";
+const COLD_CALLS_WIDE_FOLDS_TO_CBETS_OBSERVATION: &str =
+    "Cold-calls a wide range but folds too often to continuation bets.";
+const COLD_CALLS_WIDE_FOLDS_TO_CBETS_ADVICE: &str =
+    "Bet him off pots after he flats preflop; you don't need a real hand.";
+const AGGRESSIVE_PREFLOP_FOLDS_TO_RERAISE_OBSERVATION: &str =
+    "3-bets and squeezes with a wide range but gives up when re-raised back.";
+const AGGRESSIVE_PREFLOP_FOLDS_TO_RERAISE_ADVICE: &str =
+    "4-bet or re-raise his preflop aggression light; he folds too much.";
 
 // --- confidence formula ---
 
@@ -182,7 +201,9 @@ fn loose_passive_matches_at_exactly_the_40_percent_vpip_boundary() {
     let out = description_rules::evaluate(&stats, &opp);
     let result = find(&out, LOOSE_PASSIVE);
     assert!(result.is_some(), "VPIP=40% exactly must match Loose-passive");
-    assert_eq!(result.unwrap().conclusion, LOOSE_PASSIVE_TEXT);
+    let result = result.unwrap();
+    assert_eq!(result.observation, LOOSE_PASSIVE_OBSERVATION);
+    assert_eq!(result.advice, LOOSE_PASSIVE_ADVICE);
 }
 
 #[test]
@@ -215,7 +236,9 @@ fn rarely_3bets_matches_at_exactly_the_4_percent_boundary() {
     let out = description_rules::evaluate(&stats, &opp);
     let result = find(&out, RARELY_3BETS);
     assert!(result.is_some());
-    assert_eq!(result.unwrap().conclusion, RARELY_3BETS_TEXT);
+    let result = result.unwrap();
+    assert_eq!(result.observation, RARELY_3BETS_OBSERVATION);
+    assert_eq!(result.advice, RARELY_3BETS_ADVICE);
 }
 
 #[test]
@@ -247,7 +270,9 @@ fn cbets_almost_always_matches_at_exactly_the_75_percent_boundary() {
     let out = description_rules::evaluate(&stats, &opp);
     let result = find(&out, CBETS_ALMOST_ALWAYS);
     assert!(result.is_some());
-    assert_eq!(result.unwrap().conclusion, CBETS_ALMOST_ALWAYS_TEXT);
+    let result = result.unwrap();
+    assert_eq!(result.observation, CBETS_ALMOST_ALWAYS_OBSERVATION);
+    assert_eq!(result.advice, CBETS_ALMOST_ALWAYS_ADVICE);
 }
 
 #[test]
@@ -282,7 +307,8 @@ fn calling_station_matches_at_exactly_its_boundaries() {
     let result = find(&out, CALLING_STATION);
     assert!(result.is_some());
     let result = result.unwrap();
-    assert_eq!(result.conclusion, CALLING_STATION_TEXT);
+    assert_eq!(result.observation, CALLING_STATION_OBSERVATION);
+    assert_eq!(result.advice, CALLING_STATION_ADVICE);
     assert_eq!(result.category, description_rules::RuleCategory::Tendency);
 }
 
@@ -316,7 +342,9 @@ fn passive_postflop_matches_at_exactly_the_1_0_af_boundary() {
     let out = description_rules::evaluate(&stats, &opp);
     let result = find(&out, PASSIVE_POSTFLOP);
     assert!(result.is_some());
-    assert_eq!(result.unwrap().conclusion, PASSIVE_POSTFLOP_TEXT);
+    let result = result.unwrap();
+    assert_eq!(result.observation, PASSIVE_POSTFLOP_OBSERVATION);
+    assert_eq!(result.advice, PASSIVE_POSTFLOP_ADVICE);
 }
 
 #[test]
@@ -349,7 +377,8 @@ fn squeezes_aggressively_matches_at_exactly_the_12_percent_boundary() {
     let result = find(&out, SQUEEZES_AGGRESSIVELY);
     assert!(result.is_some(), "squeeze=12% exactly must match Squeezes aggressively");
     let result = result.unwrap();
-    assert_eq!(result.conclusion, SQUEEZES_AGGRESSIVELY_TEXT);
+    assert_eq!(result.observation, SQUEEZES_AGGRESSIVELY_OBSERVATION);
+    assert_eq!(result.advice, SQUEEZES_AGGRESSIVELY_ADVICE);
     assert_eq!(result.category, description_rules::RuleCategory::Tendency);
     assert_eq!(result.evidence, vec![description_rules::Evidence {
         stat_name: "squeeze".to_string(),
@@ -386,7 +415,8 @@ fn rarely_squeezes_matches_at_exactly_the_4_percent_boundary() {
     let result = find(&out, RARELY_SQUEEZES);
     assert!(result.is_some(), "squeeze=4% exactly must match Rarely squeezes");
     let result = result.unwrap();
-    assert_eq!(result.conclusion, RARELY_SQUEEZES_TEXT);
+    assert_eq!(result.observation, RARELY_SQUEEZES_OBSERVATION);
+    assert_eq!(result.advice, RARELY_SQUEEZES_ADVICE);
     assert_eq!(result.category, description_rules::RuleCategory::Exploit);
 }
 
@@ -439,7 +469,8 @@ fn folds_a_lot_to_squeezes_matches_at_exactly_the_65_percent_boundary() {
     let result = find(&out, FOLDS_A_LOT_TO_SQUEEZES);
     assert!(result.is_some(), "fold_to_squeeze=65% exactly must match Folds a lot to squeezes");
     let result = result.unwrap();
-    assert_eq!(result.conclusion, FOLDS_A_LOT_TO_SQUEEZES_TEXT);
+    assert_eq!(result.observation, FOLDS_A_LOT_TO_SQUEEZES_OBSERVATION);
+    assert_eq!(result.advice, FOLDS_A_LOT_TO_SQUEEZES_ADVICE);
     assert_eq!(result.category, description_rules::RuleCategory::Exploit);
     assert_eq!(result.evidence, vec![description_rules::Evidence {
         stat_name: "fold_to_squeeze".to_string(),
@@ -539,7 +570,8 @@ fn four_bets_aggressively_matches_at_exactly_the_40_percent_boundary() {
     let result = find(&out, FOUR_BETS_AGGRESSIVELY);
     assert!(result.is_some(), "four_bet=40% exactly must match 4-bets aggressively");
     let result = result.unwrap();
-    assert_eq!(result.conclusion, FOUR_BETS_AGGRESSIVELY_TEXT);
+    assert_eq!(result.observation, FOUR_BETS_AGGRESSIVELY_OBSERVATION);
+    assert_eq!(result.advice, FOUR_BETS_AGGRESSIVELY_ADVICE);
     assert_eq!(result.category, description_rules::RuleCategory::Tendency);
     assert_eq!(result.evidence, vec![description_rules::Evidence {
         stat_name: "four_bet".to_string(),
@@ -576,7 +608,8 @@ fn rarely_4bets_matches_at_exactly_the_10_percent_boundary() {
     let result = find(&out, RARELY_4BETS);
     assert!(result.is_some(), "four_bet=10% exactly must match Rarely 4-bets");
     let result = result.unwrap();
-    assert_eq!(result.conclusion, RARELY_4BETS_TEXT);
+    assert_eq!(result.observation, RARELY_4BETS_OBSERVATION);
+    assert_eq!(result.advice, RARELY_4BETS_ADVICE);
     assert_eq!(
         result.category,
         description_rules::RuleCategory::Tendency,
@@ -612,7 +645,8 @@ fn folds_a_lot_to_4bets_matches_at_exactly_the_60_percent_boundary() {
     let result = find(&out, FOLDS_A_LOT_TO_4BETS);
     assert!(result.is_some(), "fold_to_four_bet=60% exactly must match Folds a lot to 4-bets");
     let result = result.unwrap();
-    assert_eq!(result.conclusion, FOLDS_A_LOT_TO_4BETS_TEXT);
+    assert_eq!(result.observation, FOLDS_A_LOT_TO_4BETS_OBSERVATION);
+    assert_eq!(result.advice, FOLDS_A_LOT_TO_4BETS_ADVICE);
     assert_eq!(result.category, description_rules::RuleCategory::Exploit);
     assert_eq!(result.evidence, vec![description_rules::Evidence {
         stat_name: "fold_to_four_bet".to_string(),
@@ -673,7 +707,8 @@ fn cold_calls_too_much_matches_at_exactly_the_30_percent_boundary() {
     let result = find(&out, COLD_CALLS_TOO_MUCH);
     assert!(result.is_some(), "cold_call=30% exactly must match Cold-calls too much");
     let result = result.unwrap();
-    assert_eq!(result.conclusion, COLD_CALLS_TOO_MUCH_TEXT);
+    assert_eq!(result.observation, COLD_CALLS_TOO_MUCH_OBSERVATION);
+    assert_eq!(result.advice, COLD_CALLS_TOO_MUCH_ADVICE);
     assert_eq!(result.category, description_rules::RuleCategory::Tendency);
     assert_eq!(result.evidence, vec![description_rules::Evidence {
         stat_name: "cold_call".to_string(),
@@ -710,7 +745,8 @@ fn steals_too_often_matches_at_exactly_the_45_percent_boundary() {
     let result = find(&out, STEALS_TOO_OFTEN);
     assert!(result.is_some(), "steal_attempt=45% exactly must match Steals too often");
     let result = result.unwrap();
-    assert_eq!(result.conclusion, STEALS_TOO_OFTEN_TEXT);
+    assert_eq!(result.observation, STEALS_TOO_OFTEN_OBSERVATION);
+    assert_eq!(result.advice, STEALS_TOO_OFTEN_ADVICE);
     assert_eq!(result.category, description_rules::RuleCategory::Tendency);
     assert_eq!(result.evidence, vec![description_rules::Evidence {
         stat_name: "steal_attempt".to_string(),
@@ -747,7 +783,8 @@ fn rarely_steals_matches_at_exactly_the_20_percent_boundary() {
     let result = find(&out, RARELY_STEALS);
     assert!(result.is_some(), "steal_attempt=20% exactly must match Rarely steals");
     let result = result.unwrap();
-    assert_eq!(result.conclusion, RARELY_STEALS_TEXT);
+    assert_eq!(result.observation, RARELY_STEALS_OBSERVATION);
+    assert_eq!(result.advice, RARELY_STEALS_ADVICE);
     assert_eq!(result.category, description_rules::RuleCategory::Tendency);
 }
 
@@ -779,7 +816,8 @@ fn overfolds_to_steals_matches_at_exactly_the_75_percent_boundary() {
     let result = find(&out, OVERFOLDS_TO_STEALS);
     assert!(result.is_some(), "fold_to_steal=75% exactly must match Overfolds to steals");
     let result = result.unwrap();
-    assert_eq!(result.conclusion, OVERFOLDS_TO_STEALS_TEXT);
+    assert_eq!(result.observation, OVERFOLDS_TO_STEALS_OBSERVATION);
+    assert_eq!(result.advice, OVERFOLDS_TO_STEALS_ADVICE);
     assert_eq!(result.category, description_rules::RuleCategory::Exploit);
     assert_eq!(result.evidence, vec![description_rules::Evidence {
         stat_name: "fold_to_steal".to_string(),
@@ -816,7 +854,8 @@ fn defends_blinds_too_wide_matches_at_exactly_the_40_percent_boundary() {
     let result = find(&out, DEFENDS_BLINDS_TOO_WIDE);
     assert!(result.is_some(), "fold_to_steal=40% exactly must match Defends blinds too wide");
     let result = result.unwrap();
-    assert_eq!(result.conclusion, DEFENDS_BLINDS_TOO_WIDE_TEXT);
+    assert_eq!(result.observation, DEFENDS_BLINDS_TOO_WIDE_OBSERVATION);
+    assert_eq!(result.advice, DEFENDS_BLINDS_TOO_WIDE_ADVICE);
     assert_eq!(result.category, description_rules::RuleCategory::Exploit);
 }
 
@@ -914,7 +953,8 @@ fn cold_calls_wide_folds_to_cbets_matches_when_both_legs_qualify() {
     let result = find(&out, COLD_CALLS_WIDE_FOLDS_TO_CBETS);
     assert!(result.is_some(), "cold_call=30% and fold_to_c_bet=60% must match");
     let result = result.unwrap();
-    assert_eq!(result.conclusion, COLD_CALLS_WIDE_FOLDS_TO_CBETS_TEXT);
+    assert_eq!(result.observation, COLD_CALLS_WIDE_FOLDS_TO_CBETS_OBSERVATION);
+    assert_eq!(result.advice, COLD_CALLS_WIDE_FOLDS_TO_CBETS_ADVICE);
     assert_eq!(result.category, description_rules::RuleCategory::Exploit);
     assert_eq!(result.evidence, vec![
         description_rules::Evidence {
@@ -1005,7 +1045,8 @@ fn aggressive_preflop_folds_to_reraise_matches_on_the_3bet_leg_alone() {
     let result = find(&out, AGGRESSIVE_PREFLOP_FOLDS_TO_RERAISE);
     assert!(result.is_some(), "three_bet=10% and fold_to_four_bet=60% must match on the 3-bet leg alone");
     let result = result.unwrap();
-    assert_eq!(result.conclusion, AGGRESSIVE_PREFLOP_FOLDS_TO_RERAISE_TEXT);
+    assert_eq!(result.observation, AGGRESSIVE_PREFLOP_FOLDS_TO_RERAISE_OBSERVATION);
+    assert_eq!(result.advice, AGGRESSIVE_PREFLOP_FOLDS_TO_RERAISE_ADVICE);
     assert_eq!(result.category, description_rules::RuleCategory::Exploit);
     assert_eq!(result.evidence, vec![
         description_rules::Evidence {
@@ -1342,4 +1383,259 @@ fn evidence_matches_the_accumulator_for_a_calling_station() {
 
     let passive_postflop = find(&out, PASSIVE_POSTFLOP).expect("expected passive-postflop match");
     assert_eq!(passive_postflop.evidence[0].opportunities, opp.postflop_calls);
+}
+
+// --- observation/advice split: every rule must produce both non-empty,
+// and neither field may still carry an em dash as an observation/advice
+// separator (that job now belongs to having two fields, not punctuation). ---
+
+/// All 35 rule ids `evaluate` can currently produce (the module doc names 22
+/// single-stat rules from batches 1-2 plus 13 more from batch 3, including
+/// composites -- 35 total, not 31: this test's own tally, not a guess).
+/// Several rule families threshold the *same* stat in mutually exclusive
+/// directions (e.g. `three_bet <= 4.0` for `rarely-3bets` vs.
+/// `three_bet >= 10.0` for `3bets-often`), so no single `PlayerStats` value
+/// can fire all of them at once. This test instead runs five independent,
+/// hand-picked scenarios and takes the union of rule ids fired across all of
+/// them, which this list confirms covers every rule -- full coverage, just
+/// not in one `evaluate` call.
+const ALL_RULE_IDS: &[&str] = &[
+    "loose-passive",
+    "loose-aggressive",
+    "raises-face-up",
+    "nitty-very-selective",
+    "folds-a-lot-to-3bets",
+    "doesnt-fold-to-3bets",
+    "3bets-often",
+    "rarely-3bets",
+    "combative-preflop",
+    "folds-a-lot-to-cbets",
+    "doesnt-fold-to-cbets",
+    "preflop-raiser-postflop-pushover",
+    "cbets-almost-always",
+    "cbets-selectively",
+    "bets-flop-wont-back-it-up",
+    "calling-station",
+    "strong-at-showdown",
+    "aggressive-but-light-at-showdown",
+    "never-gets-there",
+    "pressure-folder",
+    "passive-postflop",
+    "aggressive-postflop",
+    "squeezes-aggressively",
+    "rarely-squeezes",
+    "folds-a-lot-to-squeezes",
+    "4bets-aggressively",
+    "rarely-4bets",
+    "folds-a-lot-to-4bets",
+    "cold-calls-too-much",
+    "steals-too-often",
+    "rarely-steals",
+    "overfolds-to-steals",
+    "defends-blinds-too-wide",
+    "cold-calls-wide-folds-to-cbets",
+    "aggressive-preflop-folds-to-reraise",
+];
+
+#[test]
+fn every_rule_produces_a_non_empty_observation_and_advice_with_no_dash_separator() {
+    use std::collections::HashSet;
+
+    // Scenario 1: the "wide/aggressive" side of every family that can be hit
+    // together without contradicting itself on a shared stat.
+    let stats1 = PlayerStats {
+        vpip: Some(45.0),
+        pfr: Some(30.0),
+        three_bet: Some(15.0),
+        fold_to_three_bet: Some(35.0),
+        four_bet: Some(45.0),
+        fold_to_four_bet: Some(70.0),
+        rfi: None,
+        limp: None,
+        cold_call: Some(35.0),
+        squeeze: Some(15.0),
+        fold_to_squeeze: Some(70.0),
+        c_bet: Some(80.0),
+        fold_to_c_bet: Some(65.0),
+        aggression_factor: Some(1.2),
+        wtsd: Some(35.0),
+        wsd: Some(30.0),
+        steal_attempt: Some(50.0),
+        fold_to_steal: Some(80.0),
+    };
+    let opp1 = PlayerStatsOpportunities {
+        hands: 200,
+        three_bet_opportunities: 200,
+        faced_3bet_opportunities: 200,
+        four_bet_opportunities: 0,
+        faced_4bet_opportunities: 200,
+        rfi_limp_opportunities: 0,
+        cold_call_opportunities: 200,
+        squeeze_opportunities: 200,
+        faced_squeeze_opportunities: 200,
+        cbet_opportunities: 200,
+        faced_cbet_opportunities: 200,
+        saw_flop_hands: 300,
+        went_to_showdown_hands: 200,
+        postflop_calls: 200,
+        postflop_bets_raises: 200,
+        steal_attempt_opportunities: 200,
+        fold_to_steal_opportunities: 200,
+    };
+
+    // Scenario 2: the "tight/passive" side of the same families, plus the
+    // "rarely" variants that scenario 1's thresholds exclude.
+    let stats2 = PlayerStats {
+        vpip: Some(15.0),
+        pfr: Some(8.0),
+        three_bet: Some(2.0),
+        fold_to_three_bet: Some(80.0),
+        four_bet: Some(8.0),
+        fold_to_four_bet: Some(20.0),
+        rfi: None,
+        limp: None,
+        cold_call: None,
+        squeeze: Some(3.0),
+        fold_to_squeeze: Some(20.0),
+        c_bet: Some(30.0),
+        fold_to_c_bet: Some(20.0),
+        aggression_factor: Some(0.9),
+        wtsd: Some(10.0),
+        wsd: Some(60.0),
+        steal_attempt: Some(15.0),
+        fold_to_steal: Some(35.0),
+    };
+    let opp2 = PlayerStatsOpportunities {
+        hands: 200,
+        three_bet_opportunities: 200,
+        faced_3bet_opportunities: 200,
+        four_bet_opportunities: 0,
+        faced_4bet_opportunities: 200,
+        rfi_limp_opportunities: 0,
+        cold_call_opportunities: 0,
+        squeeze_opportunities: 200,
+        faced_squeeze_opportunities: 200,
+        cbet_opportunities: 200,
+        faced_cbet_opportunities: 200,
+        saw_flop_hands: 300,
+        went_to_showdown_hands: 200,
+        postflop_calls: 200,
+        postflop_bets_raises: 200,
+        steal_attempt_opportunities: 200,
+        fold_to_steal_opportunities: 200,
+    };
+
+    // Scenario 3: raises-face-up, doesnt-fold-to-3bets and strong-at-showdown
+    // each need a stat value scenarios 1-2's thresholds don't hit.
+    let stats3 = PlayerStats {
+        vpip: Some(22.0),
+        pfr: Some(20.0),
+        three_bet: Some(6.0),
+        fold_to_three_bet: Some(25.0),
+        four_bet: None,
+        fold_to_four_bet: None,
+        rfi: None,
+        limp: None,
+        cold_call: None,
+        squeeze: None,
+        fold_to_squeeze: None,
+        c_bet: None,
+        fold_to_c_bet: None,
+        aggression_factor: None,
+        wtsd: Some(30.0),
+        wsd: Some(60.0),
+        steal_attempt: None,
+        fold_to_steal: None,
+    };
+    let opp3 = PlayerStatsOpportunities {
+        hands: 200,
+        three_bet_opportunities: 200,
+        faced_3bet_opportunities: 200,
+        went_to_showdown_hands: 200,
+        saw_flop_hands: 300,
+        ..base_opp()
+    };
+
+    // Scenario 4: aggressive-but-light-at-showdown needs wsd <= 40, which
+    // contradicts scenario 3's strong-at-showdown (wsd >= 55) on the same field.
+    let stats4 = PlayerStats {
+        wtsd: Some(25.0),
+        wsd: Some(30.0),
+        aggression_factor: Some(2.5),
+        ..base_stats()
+    };
+    let opp4 = PlayerStatsOpportunities {
+        went_to_showdown_hands: 200,
+        saw_flop_hands: 300,
+        ..base_opp()
+    };
+
+    // Scenario 5: pressure-folder and aggressive-postflop both need a high
+    // aggression_factor, but with wtsd low enough to also stay clear of
+    // calling-station/strong-at-showdown (which need wsd, left None here).
+    let stats5 = PlayerStats {
+        wtsd: Some(10.0),
+        aggression_factor: Some(4.0),
+        ..base_stats()
+    };
+    let opp5 = PlayerStatsOpportunities {
+        went_to_showdown_hands: 200,
+        saw_flop_hands: 300,
+        postflop_calls: 200,
+        postflop_bets_raises: 200,
+        ..base_opp()
+    };
+
+    let mut seen_ids: HashSet<String> = HashSet::new();
+    let mut all_results = Vec::new();
+    for (stats, opp) in [
+        (&stats1, &opp1),
+        (&stats2, &opp2),
+        (&stats3, &opp3),
+        (&stats4, &opp4),
+        (&stats5, &opp5),
+    ] {
+        let out = description_rules::evaluate(stats, opp);
+        for result in out {
+            seen_ids.insert(result.rule_id.clone());
+            all_results.push(result);
+        }
+    }
+
+    for result in &all_results {
+        assert!(
+            !result.observation.is_empty(),
+            "rule {} produced an empty observation",
+            result.rule_id
+        );
+        assert!(
+            !result.advice.is_empty(),
+            "rule {} produced an empty advice",
+            result.rule_id
+        );
+        assert!(
+            !result.observation.contains(" — "),
+            "rule {} observation still carries an em-dash separator: {:?}",
+            result.rule_id,
+            result.observation
+        );
+        assert!(
+            !result.advice.contains(" — "),
+            "rule {} advice still carries an em-dash separator: {:?}",
+            result.rule_id,
+            result.advice
+        );
+    }
+
+    for expected_id in ALL_RULE_IDS {
+        assert!(
+            seen_ids.contains(*expected_id),
+            "rule {expected_id} was not fired by any of the five scenarios -- coverage gap"
+        );
+    }
+    assert_eq!(
+        seen_ids.len(),
+        ALL_RULE_IDS.len(),
+        "the five scenarios fired a rule id not present in ALL_RULE_IDS -- update the list"
+    );
 }

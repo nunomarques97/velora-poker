@@ -112,7 +112,11 @@ pub fn builtin_profiles() -> Vec<HudProfile> {
 }
 
 pub const ACTIVE_PROFILE_SETTING: &str = "active_hud_profile_id";
-const DEFAULT_PROFILE_ID: &str = "velora-hud";
+/// The badge model: a new install lands on the smallest HUD there is, one
+/// clickable pill per player, and the full cards are one click away in HUD
+/// Profiles. Chosen as the default because the full cards cover the tables
+/// themselves once more than one is open.
+const DEFAULT_PROFILE_ID: &str = "badge";
 
 /// Renames the old "jivaro-inspired" builtin profile (from before the
 /// product's own default HUD visual was implemented) to "velora-hud" in

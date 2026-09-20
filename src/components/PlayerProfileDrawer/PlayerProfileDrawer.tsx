@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Player } from "../../data/types";
+import type { Player, RuleResult } from "../../data/types";
 import { clearPlayerColorOverride, setPlayerColorOverride, setPlayerNote } from "../../data/api";
 import styles from "./PlayerProfileDrawer.module.css";
 import { CloseIcon } from "../icons";
@@ -20,12 +20,45 @@ const OVERRIDE_COLORS: { color: string; label: string }[] = [
   { color: "#a780e8", label: "Custom" },
 ];
 
+const CATEGORY_LABEL: Record<string, string> = {
+  tendency: "Tendency",
+  exploit: "Exploit",
+};
+
 const TIER_LABEL: Record<string, string> = {
   high: "High",
   medium: "Medium",
   low: "Low",
   insufficientData: "Insufficient data",
 };
+
+/**
+ * One rule result: what the opponent does, then what to do about it, each
+ * under its own label. They used to be a single sentence with the advice
+ * tacked on after a dash — except seven rules used a full stop instead, so
+ * there was no reliable way to tell where the read ended and the advice
+ * began. The colour carries the same split: observations in the normal text
+ * colour, advice in the accent.
+ */
+function ReadItem({ result, index }: { result: RuleResult; index: number }) {
+  return (
+    <li className={styles.readItem}>
+      <span className={styles.readIndex}>{index}</span>
+      <div className={styles.readBody}>
+        <div className={styles.readLabel}>
+          {CATEGORY_LABEL[result.category] ?? result.category}
+          <span className={styles.readLabelSep}>·</span>
+          <span className={`${styles[`tier-${result.confidenceTier}`] ?? ""} ${styles.readTier}`}>
+            {TIER_LABEL[result.confidenceTier] ?? result.confidenceTier}
+          </span>
+        </div>
+        <div className={styles.readObservation}>{result.observation}</div>
+        <div className={styles.readLabel}>Advice</div>
+        <div className={styles.readAdvice}>{result.advice}</div>
+      </div>
+    </li>
+  );
+}
 
 export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: PlayerProfileDrawerProps) {
   const descriptions = player.descriptions ?? [];
@@ -157,15 +190,8 @@ export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: Player
           <div className={styles.sectionTitle}>Tendencies</div>
           {tendencies.length > 0 ? (
             <ul className={styles.descriptionList}>
-              {tendencies.map((r) => (
-                <li key={r.ruleId} className={styles.descriptionItem}>
-                  <span className={styles.descriptionText}>{r.conclusion}</span>
-                  <span
-                    className={`${styles.confidenceBadge} ${styles[`tier-${r.confidenceTier}`] ?? ""}`}
-                  >
-                    {TIER_LABEL[r.confidenceTier] ?? r.confidenceTier}
-                  </span>
-                </li>
+              {tendencies.map((r, i) => (
+                <ReadItem key={r.ruleId} result={r} index={i + 1} />
               ))}
             </ul>
           ) : (
@@ -177,15 +203,8 @@ export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: Player
           <div className={styles.sectionTitle}>Exploits</div>
           {exploits.length > 0 ? (
             <ul className={styles.descriptionList}>
-              {exploits.map((r) => (
-                <li key={r.ruleId} className={styles.descriptionItem}>
-                  <span className={styles.descriptionText}>{r.conclusion}</span>
-                  <span
-                    className={`${styles.confidenceBadge} ${styles[`tier-${r.confidenceTier}`] ?? ""}`}
-                  >
-                    {TIER_LABEL[r.confidenceTier] ?? r.confidenceTier}
-                  </span>
-                </li>
+              {exploits.map((r, i) => (
+                <ReadItem key={r.ruleId} result={r} index={i + 1} />
               ))}
             </ul>
           ) : (

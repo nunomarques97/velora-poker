@@ -60,7 +60,12 @@ fn evidence(stat_name: &str, value: Option<f64>, opportunities: i64) -> Evidence
 pub struct RuleResult {
     pub rule_id: String,
     pub category: RuleCategory,
-    pub conclusion: String,
+    /// What the opponent does. No advice, no imperative verbs addressed to
+    /// the reader — that belongs in `advice`.
+    pub observation: String,
+    /// What the reader should do about it. Imperative, addressed to the
+    /// reader — never a restatement of `observation`.
+    pub advice: String,
     pub confidence_pct: Option<u8>,
     pub confidence_tier: ConfidenceTier,
     pub evidence: Vec<Evidence>,
@@ -95,7 +100,8 @@ fn push(
     rule_id: &str,
     category: RuleCategory,
     opportunities: i64,
-    conclusion: &str,
+    observation: &str,
+    advice: &str,
     evidence: Vec<Evidence>,
 ) {
     if !matched {
@@ -108,7 +114,8 @@ fn push(
     out.push(RuleResult {
         rule_id: rule_id.to_string(),
         category,
-        conclusion: conclusion.to_string(),
+        observation: observation.to_string(),
+        advice: advice.to_string(),
         confidence_pct,
         confidence_tier,
         evidence,
@@ -132,7 +139,7 @@ fn push(
 /// yet — do not add a rule here that needs a stat not already in
 /// `PlayerStats`/`PlayerStatsOpportunities`.
 ///
-/// Every trigger, confidence basis, and conclusion string below is
+/// Every trigger, confidence basis, and observation/advice string below is
 /// deliberate — the wording was specifically reviewed against the hard rule
 /// against inferring villain range composition from frequency alone, so do
 /// not reword any text field even for style.
@@ -150,7 +157,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "loose-passive",
             Tendency,
             opp.hands,
-            "Loose-passive — calls wide, rarely raises. Value bet, don't bluff.",
+            "Loose-passive: calls wide, rarely raises.",
+            "Value bet, don't bluff.",
             vec![
                 evidence("vpip", stats.vpip, opp.hands),
                 evidence("pfr", stats.pfr, opp.hands),
@@ -162,7 +170,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "loose-aggressive",
             Tendency,
             opp.hands,
-            "Loose-aggressive — wide range, bets/raises often. Give less credit, call wider.",
+            "Loose-aggressive: wide range, bets/raises often.",
+            "Give less credit, call wider.",
             vec![
                 evidence("vpip", stats.vpip, opp.hands),
                 evidence("pfr", stats.pfr, opp.hands),
@@ -174,7 +183,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "raises-face-up",
             Tendency,
             opp.hands,
-            "Barely limps or flats preflop — if he's in the pot, he's usually raising. Easy to read his preflop strength.",
+            "Barely limps or flats preflop: if he's in the pot, he's usually raising.",
+            "Read his preflop strength easily from that raise-or-fold pattern.",
             vec![
                 evidence("vpip", stats.vpip, opp.hands),
                 evidence("pfr", stats.pfr, opp.hands),
@@ -188,7 +198,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "nitty-very-selective",
             Tendency,
             opp.hands,
-            "Very selective. Respect his raises, avoid marginal spots.",
+            "Very selective preflop.",
+            "Respect his raises and avoid marginal spots.",
             vec![evidence("vpip", stats.vpip, opp.hands)],
         );
     }
@@ -200,7 +211,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "folds-a-lot-to-3bets",
             Exploit,
             opp.faced_3bet_opportunities,
-            "Folds a lot to 3-bets — 3-bet him wider.",
+            "Folds a lot to 3-bets.",
+            "3-bet him wider.",
             vec![evidence(
                 "fold_to_three_bet",
                 stats.fold_to_three_bet,
@@ -213,7 +225,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "doesnt-fold-to-3bets",
             Exploit,
             opp.faced_3bet_opportunities,
-            "Doesn't fold to 3-bets — only 3-bet for value.",
+            "Doesn't fold to 3-bets.",
+            "Only 3-bet him for value.",
             vec![evidence(
                 "fold_to_three_bet",
                 stats.fold_to_three_bet,
@@ -229,7 +242,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "3bets-often",
             Tendency,
             opp.three_bet_opportunities,
-            "3-bets often — wide range, don't overfold to it.",
+            "3-bets often, with a wide range.",
+            "Don't overfold to his 3-bets.",
             vec![evidence("three_bet", stats.three_bet, opp.three_bet_opportunities)],
         );
         push(
@@ -238,7 +252,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "rarely-3bets",
             Tendency,
             opp.three_bet_opportunities,
-            "Rarely 3-bets — when he does, it's premium. Respect it.",
+            "Rarely 3-bets; when he does, it's premium.",
+            "Respect his 3-bets.",
             vec![evidence("three_bet", stats.three_bet, opp.three_bet_opportunities)],
         );
     }
@@ -250,7 +265,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "combative-preflop",
             Tendency,
             opp.three_bet_opportunities.min(opp.faced_3bet_opportunities),
-            "3-bets a lot and doesn't fold to 3-bets — expect a big preflop pot if you get involved with him.",
+            "3-bets a lot and doesn't fold to 3-bets.",
+            "Expect a big preflop pot if you get involved with him.",
             vec![
                 evidence("three_bet", stats.three_bet, opp.three_bet_opportunities),
                 evidence(
@@ -269,7 +285,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "folds-a-lot-to-cbets",
             Exploit,
             opp.faced_cbet_opportunities,
-            "Folds a lot to continuation bets — c-bet him often.",
+            "Folds a lot to continuation bets.",
+            "C-bet him often.",
             vec![evidence(
                 "fold_to_c_bet",
                 stats.fold_to_c_bet,
@@ -282,7 +299,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "doesnt-fold-to-cbets",
             Exploit,
             opp.faced_cbet_opportunities,
-            "Doesn't fold to c-bets — don't bluff without a follow-up plan.",
+            "Doesn't fold to c-bets.",
+            "Don't bluff him without a follow-up plan.",
             vec![evidence(
                 "fold_to_c_bet",
                 stats.fold_to_c_bet,
@@ -297,7 +315,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
                 "preflop-raiser-postflop-pushover",
                 Exploit,
                 opp.faced_cbet_opportunities,
-                "Raises a lot preflop but gives up easily to a c-bet — apply pressure back at him postflop.",
+                "Raises a lot preflop but gives up easily to a c-bet.",
+                "Apply pressure back at him postflop.",
                 vec![
                     evidence("pfr", stats.pfr, opp.hands),
                     evidence(
@@ -317,7 +336,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "cbets-almost-always",
             Tendency,
             opp.cbet_opportunities,
-            "C-bets nearly every flop — low information. Float or raise more.",
+            "C-bets nearly every flop, which is low information.",
+            "Float or raise him more.",
             vec![evidence("c_bet", stats.c_bet, opp.cbet_opportunities)],
         );
         push(
@@ -326,7 +346,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "cbets-selectively",
             Tendency,
             opp.cbet_opportunities,
-            "Only c-bets a minority of flops — respect the ones he makes.",
+            "Only c-bets a minority of flops.",
+            "Respect the c-bets he makes.",
             vec![evidence("c_bet", stats.c_bet, opp.cbet_opportunities)],
         );
 
@@ -337,7 +358,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
                 "bets-flop-wont-back-it-up",
                 Exploit,
                 opp.cbet_opportunities.min(opp.postflop_calls),
-                "C-bets the flop often but is passive the rest of the way — floats and turn/river aggression work well against him.",
+                "C-bets the flop often but is passive the rest of the way.",
+                "Float him and apply turn/river aggression.",
                 vec![
                     evidence("c_bet", stats.c_bet, opp.cbet_opportunities),
                     evidence("aggression_factor", stats.aggression_factor, opp.postflop_calls),
@@ -353,7 +375,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "calling-station",
             Tendency,
             opp.went_to_showdown_hands,
-            "Reaches showdown often, wins little there. Value bet thin, don't bluff.",
+            "Reaches showdown often, wins little there.",
+            "Value bet thin, don't bluff.",
             vec![
                 evidence("wtsd", stats.wtsd, opp.saw_flop_hands),
                 evidence("wsd", stats.wsd, opp.went_to_showdown_hands),
@@ -365,7 +388,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "strong-at-showdown",
             Tendency,
             opp.went_to_showdown_hands,
-            "Wins most showdowns he reaches. Don't bluff-catch rivers light against him.",
+            "Wins most showdowns he reaches.",
+            "Don't bluff-catch rivers light against him.",
             vec![
                 evidence("wtsd", stats.wtsd, opp.saw_flop_hands),
                 evidence("wsd", stats.wsd, opp.went_to_showdown_hands),
@@ -379,7 +403,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
                 "aggressive-but-light-at-showdown",
                 Exploit,
                 opp.went_to_showdown_hands,
-                "Aggressive but light when he shows down — his big bets don't always mean a big hand. Look him up more.",
+                "Aggressive but light when he shows down; his big bets don't always mean a big hand.",
+                "Look him up more.",
                 vec![
                     evidence("wtsd", stats.wtsd, opp.saw_flop_hands),
                     evidence("wsd", stats.wsd, opp.went_to_showdown_hands),
@@ -396,7 +421,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "never-gets-there",
             Tendency,
             opp.went_to_showdown_hands,
-            "Rarely reaches showdown at all. Bet him off pots liberally.",
+            "Rarely reaches showdown at all.",
+            "Bet him off pots liberally.",
             vec![evidence("wtsd", stats.wtsd, opp.saw_flop_hands)],
         );
 
@@ -407,7 +433,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
                 "pressure-folder",
                 Exploit,
                 opp.went_to_showdown_hands,
-                "Applies a lot of postflop pressure but rarely reaches showdown. Call down lighter against him.",
+                "Applies a lot of postflop pressure but rarely reaches showdown.",
+                "Call down lighter against him.",
                 vec![
                     evidence("aggression_factor", stats.aggression_factor, opp.postflop_calls),
                     evidence("wtsd", stats.wtsd, opp.saw_flop_hands),
@@ -423,7 +450,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "passive-postflop",
             Tendency,
             opp.postflop_calls,
-            "Mostly calls postflop, rarely raises. Bet thin for value.",
+            "Mostly calls postflop, rarely raises.",
+            "Bet thin for value.",
             vec![evidence("aggression_factor", stats.aggression_factor, opp.postflop_calls)],
         );
         push(
@@ -432,7 +460,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "aggressive-postflop",
             Tendency,
             opp.postflop_bets_raises,
-            "Bets and raises heavily postflop relative to calling. Don't overfold to the pressure.",
+            "Bets and raises heavily postflop relative to calling.",
+            "Don't overfold to the pressure.",
             vec![evidence("aggression_factor", stats.aggression_factor, opp.postflop_calls)],
         );
     }
@@ -446,7 +475,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "squeezes-aggressively",
             Tendency,
             opp.squeeze_opportunities,
-            "Squeezes often when there's a raise and a caller ahead of him — his squeezes aren't always premium, you can continue lighter into them.",
+            "Squeezes often when there's a raise and a caller ahead of him, and his squeezes aren't always premium.",
+            "Continue lighter into his squeezes.",
             vec![evidence("squeeze", stats.squeeze, opp.squeeze_opportunities)],
         );
         push(
@@ -455,7 +485,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "rarely-squeezes",
             Exploit,
             opp.squeeze_opportunities,
-            "Almost never squeezes — safe to cold-call in front of him without fear of getting blown off the hand.",
+            "Almost never squeezes.",
+            "Cold-call safely in front of him without fear of getting blown off the hand.",
             vec![evidence("squeeze", stats.squeeze, opp.squeeze_opportunities)],
         );
     }
@@ -467,7 +498,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "folds-a-lot-to-squeezes",
             Exploit,
             opp.faced_squeeze_opportunities,
-            "Folds a lot when squeezed after someone else's cold call — squeeze him light for profit.",
+            "Folds a lot when squeezed after someone else's cold call.",
+            "Squeeze him light for profit.",
             vec![evidence(
                 "fold_to_squeeze",
                 stats.fold_to_squeeze,
@@ -489,7 +521,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "4bets-aggressively",
             Tendency,
             opp.faced_3bet_opportunities,
-            "4-bets often when 3-bet — his 4-bets aren't automatically premium, look for a spot to continue.",
+            "4-bets often when 3-bet, and his 4-bets aren't automatically premium.",
+            "Look for a spot to continue against his 4-bets.",
             vec![evidence("four_bet", stats.four_bet, opp.faced_3bet_opportunities)],
         );
         push(
@@ -498,7 +531,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "rarely-4bets",
             Tendency,
             opp.faced_3bet_opportunities,
-            "Almost never 4-bets — when he does, it's about as strong as it gets. Fold anything but the top of your range.",
+            "Almost never 4-bets; when he does, it's about as strong as it gets.",
+            "Fold anything but the top of your range.",
             vec![evidence("four_bet", stats.four_bet, opp.faced_3bet_opportunities)],
         );
     }
@@ -510,7 +544,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "folds-a-lot-to-4bets",
             Exploit,
             opp.faced_4bet_opportunities,
-            "Gives up his 3-bets to a 4-bet often — 4-bet bluff him more.",
+            "Gives up his 3-bets to a 4-bet often.",
+            "4-bet bluff him more.",
             vec![evidence(
                 "fold_to_four_bet",
                 stats.fold_to_four_bet,
@@ -526,7 +561,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "cold-calls-too-much",
             Tendency,
             opp.cold_call_opportunities,
-            "Flats raises a lot instead of 3-betting or folding — a wide, hard-to-pin-down range. Bet for value freely postflop.",
+            "Flats raises a lot instead of 3-betting or folding: a wide, hard-to-pin-down range.",
+            "Bet for value freely postflop.",
             vec![evidence("cold_call", stats.cold_call, opp.cold_call_opportunities)],
         );
     }
@@ -544,7 +580,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "steals-too-often",
             Tendency,
             opp.steal_attempt_opportunities,
-            "Opens light from the cutoff/button/small blind — defend your blinds wider and punish his late opens.",
+            "Opens light from the cutoff, button, or small blind.",
+            "Defend your blinds wider and punish his late opens.",
             vec![evidence(
                 "steal_attempt",
                 stats.steal_attempt,
@@ -557,7 +594,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "rarely-steals",
             Tendency,
             opp.steal_attempt_opportunities,
-            "Rarely opens from late position — when he does, it's real. Give it more respect than a normal open.",
+            "Rarely opens from late position; when he does, it's real.",
+            "Give it more respect than a normal open.",
             vec![evidence(
                 "steal_attempt",
                 stats.steal_attempt,
@@ -573,7 +611,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "overfolds-to-steals",
             Exploit,
             opp.fold_to_steal_opportunities,
-            "Folds his blinds to a steal almost every time — steal against him relentlessly.",
+            "Folds his blinds to a steal almost every time.",
+            "Steal against him relentlessly.",
             vec![evidence(
                 "fold_to_steal",
                 stats.fold_to_steal,
@@ -586,7 +625,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "defends-blinds-too-wide",
             Exploit,
             opp.fold_to_steal_opportunities,
-            "Defends his blinds very wide against steals — don't bother stealing light, he'll fight back.",
+            "Defends his blinds very wide against steals.",
+            "Don't bother stealing light against him; he'll fight back.",
             vec![evidence(
                 "fold_to_steal",
                 stats.fold_to_steal,
@@ -608,7 +648,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "cold-calls-wide-folds-to-cbets",
             Exploit,
             opp.cold_call_opportunities.min(opp.faced_cbet_opportunities),
-            "Cold-calls a wide range but folds too often to continuation bets — bet him off pots after he flats preflop, don't need a real hand.",
+            "Cold-calls a wide range but folds too often to continuation bets.",
+            "Bet him off pots after he flats preflop; you don't need a real hand.",
             vec![
                 evidence("cold_call", stats.cold_call, opp.cold_call_opportunities),
                 evidence("fold_to_c_bet", stats.fold_to_c_bet, opp.faced_cbet_opportunities),
@@ -659,7 +700,8 @@ pub fn evaluate(stats: &PlayerStats, opp: &PlayerStatsOpportunities) -> Vec<Rule
             "aggressive-preflop-folds-to-reraise",
             Exploit,
             basis,
-            "3-bets/squeezes with a wide range but gives up when re-raised back — 4-bet or re-raise his preflop aggression light, he folds too much.",
+            "3-bets and squeezes with a wide range but gives up when re-raised back.",
+            "4-bet or re-raise his preflop aggression light; he folds too much.",
             composite_evidence,
         );
     }
