@@ -81,6 +81,20 @@ pub fn builtin_profiles() -> Vec<HudProfile> {
             min_hands: 25,
             is_builtin: true,
         },
+        // Badge model: no stats on the table at all, just a small clickable
+        // pill with the player's initials and hand count. The stats live one
+        // click away, in the detail drawer. Built for multi-tabling, where
+        // full cards on every table cover the tables themselves. It carries
+        // the same stat pages as the others so switching models never loses
+        // a page configuration; the frontend simply doesn't render them.
+        HudProfile {
+            id: "badge".to_string(),
+            name: "Badge".to_string(),
+            visual_model: "badge".to_string(),
+            stat_pages: pages.clone(),
+            min_hands: 25,
+            is_builtin: true,
+        },
         // The Jivaro-style model. Backend-wise it is deliberately nothing new: the
         // same canonical stat pages, the same 25-hand gate and the same
         // `classification::resolve_for_player` colour source as the other three

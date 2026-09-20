@@ -50,10 +50,9 @@
 }
 
 /*
- * The on-table card's wrapper
- * — none of `.card`'s pill chrome (background/border/shadow/padding), since
- * the whole point is a small badge, not a big card with its text hidden.
- * Sized to its content (the ring below), same reasoning `.card` already uses.
+ * Badge model — the whole on-table element. No pill chrome from `.card`
+ * (background/border/shadow/padding come from the button itself), sized to
+ * its content, same reasoning `.card` already uses.
  */
 .badgeCard {
   position: relative;
@@ -62,86 +61,78 @@
 }
 
 /*
- * Two-tone, not a single-fill solid circle — the outer ring is
- * `--bb-color` (stack depth, `badgeStackColor` above), the center circle
- * (`.badgeInner`) is `--profile-color` (classification, the same `color` the
- * full card's ring used before this badge existed). Same 64px footprint the
- * original ring occupied.
+ * A single small button: initials + hand count, nothing else. Neutral
+ * surface tokens (`--bg-surface`, `--border-subtle`) rather than the
+ * classification colours the full cards use — the point of this model is
+ * that the table stays readable, so the badge reads as chrome, not as a
+ * signal competing with the cards on the felt.
  */
 .badge {
-  position: relative;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--bb-color);
-  border: none;
-  padding: 0;
-  margin: 0;
-  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 11px;
+  background: rgba(18, 22, 32, 0.92);
+  border: 1px solid #232a38;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
   font-family: inherit;
-  overflow: hidden;
-  box-shadow:
-    0 0 10px 0 color-mix(in srgb, var(--bb-color) 55%, transparent),
-    0 4px 10px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
 
+.badge:hover {
+  border-color: #6f8fff;
+}
+
+/*
+ * "There is something to read here": set when the player has tendencies,
+ * exploits or an archetype. Accent border plus a faint halo so it reads at a
+ * glance over the table without becoming a second HUD element.
+ */
+.badgeHasInfo {
+  border-color: #6f8fff;
+  box-shadow:
+    0 0 0 1px rgba(111, 143, 255, 0.25),
+    0 2px 6px rgba(0, 0, 0, 0.45);
+}
+
+.badgeHasInfo .badgeName {
+  color: #ffffff;
+}
+
+/* Keyboard focus: the overlay is mouse-driven, but the HUD Profiles preview
+   is reachable by tab and the full cards have no focus style either (a known
+   accessibility gap) — this one at least does not add to it. */
+.badge:focus-visible {
+  outline: 2px solid #6f8fff;
+  outline-offset: 2px;
+}
+
+/* While dragging the overlay element the pill must not advertise a click,
+   same rule `.draggable .content` applies to the full cards. */
 .draggable .badge {
   cursor: inherit;
 }
 
-/* The ring band left visible is `.badge`'s size minus this inset on all
-   sides — 7px matches the old `.avatar`'s own inset, same visual weight. */
-.badgeInner {
-  position: absolute;
-  inset: 7px;
-  border-radius: 50%;
-  background: var(--profile-color);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  padding: 2px;
-  overflow: hidden;
-}
-
-/* Dark text reads clearly against both palettes (BB tiers and classification
-   colors are similar medium-saturation/medium-brightness ranges, checked
-   against each). */
 .badgeName {
-  max-width: 100%;
+  max-width: 68px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 9px;
-  font-weight: 800;
-  line-height: 1.15;
-  color: #0a0c10;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  color: #e8ebf2;
 }
 
 .badgeHands {
-  font-size: 8px;
-  font-weight: 700;
-  color: rgba(10, 12, 16, 0.72);
-}
-
-.minimal .badge {
-  width: 44px;
-  height: 44px;
-}
-
-.minimal .badgeInner {
-  inset: 5px;
-}
-
-.minimal .badgeName {
-  font-size: 7.5px;
-}
-
-.minimal .badgeHands {
-  font-size: 6.5px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+  color: #9aa4b8;
+  font-variant-numeric: tabular-nums;
 }
 
 /* --- Ring / avatar --- */

@@ -29,32 +29,6 @@ function sampleConfidence(hands: number, minHands: number): number {
   return MIN_STAT_OPACITY + (1 - MIN_STAT_OPACITY) * ratio;
 }
 
-/**
- * On-table badge only: the badge's ring
- * color reads stack depth instead of classification, since there's no
- * stack-row text left on a badge to carry that read. Same hex values as
- * `.bbShort`/`.bbMedium`/`.bbDeep` in PlayerHudCard.module.css, but NOT the
- * same boundary as `bbDepthTier` (statFormat.ts, `< 20`/`< 35`) — this
- * specific badge treats exactly 20bb as red ("lower or
- * equal to 20"), one bb different from the existing stack-row tiering. Not a
- * fix to `bbDepthTier` itself; that stat-row convention is unchanged.
- */
-function badgeStackColor(stackBb: number | undefined): string {
-  if (stackBb == null) return "#6b7480";
-  if (stackBb <= 20) return "#ff5c5c";
-  if (stackBb < 35) return "#4fd1ff";
-  return "#4ade80";
-}
-
-/**
- * Build-time toggle: the badge above was built for MTT
- * multi-tabling; single-table sessions want the normal full Velora card
- * back. Not a persisted setting — it is swapped by session type with a
- * rebuild each time (same pattern as SHOW_REPOSITION_* in
- * OverlayApp.tsx), so a flip here plus one rebuild is all switching back to
- * badge mode for the next MTT session takes.
- */
-const SHOW_COMPACT_BADGE = false;
 
 interface PlayerHudCardProps {
   player: Player;
@@ -132,51 +106,49 @@ export function PlayerHudCard({
   const color = classification?.color ?? "#6b7480";
   const initials = player.name.slice(0, 2).toUpperCase();
 
-  // When enabled, the on-table card shrinks to just this badge, full stats
-  // moving behind a click into the existing PlayerProfileDrawer. Deliberately
-  // not a new prop/setting: `dragHandleProps` is already overlay-only (see its own doc
-  // comment above — main-app previews, e.g. the HUD Profiles page, never
-  // pass it), so reusing its presence here means that preview keeps showing
-  // full cards, unaffected, exactly as configuring stat pages there needs.
-  const isOnTableCard = SHOW_COMPACT_BADGE && Boolean(dragHandleProps);
+  // The badge model puts nothing on the table but a small pill: initials and
+  // hand count, and a click that opens the detail drawer with the player's
+  // stats and tendencies. It renders the same way in the overlay and in the
+  // HUD Profiles preview, so what the preview shows is what lands on a table.
+  if (profile.visualModel === "badge") {
+    // The outline turns accent-coloured only when opening this player
+    // actually shows something written: a tendency/exploit line, or an
+    // archetype. Without that, a badge is just a name and a hand count and
+    // the click leads to an empty drawer — the colour is the difference
+    // between the two, so a glance says which players are worth opening.
+    // Notes are deliberately not part of it: the overlay's player payload
+    // does not load them (`build_player_payload(..., include_note: false)`),
+    // and adding a per-player note query to the live refresh path is a cost
+    // this doesn't justify.
+    const hasWrittenInfo =
+      (player.descriptions?.length ?? 0) > 0 ||
+      Boolean(
+        classification &&
+          classification.available &&
+          (classification.isOverride || classification.classification !== "unknown"),
+      );
 
-  if (isOnTableCard) {
     return (
       <div
-        className={`${styles.badgeCard} ${styles[profile.visualModel] ?? ""} ${styles.draggable}`}
-        // Two-tone —
-        // outer ring reads stack depth (badgeStackColor, the same
-        // red/blue/green tiers `.bbShort`/`.bbMedium`/`.bbDeep` use for the
-        // full card's stack row), center circle reads classification/profile
-        // type (the same `color` the full card's ring used before this
-        // badge existed).
-        style={{
-          ["--bb-color" as string]: badgeStackColor(player.snapshot?.stackBb),
-          ["--profile-color" as string]: color,
-        }}
+        className={`${styles.badgeCard} ${dragHandleProps ? styles.draggable : ""}`}
         {...dragHandleProps}
       >
         <button
           type="button"
           ref={contentRef}
-          className={styles.badge}
-          // No `stopPropagation` here, unlike the full
-          // card's content button below — the badge IS the whole drag
-          // surface (there's no separate ring/padding area outside it to
-          // grab, the way the full card has), so the wrapper's
-          // `dragHandleProps.onPointerDown` must see this press to record it.
-          // That's now safe to let through without swallowing this button's
-          // own click: `OverlayApp.tsx` defers pointer capture until real
+          className={`${styles.badge} ${hasWrittenInfo ? styles.badgeHasInfo : ""}`}
+          // No `stopPropagation`, unlike the full card's content button
+          // below: the pill IS the whole drag surface, so the wrapper's
+          // `dragHandleProps.onPointerDown` must see this press. That stays
+          // safe because `OverlayApp.tsx` defers pointer capture until real
           // movement crosses a threshold, so a plain tap never captures and
-          // this native `click` still fires normally.
+          // this button's own click still fires.
           onClick={() => onOpenDetail?.(player)}
           aria-label={`Open detailed stats for ${player.name}`}
           title={player.name}
         >
-          <span className={styles.badgeInner}>
-            <span className={styles.badgeName}>{initials}</span>
-            <span className={styles.badgeHands}>{player.hands}</span>
-          </span>
+          <span className={styles.badgeName}>{initials}</span>
+          <span className={styles.badgeHands}>{player.hands}</span>
         </button>
       </div>
     );

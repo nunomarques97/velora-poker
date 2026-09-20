@@ -150,7 +150,12 @@ export interface StatPage {
   statKeys: (keyof PlayerStats)[];
 }
 
-export type HudVisualModel = "velora_hud" | "velora_classic" | "minimal" | "jivaro";
+export type HudVisualModel =
+  | "velora_hud"
+  | "velora_classic"
+  | "minimal"
+  | "jivaro"
+  | "badge";
 
 export interface HudProfile {
   id: string;
