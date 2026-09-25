@@ -30,8 +30,23 @@ const OTHER_ROOMS = ["GGPoker", "888poker", "partypoker", "iPoker"];
 const SKIP_COSTS = {
   folder: "Velora won't see a single hand.",
   language: "Hands may be misread silently.",
-  autoCenter: "HUD cards may appear in the wrong seats.",
+  autoCenter:
+    "Cards are placed by PokerStars seat number; if Auto-Center is on in PokerStars, they land on the wrong seats.",
 } as const;
+
+// The default HUD profile, preselected so the model step is one click.
+const RECOMMENDED_PROFILE_ID = "compact";
+
+// One line per model, the same wording as the HUD Profiles view.
+const MODEL_DESCRIPTIONS: Record<HudProfile["visualModel"], string> = {
+  compact: "One line per player: VPIP / PFR / 3-bet and hands. Readable on the smallest table.",
+  badge: "Initials and hands only, the smallest footprint. Click a badge for the stats.",
+};
+
+// What the Auto-Center answer changes. Written once for the readiness item;
+// Settings says the same thing next to its checkbox.
+const AUTO_CENTER_EFFECT =
+  "This tells Velora how PokerStars draws the seats: with Auto-Center you are always at the bottom and cards follow seats relative to you; without it they follow PokerStars' seat numbers. Nothing to calibrate, table by table or otherwise.";
 
 // The exact PokerStars step that turns on Auto-Center, pulled from the same
 // data pokerStarsTutorial.ts already exports for step 2 — never re-typed.
@@ -152,7 +167,9 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
   const [detecting, setDetecting] = useState(false);
 
   const [profiles, setProfiles] = useState<HudProfile[]>([]);
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  // Preselected before the list arrives, so Continue works with one click
+  // and still works if the list can't be read (the backend default is the same).
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(RECOMMENDED_PROFILE_ID);
 
   const [savingConfig, setSavingConfig] = useState(false);
   const [finishing, setFinishing] = useState(false);
@@ -182,7 +199,9 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
       getHudProfiles()
         .then((all) => {
           setProfiles(all);
-          setSelectedProfileId(all[0]?.id ?? null);
+          setSelectedProfileId((current) =>
+            all.some((p) => p.id === current) ? current : (all[0]?.id ?? null),
+          );
         })
         .catch(() => undefined);
     }
@@ -466,7 +485,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
         {step === 3 && (
           <div className={styles.stepBody}>
             <h1 className={styles.title}>Choose your HUD</h1>
-            <div className={styles.hudList}>
+            <div className={styles.hudList} role="group" aria-label="HUD model">
               {profiles.map((p) => (
                 <button
                   key={p.id}
@@ -474,12 +493,25 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                   className={`${styles.hudButton} ${
                     selectedProfileId === p.id ? styles.hudButtonActive : ""
                   }`}
+                  aria-pressed={selectedProfileId === p.id}
                   onClick={() => setSelectedProfileId(p.id)}
                 >
-                  {p.name}
+                  <span className={styles.hudButtonHead}>
+                    {p.name}
+                    {p.id === RECOMMENDED_PROFILE_ID && (
+                      <span className={styles.recommendedTag}>Recommended</span>
+                    )}
+                  </span>
+                  <span className={styles.hudButtonDescription}>
+                    {MODEL_DESCRIPTIONS[p.visualModel] ?? MODEL_DESCRIPTIONS.compact}
+                  </span>
                 </button>
               ))}
             </div>
+            <p className={styles.hudNote}>
+              You can switch later in HUD Profiles. Cards start on each seat by themselves; drag one
+              on the table to move it for every table of that size.
+            </p>
             <div className={styles.footer}>
               <button type="button" className={styles.linkButton} onClick={() => setStep(2)}>
                 Back
@@ -568,6 +600,7 @@ export function OnboardingFlow({ onComplete }: OnboardingFlowProps) {
                   onSkip={() => setSkipped((s) => ({ ...s, autoCenter: true }))}
                   onUndoSkip={() => setSkipped((s) => ({ ...s, autoCenter: false }))}
                 >
+                  <div className={styles.readinessDetailNote}>{AUTO_CENTER_EFFECT}</div>
                   {autoCenterOk ? (
                     <div className={styles.readinessDetailNote}>Auto-Center is on.</div>
                   ) : autoCenterStatus === "checking" ? (

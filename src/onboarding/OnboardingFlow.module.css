@@ -332,6 +332,37 @@
   color: var(--accent-strong);
 }
 
+.hudButtonHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.recommendedTag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--positive-soft);
+  color: var(--positive);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.hudButtonDescription {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.hudNote {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
 .readyText {
   font-size: 13.5px;
   color: var(--text-secondary);

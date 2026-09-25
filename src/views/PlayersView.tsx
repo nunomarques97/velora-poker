@@ -12,7 +12,7 @@ function formatPct(value: number | null): string {
 
 /**
  * The archetype this row is allowed to show, or `null` when there is none to
- * show. Same gate as `JivaroHudCard`'s `tint` and `PlayerHudCard`'s label, for
+ * show. Same gate as `PlayerHudCard`'s player colour, for
  * the same two reasons:
  * - `available: false` — this build has no automatic classifier and the player
  *   has no manual override, so the backend's label is the build-level sentence

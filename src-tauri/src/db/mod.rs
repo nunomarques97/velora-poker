@@ -157,6 +157,25 @@ fn init_schema(conn: &Connection) -> rusqlite::Result<()> {
             PRIMARY KEY (max_players, seat_offset)
         );
 
+        -- One saved HUD chip position per seat, shared by every table of the
+        -- same size. `frame` says what `seat_key` counts: 'hero' is the
+        -- seat's offset from the hero (PokerStars "Auto-Center me" on, so the
+        -- hero is the fixed screen anchor); 'absolute' is PokerStars' own
+        -- seat number. `x`/`y` are the chip's *centre* as fractions (0..1) of
+        -- the overlay window. Only positions a user dragged live here: the
+        -- defaults are computed by the frontend's layout engine, so a better
+        -- default reaches every seat the user never moved. `seat_templates`
+        -- and `hud_positions` above are kept as an unread backup.
+        CREATE TABLE IF NOT EXISTS seat_positions (
+            max_players INTEGER NOT NULL,
+            frame TEXT NOT NULL CHECK (frame IN ('hero', 'absolute')),
+            seat_key INTEGER NOT NULL,
+            x REAL NOT NULL,
+            y REAL NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY (max_players, frame, seat_key)
+        );
+
         -- Import-time integrity findings. One row
         -- per (hand, check) so a re-import of the same file replaces rather than
         -- accumulates. A rejected hand has no `hands` row, so this table is the
@@ -193,6 +212,7 @@ fn migrate_schema(conn: &Connection) -> rusqlite::Result<()> {
     migrate_hud_positions_to_relative(conn)?;
     migrate_seat_templates_to_hero_relative(conn)?;
     clamp_stored_positions(conn)?;
+    migrate_seat_templates_to_seat_positions(conn)?;
     repair_ingestion_integrity(conn)?;
     Ok(())
 }
@@ -432,6 +452,88 @@ fn migrate_seat_templates_to_hero_relative(conn: &Connection) -> rusqlite::Resul
     Ok(())
 }
 
+/// Settings flag of `migrate_seat_templates_to_seat_positions`.
+pub const SEAT_POSITIONS_MIGRATION_FLAG: &str = "seat_templates_copied_to_seat_positions";
+
+/// Nominal size, in CSS pixels, of the chip a legacy `seat_templates` row was
+/// anchored by: the Badge pill (22px high, `PlayerHudCard.module.css`
+/// `.badge`; about 60px wide for two initials and a hand count), the default
+/// model when positions were last saved that way. Nominal, not measured per
+/// row: the old rows kept only a top-left fraction, never the size of the
+/// card that was dragged.
+pub const LEGACY_CHIP_WIDTH_PX: f64 = 60.0;
+pub const LEGACY_CHIP_HEIGHT_PX: f64 = 22.0;
+
+/// Nominal overlay window, in CSS pixels, used to turn the half-chip offset
+/// above into a fraction: PokerStars' default table window, about 800x570.
+pub const NOMINAL_TABLE_WIDTH_PX: f64 = 800.0;
+pub const NOMINAL_TABLE_HEIGHT_PX: f64 = 570.0;
+
+/// Converts a legacy top-left anchor into the chip-centre anchor
+/// `seat_positions` stores, clamped into the window.
+pub fn legacy_top_left_to_centre(x: f64, y: f64) -> (f64, f64) {
+    (
+        clamp_centre(x + LEGACY_CHIP_WIDTH_PX / 2.0 / NOMINAL_TABLE_WIDTH_PX),
+        clamp_centre(y + LEGACY_CHIP_HEIGHT_PX / 2.0 / NOMINAL_TABLE_HEIGHT_PX),
+    )
+}
+
+/// The value the old seeding wrote for one hero-relative seat: the measured
+/// 6-max row, or the derived ellipse for every other size from 2 to 10.
+/// `None` for a seat that was never seeded.
+pub fn legacy_seeded_seat_template(max_players: i64, seat_offset: i64) -> Option<(f64, f64)> {
+    if max_players == 6 {
+        return BUILTIN_SEAT_TEMPLATES
+            .iter()
+            .find(|(_, offset, _, _)| *offset == seat_offset)
+            .map(|&(_, _, x, y)| (x, y));
+    }
+    if (2..=10).contains(&max_players) && (0..max_players).contains(&seat_offset) {
+        return Some(ellipse_seat_template(max_players, seat_offset));
+    }
+    None
+}
+
+/// Rows within this distance (per axis) of the old seeded value are the
+/// untouched default, not a user's drag.
+const SEEDED_TOLERANCE: f64 = 1e-6;
+
+/// Carries the seats a user actually dragged under the old `seat_templates`
+/// model into `seat_positions` (frame 'hero', since that table was keyed by
+/// hero-relative offset), converting each from a top-left to a centre anchor.
+/// Rows still equal to the old seeded value are skipped, so those seats pick
+/// up the new computed defaults. `seat_templates` itself is left intact as a
+/// backup. Runs once (settings flag), so a later reset is never undone by a
+/// restart; `INSERT OR IGNORE` never overwrites a row already there.
+fn migrate_seat_templates_to_seat_positions(conn: &Connection) -> rusqlite::Result<()> {
+    if get_setting(conn, SEAT_POSITIONS_MIGRATION_FLAG)?.is_some() {
+        return Ok(());
+    }
+    let legacy: Vec<(i64, i64, f64, f64)> = {
+        let mut stmt = conn.prepare("SELECT max_players, seat_offset, x, y FROM seat_templates")?;
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        rows
+    };
+    for (max_players, seat_offset, x, y) in legacy {
+        let is_seeded = legacy_seeded_seat_template(max_players, seat_offset)
+            .map(|(sx, sy)| (x - sx).abs() <= SEEDED_TOLERANCE && (y - sy).abs() <= SEEDED_TOLERANCE)
+            .unwrap_or(false);
+        if is_seeded || validate_seat_key(max_players, SeatFrame::Hero, seat_offset).is_err() {
+            continue;
+        }
+        let (cx, cy) = legacy_top_left_to_centre(x, y);
+        conn.execute(
+            "INSERT OR IGNORE INTO seat_positions (max_players, frame, seat_key, x, y, updated_at)
+             VALUES (?1, 'hero', ?2, ?3, ?4, ?5)",
+            params![max_players, seat_offset, cx, cy, now_iso()],
+        )?;
+    }
+    set_setting(conn, SEAT_POSITIONS_MIGRATION_FLAG, "true")?;
+    Ok(())
+}
+
 /// The 6-max card layout a brand-new database starts with, as
 /// `(max_players, seat_offset, x, y)` — hero-relative seat offsets and
 /// fractions of the overlay window, exactly like any row the user drags into
@@ -536,11 +638,9 @@ fn ellipse_seat_template(max_players: i64, seat_offset: i64) -> (f64, f64) {
 /// by the measured table above, and `INSERT OR IGNORE` would just discard the
 /// ellipse version anyway.
 ///
-/// Depends on running *after* `migrate_schema`, which `open` guarantees:
-/// `migrate_seat_templates_to_hero_relative` clears `seat_templates` exactly
-/// once on a database that has never been migrated — including a brand-new
-/// one — and seeding before that would hand every fresh install an empty
-/// table again.
+/// No longer called by `seed_defaults`: `seat_positions` replaced this table.
+/// Kept for tests that reproduce a database the old seeding produced.
+#[cfg(test)]
 fn seed_builtin_seat_templates(conn: &Connection) -> rusqlite::Result<()> {
     for (max_players, seat_offset, x, y) in BUILTIN_SEAT_TEMPLATES {
         conn.execute(
@@ -566,14 +666,14 @@ fn seed_builtin_seat_templates(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-/// Seeds built-in classification rules, HUD profiles and seat templates the
-/// first time a database is opened. Uses fixed ids and `INSERT OR IGNORE` so
+/// Seeds built-in classification rules and HUD profiles the first time a
+/// database is opened. Seat layouts are not seeded: defaults are computed by
+/// the frontend and only a user's drags are stored (`seat_positions`). Uses fixed ids and `INSERT OR IGNORE` so
 /// it never overwrites a user's own edits to these rows, and is safe to call
 /// on every startup.
 pub fn seed_defaults(conn: &Connection) -> rusqlite::Result<()> {
     crate::classification::seed_builtin_rules(conn)?;
     crate::hud::seed_builtin_profiles(conn)?;
-    seed_builtin_seat_templates(conn)?;
     Ok(())
 }
 
@@ -1218,6 +1318,7 @@ pub fn clear_player_color_override(conn: &Connection, player_id: i64) -> rusqlit
     Ok(())
 }
 
+#[cfg(test)]
 pub fn get_hud_position(conn: &Connection, player_id: i64) -> rusqlite::Result<Option<(f64, f64)>> {
     conn.query_row(
         "SELECT x, y FROM hud_positions WHERE player_id = ?1",
@@ -1240,6 +1341,7 @@ pub fn get_hud_position(conn: &Connection, player_id: i64) -> rusqlite::Result<O
 ///
 /// `NaN` clamps to 0.0 rather than propagating: `f64::clamp` panics on a NaN
 /// bound and `min`/`max` would carry it into the database.
+#[cfg(test)]
 fn clamp_fraction(value: f64) -> f64 {
     if value.is_nan() {
         0.0
@@ -1248,6 +1350,7 @@ fn clamp_fraction(value: f64) -> f64 {
     }
 }
 
+#[cfg(test)]
 pub fn set_hud_position(conn: &Connection, player_id: i64, x: f64, y: f64) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO hud_positions (player_id, x, y, updated_at) VALUES (?1, ?2, ?3, ?4)
@@ -1257,6 +1360,7 @@ pub fn set_hud_position(conn: &Connection, player_id: i64, x: f64, y: f64) -> ru
     Ok(())
 }
 
+#[cfg(test)]
 #[derive(Debug)]
 pub struct SeatTemplateRow {
     pub seat_offset: i64,
@@ -1269,6 +1373,7 @@ pub struct SeatTemplateRow {
 /// max-players count and reused automatically on every future table of that
 /// size. See `relative_seat` for why the key is an offset and not
 /// PokerStars' absolute seat number.
+#[cfg(test)]
 pub fn get_seat_template(
     conn: &Connection,
     max_players: i64,
@@ -1282,6 +1387,7 @@ pub fn get_seat_template(
     .optional()
 }
 
+#[cfg(test)]
 pub fn list_seat_templates(
     conn: &Connection,
     max_players: i64,
@@ -1301,6 +1407,7 @@ pub fn list_seat_templates(
     Ok(rows)
 }
 
+#[cfg(test)]
 pub fn set_seat_template(
     conn: &Connection,
     max_players: i64,
@@ -1320,6 +1427,132 @@ pub fn set_seat_template(
         ],
     )?;
     Ok(())
+}
+
+/// What a `seat_positions.seat_key` counts — see the table in `init_schema`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SeatFrame {
+    /// Offset from the hero's seat (0 = hero), PokerStars "Auto-Center me" on.
+    Hero,
+    /// PokerStars' own seat number, 1-based.
+    Absolute,
+}
+
+impl SeatFrame {
+    /// Accepts exactly the two stored values; anything else is an error.
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "hero" => Ok(SeatFrame::Hero),
+            "absolute" => Ok(SeatFrame::Absolute),
+            other => Err(format!("invalid seat frame '{other}': expected 'hero' or 'absolute'")),
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SeatFrame::Hero => "hero",
+            SeatFrame::Absolute => "absolute",
+        }
+    }
+}
+
+/// Largest table PokerStars deals.
+pub const MAX_TABLE_SIZE: i64 = 10;
+
+/// Checks that a seat key can exist at a table of `max_players` in `frame`:
+/// hero offsets run 0..max_players, PokerStars seat numbers 1..=max_players.
+pub fn validate_seat_key(max_players: i64, frame: SeatFrame, seat_key: i64) -> Result<(), String> {
+    if !(2..=MAX_TABLE_SIZE).contains(&max_players) {
+        return Err(format!("invalid table size {max_players}: expected 2..={MAX_TABLE_SIZE}"));
+    }
+    let valid = match frame {
+        SeatFrame::Hero => (0..max_players).contains(&seat_key),
+        SeatFrame::Absolute => (1..=max_players).contains(&seat_key),
+    };
+    if valid {
+        Ok(())
+    } else {
+        Err(format!(
+            "invalid seat {seat_key} for a {max_players}-max table in the '{}' frame",
+            frame.as_str()
+        ))
+    }
+}
+
+/// A chip centre forced into the window. Unlike `clamp_fraction`, `NaN` goes
+/// to the middle (0.5): a centre at 0.0 would leave half the chip off-screen.
+pub fn clamp_centre(value: f64) -> f64 {
+    if value.is_nan() {
+        0.5
+    } else {
+        value.clamp(0.0, 1.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SeatPositionRow {
+    pub seat_key: i64,
+    pub x: f64,
+    pub y: f64,
+}
+
+/// Every saved chip centre for one table size in one frame, by seat key.
+pub fn list_seat_positions(
+    conn: &Connection,
+    max_players: i64,
+    frame: SeatFrame,
+) -> rusqlite::Result<Vec<SeatPositionRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT seat_key, x, y FROM seat_positions WHERE max_players = ?1 AND frame = ?2 ORDER BY seat_key ASC",
+    )?;
+    let rows = stmt
+        .query_map(params![max_players, frame.as_str()], |row| {
+            Ok(SeatPositionRow {
+                seat_key: row.get(0)?,
+                x: row.get(1)?,
+                y: row.get(2)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// Saves one seat's chip centre for every table of `max_players` in `frame`.
+/// The seat key is validated before anything is written; `x`/`y` are clamped
+/// into the window (`NaN` to its middle), because a drag can end past an edge.
+pub fn set_seat_position(
+    conn: &Connection,
+    max_players: i64,
+    frame: SeatFrame,
+    seat_key: i64,
+    x: f64,
+    y: f64,
+) -> Result<(), String> {
+    validate_seat_key(max_players, frame, seat_key)?;
+    conn.execute(
+        "INSERT INTO seat_positions (max_players, frame, seat_key, x, y, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+         ON CONFLICT(max_players, frame, seat_key) DO UPDATE SET x = excluded.x, y = excluded.y, updated_at = excluded.updated_at",
+        params![
+            max_players,
+            frame.as_str(),
+            seat_key,
+            clamp_centre(x),
+            clamp_centre(y),
+            now_iso()
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Deletes saved chip positions in both frames, for one table size or, when
+/// `max_players` is `None`, for every size. Those seats fall back to the
+/// computed defaults. Returns how many rows were removed.
+pub fn reset_seat_positions(conn: &Connection, max_players: Option<i64>) -> rusqlite::Result<usize> {
+    match max_players {
+        Some(size) => conn.execute("DELETE FROM seat_positions WHERE max_players = ?1", params![size]),
+        None => conn.execute("DELETE FROM seat_positions", []),
+    }
 }
 
 #[cfg(test)]
@@ -1460,18 +1693,237 @@ mod tests {
     }
 
     #[test]
-    fn opening_a_brand_new_database_leaves_the_builtin_layout_in_place() {
-        // Ordering regression: `migrate_seat_templates_to_hero_relative`
-        // clears `seat_templates` once on any database that has never been
-        // migrated, a brand-new one included. If seeding ever moved ahead of
-        // the migrations, every fresh install would silently get the empty
-        // table this feature replaced — and the unit tests above, which seed
-        // a bare schema directly, would all still pass.
+    fn opening_a_brand_new_database_stores_no_seat_layout_at_all() {
+        // Defaults are computed by the frontend now, so a fresh install
+        // stores nothing: neither the legacy table nor the new one.
         let dir = tempfile::tempdir().expect("temp dir");
         let conn = open(&dir.path().join("velora.db")).unwrap();
 
-        assert_eq!(list_seat_templates(&conn, 6).unwrap().len(), 6);
-        assert_eq!(get_seat_template(&conn, 6, 0).unwrap(), Some((0.38025864, 0.68320590)));
+        assert_eq!(list_seat_templates(&conn, 6).unwrap().len(), 0);
+        assert_eq!(list_seat_positions(&conn, 6, SeatFrame::Hero).unwrap(), vec![]);
+        assert_eq!(get_setting(&conn, SEAT_POSITIONS_MIGRATION_FLAG).unwrap().as_deref(), Some("true"));
+    }
+
+    /// A database as the old code left it: every table size seeded, then
+    /// migrated (flags set), before `seat_positions` existed.
+    fn legacy_seeded_conn() -> Connection {
+        let conn = test_conn();
+        set_setting(&conn, HUD_POSITIONS_RELATIVE_MIGRATION_FLAG, "true").unwrap();
+        set_setting(&conn, SEAT_TEMPLATES_HERO_RELATIVE_MIGRATION_FLAG, "true").unwrap();
+        seed_builtin_seat_templates(&conn).unwrap();
+        conn
+    }
+
+    fn count(conn: &Connection, table: &str) -> i64 {
+        conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| row.get(0))
+            .unwrap()
+    }
+
+    #[test]
+    fn migration_copies_only_the_seats_a_user_dragged_as_centres() {
+        let conn = legacy_seeded_conn();
+        // Two real drags, one on the measured 6-max layout and one on a
+        // derived 9-max seat; one value within 1e-6 of the seed, which is
+        // still the untouched default.
+        set_seat_template(&conn, 6, 2, 0.10, 0.30).unwrap();
+        set_seat_template(&conn, 9, 4, 0.50, 0.05).unwrap();
+        let (sx, sy) = legacy_seeded_seat_template(6, 3).unwrap();
+        set_seat_template(&conn, 6, 3, sx + 5e-7, sy - 5e-7).unwrap();
+        let legacy_rows_before = count(&conn, "seat_templates");
+
+        migrate_seat_templates_to_seat_positions(&conn).unwrap();
+
+        let dx = LEGACY_CHIP_WIDTH_PX / 2.0 / NOMINAL_TABLE_WIDTH_PX;
+        let dy = LEGACY_CHIP_HEIGHT_PX / 2.0 / NOMINAL_TABLE_HEIGHT_PX;
+        let six = list_seat_positions(&conn, 6, SeatFrame::Hero).unwrap();
+        assert_eq!(six.len(), 1, "only the dragged 6-max seat is copied: {six:?}");
+        assert_eq!(six[0].seat_key, 2);
+        assert!((six[0].x - (0.10 + dx)).abs() < 1e-12 && (six[0].y - (0.30 + dy)).abs() < 1e-12);
+
+        let nine = list_seat_positions(&conn, 9, SeatFrame::Hero).unwrap();
+        assert_eq!(nine.len(), 1, "{nine:?}");
+        assert_eq!(nine[0].seat_key, 4);
+        assert!((nine[0].x - (0.50 + dx)).abs() < 1e-12 && (nine[0].y - (0.05 + dy)).abs() < 1e-12);
+
+        assert_eq!(count(&conn, "seat_positions"), 2, "no other size gains a row");
+        assert_eq!(
+            list_seat_positions(&conn, 6, SeatFrame::Absolute).unwrap(),
+            vec![],
+            "legacy rows were hero-relative and only land in the hero frame"
+        );
+        // The backup is left exactly as it was.
+        assert_eq!(count(&conn, "seat_templates"), legacy_rows_before);
+        assert_eq!(get_seat_template(&conn, 6, 2).unwrap(), Some((0.10, 0.30)));
+    }
+
+    #[test]
+    fn migration_clamps_a_converted_centre_into_the_window() {
+        let conn = legacy_seeded_conn();
+        set_seat_template(&conn, 6, 5, 1.0, 1.0).unwrap();
+
+        migrate_seat_templates_to_seat_positions(&conn).unwrap();
+
+        let rows = list_seat_positions(&conn, 6, SeatFrame::Hero).unwrap();
+        assert_eq!(rows, vec![SeatPositionRow { seat_key: 5, x: 1.0, y: 1.0 }]);
+    }
+
+    #[test]
+    fn a_database_that_only_has_the_seeded_layout_migrates_to_nothing() {
+        let conn = legacy_seeded_conn();
+        migrate_seat_templates_to_seat_positions(&conn).unwrap();
+        assert_eq!(count(&conn, "seat_positions"), 0);
+    }
+
+    #[test]
+    fn running_the_seat_positions_migration_twice_changes_nothing() {
+        let conn = legacy_seeded_conn();
+        set_seat_template(&conn, 6, 1, 0.2, 0.4).unwrap();
+        migrate_seat_templates_to_seat_positions(&conn).unwrap();
+        let first = list_seat_positions(&conn, 6, SeatFrame::Hero).unwrap();
+
+        // A later drag and a reset must both survive a second pass: the flag
+        // stops the copy from resurrecting reset seats or overwriting drags.
+        set_seat_position(&conn, 6, SeatFrame::Hero, 1, 0.7, 0.7).unwrap();
+        migrate_seat_templates_to_seat_positions(&conn).unwrap();
+        assert_eq!(
+            list_seat_positions(&conn, 6, SeatFrame::Hero).unwrap(),
+            vec![SeatPositionRow { seat_key: 1, x: 0.7, y: 0.7 }]
+        );
+        reset_seat_positions(&conn, None).unwrap();
+        migrate_seat_templates_to_seat_positions(&conn).unwrap();
+        assert_eq!(count(&conn, "seat_positions"), 0);
+        assert_eq!(first.len(), 1);
+    }
+
+    #[test]
+    fn the_seeded_value_lookup_matches_the_old_seeding() {
+        let conn = legacy_seeded_conn();
+        for max_players in 2..=10i64 {
+            for row in list_seat_templates(&conn, max_players).unwrap() {
+                assert_eq!(
+                    legacy_seeded_seat_template(max_players, row.seat_offset),
+                    Some((row.x, row.y)),
+                    "{max_players}-max offset {}",
+                    row.seat_offset
+                );
+            }
+        }
+        assert_eq!(legacy_seeded_seat_template(6, 6), None);
+        assert_eq!(legacy_seeded_seat_template(11, 0), None);
+    }
+
+    #[test]
+    fn a_seat_position_is_scoped_by_size_frame_and_seat() {
+        let conn = test_conn();
+        set_seat_position(&conn, 6, SeatFrame::Hero, 1, 0.1, 0.2).unwrap();
+        set_seat_position(&conn, 6, SeatFrame::Absolute, 1, 0.3, 0.4).unwrap();
+        set_seat_position(&conn, 9, SeatFrame::Hero, 1, 0.5, 0.6).unwrap();
+        set_seat_position(&conn, 6, SeatFrame::Hero, 2, 0.7, 0.8).unwrap();
+
+        assert_eq!(
+            list_seat_positions(&conn, 6, SeatFrame::Hero).unwrap(),
+            vec![
+                SeatPositionRow { seat_key: 1, x: 0.1, y: 0.2 },
+                SeatPositionRow { seat_key: 2, x: 0.7, y: 0.8 },
+            ]
+        );
+        assert_eq!(
+            list_seat_positions(&conn, 6, SeatFrame::Absolute).unwrap(),
+            vec![SeatPositionRow { seat_key: 1, x: 0.3, y: 0.4 }]
+        );
+        assert_eq!(
+            list_seat_positions(&conn, 9, SeatFrame::Hero).unwrap(),
+            vec![SeatPositionRow { seat_key: 1, x: 0.5, y: 0.6 }]
+        );
+        assert_eq!(list_seat_positions(&conn, 9, SeatFrame::Absolute).unwrap(), vec![]);
+
+        // Saving again overwrites that one key in place.
+        set_seat_position(&conn, 6, SeatFrame::Hero, 1, 0.15, 0.25).unwrap();
+        assert_eq!(
+            list_seat_positions(&conn, 6, SeatFrame::Hero).unwrap()[0],
+            SeatPositionRow { seat_key: 1, x: 0.15, y: 0.25 }
+        );
+        assert_eq!(count(&conn, "seat_positions"), 4);
+    }
+
+    #[test]
+    fn a_saved_seat_position_is_clamped_into_the_window_nan_included() {
+        let conn = test_conn();
+        set_seat_position(&conn, 6, SeatFrame::Hero, 0, 1.4, -2.0).unwrap();
+        set_seat_position(&conn, 6, SeatFrame::Hero, 1, f64::NAN, f64::INFINITY).unwrap();
+        set_seat_position(&conn, 6, SeatFrame::Hero, 2, f64::NEG_INFINITY, f64::NAN).unwrap();
+
+        assert_eq!(
+            list_seat_positions(&conn, 6, SeatFrame::Hero).unwrap(),
+            vec![
+                SeatPositionRow { seat_key: 0, x: 1.0, y: 0.0 },
+                SeatPositionRow { seat_key: 1, x: 0.5, y: 1.0 },
+                SeatPositionRow { seat_key: 2, x: 0.0, y: 0.5 },
+            ]
+        );
+    }
+
+    #[test]
+    fn invalid_frames_sizes_and_seats_are_rejected_before_writing() {
+        let conn = test_conn();
+        assert_eq!(SeatFrame::parse("hero"), Ok(SeatFrame::Hero));
+        assert_eq!(SeatFrame::parse("absolute"), Ok(SeatFrame::Absolute));
+        for bad in ["", "Hero", "absolute ", "offset", "hero' OR 1=1 --"] {
+            assert!(SeatFrame::parse(bad).is_err(), "{bad:?} must be rejected");
+        }
+
+        assert!(set_seat_position(&conn, 1, SeatFrame::Hero, 0, 0.5, 0.5).is_err());
+        assert!(set_seat_position(&conn, 11, SeatFrame::Hero, 0, 0.5, 0.5).is_err());
+        assert!(set_seat_position(&conn, 6, SeatFrame::Hero, 6, 0.5, 0.5).is_err());
+        assert!(set_seat_position(&conn, 6, SeatFrame::Hero, -1, 0.5, 0.5).is_err());
+        assert!(set_seat_position(&conn, 6, SeatFrame::Absolute, 0, 0.5, 0.5).is_err());
+        assert!(set_seat_position(&conn, 6, SeatFrame::Absolute, 7, 0.5, 0.5).is_err());
+        assert_eq!(count(&conn, "seat_positions"), 0, "a rejected save writes nothing");
+
+        // The boundaries themselves are valid.
+        set_seat_position(&conn, 6, SeatFrame::Hero, 5, 0.5, 0.5).unwrap();
+        set_seat_position(&conn, 6, SeatFrame::Absolute, 6, 0.5, 0.5).unwrap();
+        set_seat_position(&conn, 10, SeatFrame::Absolute, 1, 0.5, 0.5).unwrap();
+        set_seat_position(&conn, 2, SeatFrame::Hero, 0, 0.5, 0.5).unwrap();
+
+        // Defence in depth: the table itself refuses any other frame.
+        assert!(conn
+            .execute(
+                "INSERT INTO seat_positions (max_players, frame, seat_key, x, y, updated_at)
+                 VALUES (6, 'offset', 1, 0.5, 0.5, 'x')",
+                [],
+            )
+            .is_err());
+    }
+
+    #[test]
+    fn reset_clears_one_size_in_both_frames_or_every_size() {
+        let conn = test_conn();
+        set_seat_position(&conn, 6, SeatFrame::Hero, 1, 0.1, 0.1).unwrap();
+        set_seat_position(&conn, 6, SeatFrame::Absolute, 2, 0.2, 0.2).unwrap();
+        set_seat_position(&conn, 9, SeatFrame::Hero, 1, 0.3, 0.3).unwrap();
+        set_seat_position(&conn, 9, SeatFrame::Absolute, 3, 0.4, 0.4).unwrap();
+
+        assert_eq!(reset_seat_positions(&conn, Some(6)).unwrap(), 2);
+        assert_eq!(list_seat_positions(&conn, 6, SeatFrame::Hero).unwrap(), vec![]);
+        assert_eq!(list_seat_positions(&conn, 6, SeatFrame::Absolute).unwrap(), vec![]);
+        assert_eq!(list_seat_positions(&conn, 9, SeatFrame::Hero).unwrap().len(), 1);
+        assert_eq!(list_seat_positions(&conn, 9, SeatFrame::Absolute).unwrap().len(), 1);
+
+        assert_eq!(reset_seat_positions(&conn, Some(4)).unwrap(), 0, "an empty size is a no-op");
+        assert_eq!(reset_seat_positions(&conn, None).unwrap(), 2);
+        assert_eq!(count(&conn, "seat_positions"), 0);
+    }
+
+    #[test]
+    fn schema_setup_is_idempotent_for_seat_positions() {
+        let conn = test_conn();
+        set_seat_position(&conn, 6, SeatFrame::Hero, 1, 0.1, 0.1).unwrap();
+        init_schema(&conn).unwrap();
+        migrate_schema(&conn).unwrap();
+        init_schema(&conn).unwrap();
+        migrate_schema(&conn).unwrap();
+        assert_eq!(count(&conn, "seat_positions"), 1);
     }
 
     fn insert_player(conn: &Connection, name: &str) -> i64 {

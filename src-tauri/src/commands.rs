@@ -8,7 +8,7 @@ use crate::db;
 use crate::description_rules::{self, RuleResult};
 use crate::hud::{self, HudProfile};
 use crate::import;
-use crate::overlay::{self, HotZone, OverlayMode};
+use crate::overlay::{self, HotZone};
 use crate::parser::{HandHistoryParser, PokerStarsParser};
 use crate::sessions::{self, SessionSummary, SessionsTodaySummary};
 use crate::settings::{self, DetectedDir, DirValidation};
@@ -970,14 +970,6 @@ pub fn set_hud_profile_min_hands(
 // HUD overlay window + positions
 // ---------------------------------------------------------------------
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct HudPositionPayload {
-    pub player_id: String,
-    pub x: f64,
-    pub y: f64,
-}
-
 /// Live state of the HUD overlays as a whole: the global kill switch,
 /// and every table currently tracked with whether its own overlay window is up.
 #[derive(Debug, Serialize)]
@@ -1077,65 +1069,10 @@ pub fn is_overlay_dismissed(table_id: u32) -> bool {
     overlay::manager::is_dismissed(table_id)
 }
 
-/// Switches one table's overlay between its table-interactive default and
-/// reposition mode. Replaces the old `set_overlay_click_through`, whose
-/// single window-wide flag could not express "the table is clickable *and* so
-/// are the overlay's own controls" — see `overlay::hittest`.
-#[tauri::command]
-pub fn set_overlay_mode(
-    app_handle: tauri::AppHandle,
-    table_id: u32,
-    mode: OverlayMode,
-) -> Result<(), String> {
-    overlay::set_mode(&app_handle, table_id, mode)
-}
-
-/// Puts *every* overlay in one mode — the main window's single Reposition
-/// control, which has no one table to act on. Reports the first failure but
-/// only after trying them all: leaving half the tables in reposition mode is
-/// the state that stops clicks reaching a real-money table.
-#[tauri::command]
-pub fn set_all_overlay_modes(
-    app_handle: tauri::AppHandle,
-    mode: OverlayMode,
-) -> Result<(), String> {
-    let mut first_error = None;
-    for table in table_track::tracked_tables() {
-        // A table with no overlay right now — dismissed, or the HUDs are
-        // switched off — is skipped, not an error. Reporting one would fail the
-        // whole call and leave the button's label describing a mode change that
-        // did happen on every table that has an overlay.
-        if !overlay::is_open(&app_handle, table.id) {
-            continue;
-        }
-        if let Err(err) = overlay::set_mode(&app_handle, table.id, mode) {
-            first_error.get_or_insert(err);
-        }
-    }
-    match first_error {
-        Some(err) => Err(err),
-        None => Ok(()),
-    }
-}
-
-/// One table's overlay interaction mode, read from the native hit-test state
-/// rather than any window's React flag — this is what a freshly mounted
-/// overlay seeds itself from.
-#[tauri::command]
-pub fn get_overlay_mode(table_id: u32) -> OverlayMode {
-    overlay::current_mode(table_id)
-}
-
-/// `reposition` if any overlay is repositioning — what the main window's
-/// single control for every table reads its label from.
-#[tauri::command]
-pub fn get_any_overlay_mode() -> OverlayMode {
-    overlay::any_reposition_mode()
-}
-
-/// Registers the rectangles that stay clickable in `Normal` mode on one
-/// overlay: that overlay's own control bar and each of its visible cards'
-/// pagination-dot clusters. Reported by each overlay frontend in CSS pixels
+/// Registers the rectangles that stay clickable on one overlay: its HUD chips,
+/// its "Show" pill and an open detail panel. Everywhere else the overlay lets
+/// clicks through to the table; there is no mode that captures the whole
+/// window. Reported by each overlay frontend in CSS pixels
 /// relative to its own viewport, and re-reported on every layout change — a
 /// rect must never outlive the control it describes, or the overlay would keep
 /// swallowing table clicks at a point where nothing of Velora's is drawn any
@@ -1149,100 +1086,79 @@ pub fn set_overlay_hot_zones(
     overlay::set_hot_zones(&app_handle, table_id, &zones)
 }
 
-/// Saves one player's manually-dragged card position.
-///
-/// Deliberately *not* table-scoped, unlike its neighbours above. A
-/// `hud_positions` row is keyed by player and holds a fraction of the overlay
-/// window, which mirrors whichever table that player is sitting at — there is
-/// no table-specific component to store. The same player showing up at two
-/// tables at once gets the same card position at both, which is the same
-/// deliberate sharing `seat_templates` already has across same-sized tables.
-///
-/// `x`/`y` are clamped to 0..1 on write. One real row had drifted to
-/// `x = 1.104`, which would have parked that player's card
-/// off the right edge of every overlay it ever appeared on.
-#[tauri::command]
-pub fn save_hud_position(state: State<AppState>, player_id: String, x: f64, y: f64) -> Result<(), String> {
-    let id: i64 = player_id.parse().map_err(|_| "invalid player id".to_string())?;
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    db::set_hud_position(&conn, id, x, y).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn get_hud_positions(state: State<AppState>) -> Result<Vec<HudPositionPayload>, String> {
-    let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    let mut stmt = conn
-        .prepare("SELECT player_id, x, y FROM hud_positions")
-        .map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map([], |row| {
-            Ok(HudPositionPayload {
-                player_id: row.get::<_, i64>(0)?.to_string(),
-                x: row.get(1)?,
-                y: row.get(2)?,
-            })
-        })
-        .map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| e.to_string())?;
-    Ok(rows)
-}
-
 // ---------------------------------------------------------------------
-// Seat-mapping templates
+// Seat positions
 // ---------------------------------------------------------------------
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SeatTemplatePayload {
-    /// Seat offset from the hero, not an absolute PokerStars seat
-    /// number — see `db::relative_seat`.
-    pub seat_offset: i64,
+pub struct SeatPositionPayload {
+    /// A hero-relative seat offset in the 'hero' frame, PokerStars' seat
+    /// number in the 'absolute' frame — see `db::SeatFrame`.
+    pub seat_key: i64,
+    /// Chip centre, as fractions (0..1) of the overlay window.
     pub x: f64,
     pub y: f64,
 }
 
-/// One max-players size's calibrated seat layout, `x`/`y` as fractions
-/// (0..1) of the overlay/table window — same coordinate scheme as
-/// `hud_positions`. Keyed by hero-relative seat offset.
+/// The chip positions a user dragged for one table size in one frame. Seats
+/// not listed use the frontend's computed default.
 #[tauri::command]
-pub fn get_seat_templates(
+pub fn get_seat_positions(
     state: State<AppState>,
     max_players: i64,
-) -> Result<Vec<SeatTemplatePayload>, String> {
+    frame: String,
+) -> Result<Vec<SeatPositionPayload>, String> {
+    let frame = db::SeatFrame::parse(&frame)?;
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    db::list_seat_templates(&conn, max_players)
+    db::list_seat_positions(&conn, max_players, frame)
         .map_err(|e| e.to_string())
         .map(|rows| {
             rows.into_iter()
-                .map(|r| SeatTemplatePayload { seat_offset: r.seat_offset, x: r.x, y: r.y })
+                .map(|r| SeatPositionPayload { seat_key: r.seat_key, x: r.x, y: r.y })
                 .collect()
         })
 }
 
-/// Broadcast (payload: the `max_players` size) whenever a seat template is
-/// calibrated, so every *other* overlay on a table of that size picks the new
-/// layout up.
-///
-/// A seat template has always been shared across same-sized tables, but
-/// with one overlay this was invisible: the window you dragged in was the only
-/// one there was. With one overlay per table, a drag on table A must move the
-/// same seat's card on tables B and C — and nothing else refreshes them, since
-/// their own `refresh()` only runs on mount, on a new hand, or on being shown.
+/// Broadcast whenever saved seat positions change, so every *other* overlay
+/// picks the new layout up: a drag on table A moves the same seat's chip on
+/// every table of that size, and nothing else would refresh them. The
+/// payload is the `max_players` size, or `null` after a reset of every size.
 pub const SEAT_TEMPLATES_EVENT: &str = "seat-templates-changed";
 
+/// Saves one seat's chip centre for every table of `max_players` in `frame`.
+/// The frame and seat are validated and `x`/`y` clamped into the window
+/// before anything is stored; the event only follows a successful write.
 #[tauri::command]
-pub fn save_seat_template(
+pub fn save_seat_position(
     app_handle: tauri::AppHandle,
     state: State<AppState>,
     max_players: i64,
-    seat_offset: i64,
+    frame: String,
+    seat_key: i64,
     x: f64,
     y: f64,
 ) -> Result<(), String> {
+    let frame = db::SeatFrame::parse(&frame)?;
     {
         let conn = state.conn.lock().map_err(|e| e.to_string())?;
-        db::set_seat_template(&conn, max_players, seat_offset, x, y).map_err(|e| e.to_string())?;
+        db::set_seat_position(&conn, max_players, frame, seat_key, x, y)?;
+    }
+    let _ = app_handle.emit(SEAT_TEMPLATES_EVENT, Some(max_players));
+    Ok(())
+}
+
+/// "Reset seat layout": forgets the dragged positions of one table size, or
+/// of every size when `max_players` is `null`, in both frames.
+#[tauri::command]
+pub fn reset_seat_positions(
+    app_handle: tauri::AppHandle,
+    state: State<AppState>,
+    max_players: Option<i64>,
+) -> Result<(), String> {
+    {
+        let conn = state.conn.lock().map_err(|e| e.to_string())?;
+        db::reset_seat_positions(&conn, max_players).map_err(|e| e.to_string())?;
     }
     let _ = app_handle.emit(SEAT_TEMPLATES_EVENT, max_players);
     Ok(())
@@ -1526,11 +1442,11 @@ pub fn get_diagnostics_report(
     ));
 
     // The facts that decide whether a click lands on the table or on
-    // Velora. "Hot zones" are the rectangles that stay clickable in normal
-    // mode — an overlay's control bar plus one per visible card's pagination
-    // dots — so a count of 0 while that overlay is up and showing cards is
-    // itself the symptom, rather than something to infer from behaviour. Per
-    // overlay, because "the mode" is not one value.
+    // Velora. "Hot zones" are the only rectangles that stay clickable — an
+    // overlay's chips, its Show pill and an open detail panel — so a count of
+    // 0 while that overlay is up and showing chips is itself the symptom,
+    // rather than something to infer from behaviour. Per overlay, because
+    // each window has its own zones.
     out.push_str("-- Overlay interaction --\n");
     let probe = overlay::hit_test_probe();
     if probe.overlays.is_empty() {
@@ -1538,10 +1454,9 @@ pub fn get_diagnostics_report(
     }
     for overlay_probe in &probe.overlays {
         out.push_str(&format!(
-            "{}: hwnd={}  mode={:?}  hot zones={}  clicks passing through={}\n",
+            "{}: hwnd={}  hot zones={}  clicks passing through={}\n",
             overlay_probe.label,
             overlay_probe.hwnd,
-            overlay_probe.mode,
             overlay_probe.hot_zones,
             overlay_probe.click_through,
         ));

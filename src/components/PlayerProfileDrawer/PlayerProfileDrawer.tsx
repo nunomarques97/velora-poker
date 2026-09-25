@@ -8,6 +8,17 @@ interface PlayerProfileDrawerProps {
   player: Player;
   onClose: () => void;
   onPlayerUpdated?: (updated: Player) => void;
+  /**
+   * `drawer` (default, main window): full-height sheet over a dimming
+   * backdrop. `panel` (overlay): a compact floating panel with no backdrop,
+   * so the rest of the table stays visible and click-through; it closes only
+   * through its own close button (or the overlay's Esc / chip toggle).
+   */
+  variant?: "drawer" | "panel";
+  /** `panel` only: which window edge the panel docks to. */
+  side?: "left" | "right";
+  /** `panel` only: the panel's node, registered by the overlay as a hot zone. */
+  panelRef?: (el: HTMLElement | null) => void;
 }
 
 const OVERRIDE_COLORS: { color: string; label: string }[] = [
@@ -60,7 +71,15 @@ function ReadItem({ result, index }: { result: RuleResult; index: number }) {
   );
 }
 
-export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: PlayerProfileDrawerProps) {
+export function PlayerProfileDrawer({
+  player,
+  onClose,
+  onPlayerUpdated,
+  variant = "drawer",
+  side = "right",
+  panelRef,
+}: PlayerProfileDrawerProps) {
+  const panel = variant === "panel";
   const descriptions = player.descriptions ?? [];
   const tendencies = descriptions.filter((d) => d.category === "tendency");
   const exploits = descriptions.filter((d) => d.category === "exploit");
@@ -131,8 +150,14 @@ export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: Player
 
   return (
     <>
-      <div className={styles.backdrop} onClick={onClose} />
-      <aside className={styles.drawer}>
+      {!panel && <div className={styles.backdrop} onClick={onClose} />}
+      <aside
+        ref={panel ? panelRef : undefined}
+        className={
+          panel ? `${styles.panel} ${side === "left" ? styles.panelLeft : styles.panelRight}` : styles.drawer
+        }
+        aria-label={`${player.name} details`}
+      >
         <div className={styles.header}>
           <div className={styles.identity}>
             <div
@@ -152,7 +177,7 @@ export function PlayerProfileDrawer({ player, onClose, onPlayerUpdated }: Player
               </div>
             </div>
           </div>
-          <button type="button" className={styles.closeButton} onClick={onClose}>
+          <button type="button" className={styles.closeButton} onClick={onClose} aria-label="Close details">
             <CloseIcon className={styles.closeIcon} />
           </button>
         </div>

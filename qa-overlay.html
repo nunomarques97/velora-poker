@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Velora overlay QA harness</title>
+    <!--
+      QA-only page (dev server only, never bundled: vite.config.ts builds
+      index.html and overlay.html). It renders the real overlay (src/overlay)
+      over a drawn PokerStars-like table, with the Tauri invoke/event boundary
+      mocked in memory. The table is drawn from seatLayout.ts's own ASSUMED
+      geometry, so it checks the HUD against that geometry, not against a live
+      client.
+
+      Query parameters:
+        table=1            required by the overlay (its table id)
+        max=6|9            table size (default 6)
+        frame=hero|absolute  Auto-Center on (hero, default) or off
+        model=compact|badge  HUD profile model (default compact)
+        action=drag|cancel|click|external   optional scripted interaction
+        seat=<key>         seat key the action targets (default 2)
+        dx=<px>&dy=<px>    drag distance (default 40, 14)
+
+      Results, written to <body> data attributes once the page settles
+      (data-qa-ready="1"):
+        data-qa-chips              chips rendered
+        data-qa-overlap            chip pairs that overlap
+        data-qa-intersections      chip x protected-zone overlaps (seatLayout.protectedZones)
+        data-qa-opp-hole-intersections  chip x opponents' hole cards (avoided by default)
+        data-qa-save-count         save_seat_position calls
+        data-qa-last-save          last save_seat_position arguments, JSON
+        data-qa-hot-zones          zones in the last set_overlay_hot_zones call
+        data-qa-max-zone-fraction  largest hot zone, as a fraction of the window area
+        data-qa-panel              1 when the detail panel is open
+        data-qa-action-result      what the scripted action observed
+        data-qa-min-font-px        smallest chip font size, in CSS px
+    -->
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: #101418;
+        font-family: "Segoe UI", system-ui, sans-serif;
+      }
+      #root {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 1;
+      }
+      #table {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        overflow: hidden;
+        background: radial-gradient(ellipse at 50% 40%, #1d2a33 0%, #0e1317 75%);
+      }
+      #table > div {
+        position: absolute;
+        box-sizing: border-box;
+      }
+      .felt {
+        border-radius: 50%;
+        background: radial-gradient(ellipse at 50% 45%, #2f7d4a 0%, #1f5c35 70%, #174a2a 100%);
+        border: 0.9vh solid #3a2a1c;
+        box-shadow: inset 0 0 2vh rgba(0, 0, 0, 0.45);
+      }
+      .plate {
+        background: #1a1d22;
+        border: 1px solid #50565f;
+        border-radius: 0.8vh;
+        color: #e9edf2;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.8vh;
+        line-height: 1.15;
+        overflow: hidden;
+        white-space: nowrap;
+      }
+      .plate b {
+        font-weight: 600;
+      }
+      .plate span {
+        color: #9fe39a;
+      }
+      .plate.hero {
+        border-color: #d9c35c;
+      }
+      .cards {
+        display: flex;
+        justify-content: center;
+        gap: 2%;
+      }
+      .card {
+        height: 100%;
+        aspect-ratio: 5 / 7;
+        border-radius: 0.6vh;
+        background: #f7f7f2;
+        border: 1px solid #999;
+        color: #111;
+        font-weight: 700;
+        font-size: 3.2vh;
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+        padding-top: 0.3vh;
+        box-sizing: border-box;
+      }
+      .card.red {
+        color: #c0262d;
+      }
+      .card.back {
+        background: repeating-linear-gradient(45deg, #9b1c24 0 3px, #7d141b 3px 6px);
+        border-color: #f0e6e6;
+      }
+      .board {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 4%;
+      }
+      .pot {
+        color: #f2f2f2;
+        font-size: 2.8vh;
+        font-weight: 600;
+      }
+      .boardCards {
+        display: flex;
+        gap: 2%;
+        height: 58%;
+        justify-content: center;
+        width: 100%;
+      }
+      .bet {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4%;
+        color: #fff;
+        font-size: 2.6vh;
+      }
+      .bet i {
+        display: block;
+        height: 62%;
+        aspect-ratio: 1;
+        border-radius: 50%;
+        background: #d6412f;
+        border: 0.4vh dashed #fff;
+        box-sizing: border-box;
+      }
+      .actions {
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        gap: 6%;
+        padding: 0 2% 3% 0;
+      }
+      .slider {
+        height: 22%;
+        border-radius: 0.6vh;
+        background: #2b3036;
+        border: 1px solid #555;
+      }
+      .buttons {
+        display: flex;
+        gap: 3%;
+        height: 48%;
+      }
+      .buttons div {
+        flex: 1;
+        border-radius: 0.8vh;
+        background: linear-gradient(#b3261e, #7e1510);
+        color: #fff;
+        font-size: 3.2vh;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #e0a09a;
+      }
+      .ghost {
+        border: 1px dashed #ffd84a;
+        border-radius: 4px;
+      }
+    </style>
+    <script>
+      // In-memory stand-in for the Tauri runtime: the invoke boundary and the
+      // event plugin, so the unmodified overlay code runs in a plain browser.
+      (function () {
+        const params = new URLSearchParams(location.search);
+        const max = params.get("max") === "9" ? 9 : 6;
+        const frame = params.get("frame") === "absolute" ? "absolute" : "hero";
+        const model = params.get("model") === "badge" ? "badge" : "compact";
+        const heroSeat = max === 9 ? 7 : 4;
+
+        // Realistic spread: two players under min_hands (25), one wide
+        // 4-digit sample, two automatic archetypes, one manual colour.
+        const roster = [
+          ["Hero_Nuno", 2140, 23, 19, 8, null],
+          ["fishy_mcfold", 12, 58, 6, 2, null],
+          ["TightTony", 318, 14, 12, 5, ["nittyRock", "Nitty / Rock", "#5b7a99"]],
+          ["AggroAnna77", 1204, 31, 27, 11, ["looseAggressive", "Loose Aggressive", "#e0954f"]],
+          ["xX_river_Xx", 7, 43, 14, null, null],
+          ["calldown_carl", 96, 47, 9, 3, ["loosePassive", "Loose Passive", "#d9b44a"]],
+          ["GrinderGus", 540, 21, 18, 7, null],
+          ["M4ster_Bluff", 77, 36, 30, 14, ["maniac", "Maniac", "#e0524f"]],
+          ["RockSolid_R", 44, 11, 9, 2, null],
+        ];
+        const players = [];
+        for (let seat = 1; seat <= max; seat++) {
+          // Seat order: the hero first, then clockwise.
+          const offset = (seat - heroSeat + max) % max;
+          const [name, hands, vpip, pfr, threeBet, arche] = roster[offset];
+          const override = name === "calldown_carl";
+          players.push({
+            id: `p${seat}`,
+            name,
+            hands,
+            stats: {
+              vpip, pfr, threeBet,
+              foldToThreeBet: 55, cBet: 62, foldToCBet: 41, aggressionFactor: 2.4, wtsd: 27, wsd: 51,
+            },
+            descriptions: [],
+            note: null,
+            classification: arche
+              ? { classification: arche[0], label: arche[1], color: arche[2], isOverride: override, available: true }
+              : { classification: "unknown", label: "Unknown", color: "#6b7280", isOverride: false, available: true },
+            seat,
+            seatOffset: offset,
+          });
+        }
+        const profile = {
+          id: model,
+          name: model === "badge" ? "Badge" : "Compact",
+          visualModel: model,
+          statPages: [{ id: "main", label: "Main", statKeys: ["vpip", "pfr", "threeBet", "foldToThreeBet"] }],
+          minHands: 25,
+          isBuiltin: true,
+        };
+
+        const store = new Map(); // `${max}:${frame}` -> [{ seatKey, x, y }]
+        const qa = (window.__QA__ = {
+          max, frame, model, heroSeat, players, store,
+          saves: [],
+          hotZones: [],
+          listeners: new Map(), // event -> Map(eventId -> callbackId)
+          callbacks: new Map(),
+          emit(event, payload) {
+            const byId = qa.listeners.get(event);
+            if (!byId) return;
+            for (const [eventId, cbId] of byId) {
+              const cb = qa.callbacks.get(cbId);
+              if (cb) cb({ event, id: eventId, payload });
+            }
+          },
+        });
+        let nextId = 1;
+
+        window.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+          unregisterListener(event, eventId) {
+            qa.listeners.get(event)?.delete(eventId);
+          },
+        };
+        window.__TAURI_INTERNALS__ = {
+          transformCallback(callback) {
+            const id = nextId++;
+            qa.callbacks.set(id, callback);
+            return id;
+          },
+          invoke: async (cmd, args = {}) => {
+            switch (cmd) {
+              case "plugin:event|listen": {
+                const eventId = nextId++;
+                if (!qa.listeners.has(args.event)) qa.listeners.set(args.event, new Map());
+                qa.listeners.get(args.event).set(eventId, args.handler);
+                return eventId;
+              }
+              case "plugin:event|unlisten":
+                qa.listeners.get(args.event)?.delete(args.eventId);
+                return null;
+              case "get_active_table_players":
+                return structuredClone(players);
+              case "get_active_hud_profile":
+                return structuredClone(profile);
+              case "get_active_table_max_players":
+                return max;
+              case "get_app_settings":
+                return { onboardingComplete: true, pokerRoom: "pokerstars", overlayEnabled: true, autoCenterEnabled: frame === "hero" };
+              case "get_seat_positions":
+                return structuredClone(store.get(`${args.maxPlayers}:${args.frame}`) ?? []);
+              case "save_seat_position": {
+                qa.saves.push({ ...args });
+                const key = `${args.maxPlayers}:${args.frame}`;
+                const rows = (store.get(key) ?? []).filter((r) => r.seatKey !== args.seatKey);
+                rows.push({ seatKey: args.seatKey, x: args.x, y: args.y });
+                store.set(key, rows);
+                // Like the backend: broadcast only after the write.
+                setTimeout(() => qa.emit("seat-templates-changed", args.maxPlayers), 0);
+                return null;
+              }
+              case "set_overlay_hot_zones":
+                qa.hotZones = args.zones;
+                return null;
+              case "is_overlay_dismissed":
+                return false;
+              case "show_overlay":
+                return null;
+              default:
+                console.warn("[qa-overlay] unmocked command", cmd, args);
+                return null;
+            }
+          },
+        };
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="table"></div>
+    <div id="root"></div>
+    <script type="module">
+      import {
+        ACTIONS_ZONE,
+        BOARD_ZONE,
+        defaultSeatAnchors,
+        holeCardsRect as holeRect,
+        protectedZones,
+        seatPlateRect,
+      } from "/src/overlay/seatLayout.ts";
+
+      const qa = window.__QA__;
+      const params = new URLSearchParams(location.search);
+      const table = document.getElementById("table");
+      const heroKey = qa.frame === "hero" ? 0 : qa.heroSeat;
+      const anchors = defaultSeatAnchors(qa.max, qa.frame);
+      const playerAt = (key) =>
+        qa.players.find((p) => (qa.frame === "hero" ? p.seatOffset : p.seat) === key);
+
+      function box(cls, rect, html = "") {
+        const el = document.createElement("div");
+        el.className = cls;
+        el.style.left = `${rect.x * 100}%`;
+        el.style.top = `${rect.y * 100}%`;
+        el.style.width = `${rect.w * 100}%`;
+        el.style.height = `${rect.h * 100}%`;
+        el.innerHTML = html;
+        table.appendChild(el);
+        return el;
+      }
+
+      box("felt", { x: 0.1, y: 0.17, w: 0.8, h: 0.6 });
+      const card = (text, red) => `<div class="card${red ? " red" : ""}">${text}</div>`;
+      box(
+        "board",
+        BOARD_ZONE,
+        `<div class="pot">Pot: 1,240</div><div class="boardCards">${card("A♠")}${card("K♥", true)}${card("7♦", true)}${card("7♣")}${card("2♠")}</div>`,
+      );
+      const zones = protectedZones(qa.max, qa.frame, heroKey);
+      zones
+        .filter((z) => z.kind === "bet")
+        .filter((_, i) => i % 3 === 1)
+        .forEach((z) => box("bet", z.rect, "<i></i>120"));
+      for (const a of anchors) {
+        const p = playerAt(a.seatKey);
+        const hero = a.seatKey === heroKey;
+        box(
+          "cards",
+          holeRect(a),
+          hero ? card("Q♥", true) + card("Q♣") : '<div class="card back"></div><div class="card back"></div>',
+        );
+        box(`plate${hero ? " hero" : ""}`, seatPlateRect(a), `<b>${p ? p.name : "Empty"}</b><span>${(1000 + a.seatKey * 137).toLocaleString()}</span>`);
+      }
+      box(
+        "actions",
+        ACTIONS_ZONE,
+        '<div class="slider"></div><div class="buttons"><div>Fold</div><div>Check</div><div>Bet 60</div></div>',
+      );
+
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const W = () => window.innerWidth;
+      const H = () => window.innerHeight;
+      const chipButtons = () => [...document.querySelectorAll("[data-hud-chip] > button")];
+      const pxRect = (r) => ({ x0: r.x * W(), y0: r.y * H(), x1: (r.x + r.w) * W(), y1: (r.y + r.h) * H() });
+      const domRect = (el) => {
+        const r = el.getBoundingClientRect();
+        return { x0: r.left, y0: r.top, x1: r.right, y1: r.bottom };
+      };
+      const overlaps = (a, b) =>
+        Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) > 0.5 && Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0) > 0.5;
+      const chipFor = (key) => document.querySelector(`[data-seat-key="${key}"] > button`);
+
+      function measure() {
+        const chips = chipButtons().map(domRect);
+        let overlap = 0;
+        for (let i = 0; i < chips.length; i++)
+          for (let j = i + 1; j < chips.length; j++) if (overlaps(chips[i], chips[j])) overlap++;
+        let intersections = 0;
+        for (const c of chips) for (const z of zones) if (overlaps(c, pxRect(z.rect))) intersections++;
+        let oppHole = 0;
+        for (const c of chips)
+          for (const a of anchors) if (a.seatKey !== heroKey && overlaps(c, pxRect(holeRect(a)))) oppHole++;
+        const area = W() * H();
+        const maxZone = Math.max(0, ...qa.hotZones.map((z) => (z.width * z.height) / area));
+        const fonts = chipButtons().map((b) => parseFloat(getComputedStyle(b).fontSize));
+        const d = document.body.dataset;
+        d.qaChips = String(chips.length);
+        d.qaOverlap = String(overlap);
+        d.qaIntersections = String(intersections);
+        d.qaOppHoleIntersections = String(oppHole);
+        d.qaSaveCount = String(qa.saves.length);
+        d.qaLastSave = qa.saves.length ? JSON.stringify(qa.saves[qa.saves.length - 1]) : "";
+        d.qaHotZones = String(qa.hotZones.length);
+        d.qaMaxZoneFraction = maxZone.toFixed(3);
+        d.qaPanel = document.querySelector("aside") ? "1" : "0";
+        d.qaMinFontPx = fonts.length ? String(Math.min(...fonts)) : "";
+      }
+
+      function pointer(target, type, x, y) {
+        target.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            pointerId: 1,
+            pointerType: "mouse",
+            isPrimary: true,
+            button: type === "pointermove" ? -1 : 0,
+            buttons: type === "pointerup" || type === "pointercancel" ? 0 : 1,
+            clientX: x,
+            clientY: y,
+          }),
+        );
+      }
+
+      async function runAction(action) {
+        const seat = Number(params.get("seat") ?? 2);
+        const dx = Number(params.get("dx") ?? 40);
+        const dy = Number(params.get("dy") ?? 14);
+        const btn = chipFor(seat);
+        if (!btn) return `no chip for seat ${seat}`;
+        const r = btn.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        if (action === "click") {
+          pointer(btn, "pointerdown", cx, cy);
+          pointer(btn, "pointerup", cx, cy);
+          btn.click();
+          await sleep(200);
+          return `panel=${document.querySelector("aside") ? 1 : 0}`;
+        }
+        if (action === "external") {
+          // Another overlay of this size saved seat `seat`: this one must follow.
+          const key = `${qa.max}:${qa.frame}`;
+          const rows = (qa.store.get(key) ?? []).filter((row) => row.seatKey !== seat);
+          rows.push({ seatKey: seat, x: 0.5, y: 0.08 });
+          qa.store.set(key, rows);
+          qa.emit("seat-templates-changed", qa.max);
+          await sleep(300);
+          const n = chipFor(seat).getBoundingClientRect();
+          const errX = Math.abs(n.left + n.width / 2 - 0.5 * W());
+          const errY = Math.abs(n.top + n.height / 2 - 0.08 * H());
+          return errX < 1.5 && errY < 1.5 ? "followed" : `off by ${errX.toFixed(1)},${errY.toFixed(1)}`;
+        }
+        box("ghost", { x: r.left / W(), y: r.top / H(), w: r.width / W(), h: r.height / H() });
+        pointer(btn, "pointerdown", cx, cy);
+        for (let i = 1; i <= 8; i++) {
+          pointer(btn, "pointermove", cx + (dx * i) / 8, cy + (dy * i) / 8);
+          await sleep(16);
+        }
+        pointer(btn, action === "cancel" ? "pointercancel" : "pointerup", cx + dx, cy + dy);
+        // A drag ends in a click on the chip; it must not open the panel.
+        if (action !== "cancel") btn.click();
+        await sleep(300);
+        const n = chipFor(seat).getBoundingClientRect();
+        const moved = { x: n.left + n.width / 2 - cx, y: n.top + n.height / 2 - cy };
+        return `moved=${moved.x.toFixed(1)},${moved.y.toFixed(1)} panel=${document.querySelector("aside") ? 1 : 0}`;
+      }
+
+      (async () => {
+        // Wait for every player's chip, then for the measured-size relayout.
+        for (let i = 0; i < 100 && chipButtons().length < qa.players.length; i++) await sleep(50);
+        await sleep(300);
+        const action = params.get("action");
+        if (action) document.body.dataset.qaActionResult = await runAction(action);
+        await sleep(100);
+        measure();
+        document.body.dataset.qaReady = "1";
+      })();
+    </script>
+    <script type="module" src="/src/overlay/main.tsx"></script>
+  </body>
+</html>

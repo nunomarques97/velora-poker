@@ -1,45 +1,112 @@
-.controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
+/*
+ * The two HUD models as cards. The whole card is the button's hit area (the
+ * button's ::after covers it); the sample chip is inert and lets clicks fall
+ * through to it.
+ */
+.profileCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
-.profileSwitcher {
+.profileCard {
+  position: relative;
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px 16px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 4px;
 }
 
-.profileButton {
+.profileCard:hover {
+  border-color: var(--border-strong);
+}
+
+.profileCardActive,
+.profileCardActive:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.profileChoice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
   background: transparent;
   border: none;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  font-weight: 600;
-  padding: 7px 14px;
-  border-radius: var(--radius-sm);
-}
-
-.profileButton:hover {
   color: var(--text-primary);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.profileButtonActive,
-.profileButtonActive:hover {
+.profileChoice::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-md);
+}
+
+.profileChoice:focus-visible {
+  outline: none;
+}
+
+.profileChoice:focus-visible::after {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.profileHead {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profileName {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.recommended,
+.inUse {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.recommended {
+  background: var(--positive-soft);
+  color: var(--positive);
+}
+
+.inUse {
   background: var(--accent-soft);
   color: var(--accent-strong);
 }
 
-.rightControls {
+.profileDescription {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.profileSample {
+  pointer-events: none;
+}
+
+.controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .minHandsLabel {
@@ -47,7 +114,7 @@
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
 .minHandsInput {
@@ -66,6 +133,11 @@
   border-color: var(--accent);
 }
 
+.minHandsInput:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
 .overlayButton {
   background: var(--accent-soft);
   color: var(--accent-strong);
@@ -81,9 +153,43 @@
   color: #ffffff;
 }
 
-.lockButton {
+/* Seat layout: how moving works, and the one way back to the defaults. */
+.layoutPanel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  padding: 14px 16px;
   background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.layoutText {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+
+.layoutTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.layoutHint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
   color: var(--text-secondary);
+  max-width: 620px;
+}
+
+.resetButton {
+  flex-shrink: 0;
+  background: var(--bg-surface-alt);
+  color: var(--text-primary);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   padding: 7px 14px;
@@ -91,10 +197,42 @@
   font-weight: 600;
 }
 
-.lockButtonActive {
-  background: var(--positive-soft);
+.resetButton:hover:not([aria-disabled="true"]) {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.resetButton[aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.overlayButton:focus-visible,
+.resetButton:focus-visible,
+.tableChipShowButton:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+/* Outcome of the last action. Always rendered, so the live region exists
+   before its first message and screen readers announce it. */
+.notice {
+  min-height: 1.5em;
+  margin: 8px 0 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
   color: var(--positive);
-  border-color: var(--positive);
+}
+
+.noticeError {
+  color: var(--negative);
+}
+
+.sectionTitle {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
 }
 
 .grid {
@@ -132,7 +270,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  margin: -8px 0 20px;
+  margin: 0 0 20px;
   padding: 10px 12px;
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);

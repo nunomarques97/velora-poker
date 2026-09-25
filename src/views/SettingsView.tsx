@@ -725,9 +725,11 @@ export function SettingsView() {
           <span>
             PokerStars &quot;Auto-Center&quot; is enabled
             <div className={styles.hudHint} style={{ marginTop: 4 }}>
-              Required for automatic seat mapping (cards placed on the right seat with no
-              dragging). Without it, cards fall back to manual per-player placement — window
-              tracking still applies either way.
+              Tick this if PokerStars keeps you at the bottom of every table. It only changes
+              how seats are counted: on, cards follow seats relative to you; off, they follow
+              PokerStars&apos; seat numbers. The default layout and your dragged positions work
+              either way, on every table of the same size, with nothing to calibrate. If this
+              box doesn&apos;t match PokerStars, cards land on the wrong seats.
             </div>
           </span>
           <input

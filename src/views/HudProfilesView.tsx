@@ -1,24 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { HudProfile, Player } from "../data/types";
 import {
   DesktopAppRequiredError,
   getActiveHudProfile,
-  getAnyOverlayMode,
   getHudProfiles,
   getOverlayStatus,
   getPlayersPage,
   onHandsImported,
-  onOverlayModeChanged,
   onOverlayVisibilityChanged,
   onTrackedTablesChanged,
+  resetSeatPositions,
   setActiveHudProfile,
-  setAllOverlayModes,
   setHudProfileMinHands,
   setOverlaysEnabled,
   showOverlay,
-  type OverlayMode,
   type TrackedTableStatus,
 } from "../data/api";
+import { players as SAMPLE_PLAYERS } from "../data/mockData";
 import { PlayerHudCard } from "../hud/PlayerHudCard";
 import styles from "./HudProfilesView.module.css";
 
@@ -36,11 +34,35 @@ interface HudProfilesViewProps {
 // work too, not just what's rendered client-side.
 const PREVIEW_GRID_MAX_PLAYERS = 60;
 
+/** The default profile, and the one this page recommends. */
+const RECOMMENDED_PROFILE_ID = "compact";
+
+/** One line per model, so the choice says what it changes on the table. */
+const MODEL_DESCRIPTIONS: Record<HudProfile["visualModel"], string> = {
+  compact: "One line per player: VPIP / PFR / 3-bet and hands. Readable on the smallest table.",
+  badge: "Initials and hands only, the smallest footprint. Click a badge for the stats.",
+};
+
+/**
+ * The fixed player each profile card draws its sample chip with, so the
+ * choice is visible before a single hand is imported. Illustration only: the
+ * live preview below uses real tracked players.
+ */
+const SAMPLE_PLAYER: Player = SAMPLE_PLAYERS[0];
+
 type LoadState =
   | { status: "loading" }
   | { status: "ready" }
   | { status: "unavailable"; message: string }
   | { status: "error"; message: string };
+
+/** The one line under the controls that says what the last action did. */
+type Notice = { kind: "ok" | "error"; text: string } | null;
+
+function describeError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
 
 export function HudProfilesView({ onSelectPlayer }: HudProfilesViewProps) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
@@ -53,16 +75,23 @@ export function HudProfilesView({ onSelectPlayer }: HudProfilesViewProps) {
   // followed, plus one switch to turn the whole lot off.
   const [overlaysEnabled, setOverlaysEnabledState] = useState(true);
   const [tables, setTables] = useState<TrackedTableStatus[]>([]);
-  // A secondary copy of the overlays' own control. Each overlay opens
-  // table-interactive and its control bar is reachable by a real click in
-  // every mode, so this is a convenience, never the only way back. It acts on
-  // every overlay at once, since a card layout is calibrated across tables.
-  const [overlayMode, setOverlayModeState] = useState<OverlayMode>("normal");
   const [minHandsInput, setMinHandsInput] = useState("25");
+  const [resetting, setResetting] = useState(false);
+  const [notice, setNotice] = useState<Notice>(null);
+
+  // Set in the effect (not at render) so StrictMode's setup/cleanup/setup
+  // leaves it true, and a response landing after the view is left is dropped.
+  const mounted = useRef(false);
+  // Only the latest profile click may write the active profile: two quick
+  // clicks can answer out of order.
+  const profileRequest = useRef(0);
+  // A second press before React re-renders must not start a second reset.
+  const resetPending = useRef(false);
 
   function loadPreviewPlayers() {
     getPlayersPage(0, PREVIEW_GRID_MAX_PLAYERS)
       .then(({ players: page, total }) => {
+        if (!mounted.current) return;
         setPlayers(page);
         setTotalPlayers(total);
       })
@@ -75,9 +104,9 @@ export function HudProfilesView({ onSelectPlayer }: HudProfilesViewProps) {
       getActiveHudProfile(),
       getPlayersPage(0, PREVIEW_GRID_MAX_PLAYERS),
       getOverlayStatus(),
-      getAnyOverlayMode(),
     ])
-      .then(([allProfiles, active, playersPage, overlayStatus, mode]) => {
+      .then(([allProfiles, active, playersPage, overlayStatus]) => {
+        if (!mounted.current) return;
         setProfiles(allProfiles);
         setActiveProfileState(active);
         setMinHandsInput(String(active.minHands));
@@ -85,10 +114,10 @@ export function HudProfilesView({ onSelectPlayer }: HudProfilesViewProps) {
         setTotalPlayers(playersPage.total);
         setOverlaysEnabledState(overlayStatus.enabled);
         setTables(overlayStatus.tables);
-        setOverlayModeState(mode);
         setState({ status: "ready" });
       })
       .catch((err: unknown) => {
+        if (!mounted.current) return;
         if (err instanceof DesktopAppRequiredError) {
           setState({ status: "unavailable", message: err.message });
         } else {
@@ -98,6 +127,7 @@ export function HudProfilesView({ onSelectPlayer }: HudProfilesViewProps) {
   }
 
   useEffect(() => {
+    mounted.current = true;
     loadAll();
     const unlisten = onHandsImported(loadPreviewPlayers).catch(() => undefined);
 
@@ -114,31 +144,28 @@ export function HudProfilesView({ onSelectPlayer }: HudProfilesViewProps) {
       refreshOverlayStatus();
     }).catch(() => undefined);
 
-    // Each overlay has its own mode control in its floating control bar, which
-    // this window cannot otherwise observe. Without this the label here could
-    // offer to do what the overlays are already doing, so the next click did
-    // the opposite of what it advertised and the tables underneath stayed
-    // dead. Re-read rather than taking the event's own mode: this one control
-    // speaks for every overlay, and "any of them is repositioning" is the
-    // state worth showing.
-    const unlistenMode = onOverlayModeChanged(() => {
-      getAnyOverlayMode().then(setOverlayModeState).catch(() => undefined);
-    }).catch(() => undefined);
-
     return () => {
+      mounted.current = false;
       unlisten.then((fn) => fn?.());
       unlistenTables.then((fn) => fn?.());
       unlistenOverlay.then((fn) => fn?.());
-      unlistenMode.then((fn) => fn?.());
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleSelectProfile(id: string) {
-    const updated = await setActiveHudProfile(id);
-    setActiveProfileState(updated);
-    setMinHandsInput(String(updated.minHands));
-    loadPreviewPlayers();
+    const request = ++profileRequest.current;
+    try {
+      const updated = await setActiveHudProfile(id);
+      if (!mounted.current || request !== profileRequest.current) return;
+      setActiveProfileState(updated);
+      setMinHandsInput(String(updated.minHands));
+      setNotice(null);
+      loadPreviewPlayers();
+    } catch (err) {
+      if (!mounted.current || request !== profileRequest.current) return;
+      setNotice({ kind: "error", text: `Couldn't switch the HUD model: ${describeError(err)}` });
+    }
   }
 
   async function handleMinHandsBlur() {
@@ -146,40 +173,43 @@ export function HudProfilesView({ onSelectPlayer }: HudProfilesViewProps) {
     const parsed = Number.parseInt(minHandsInput, 10);
     const value = Number.isFinite(parsed) && parsed >= 0 ? parsed : activeProfile.minHands;
     setMinHandsInput(String(value));
-    const updated = await setHudProfileMinHands(activeProfile.id, value);
-    setActiveProfileState(updated);
-    loadPreviewPlayers();
+    if (value === activeProfile.minHands) return;
+    try {
+      const updated = await setHudProfileMinHands(activeProfile.id, value);
+      if (!mounted.current) return;
+      setActiveProfileState(updated);
+      loadPreviewPlayers();
+    } catch (err) {
+      if (!mounted.current) return;
+      setMinHandsInput(String(activeProfile.minHands));
+      setNotice({ kind: "error", text: `Couldn't save Min hands: ${describeError(err)}` });
+    }
   }
 
-  /**
-   * Re-reads both the tracked tables and the live reposition state from the
-   * backend.
-   *
-   * The mode is re-read here rather than assumed, which is what closes known
-   * issue #19. This view used to force its own flag back to `normal` whenever
-   * the overlay closed, on the stated assumption that the OS resets
-   * click-through for a hidden window — never verified, and untrue in general.
-   * Now the backend forces `Normal` itself whenever an overlay is released or
-   * handed to another table, and this asks it what the state actually is.
-   */
+  /** Re-reads the tracked tables from the backend. */
   function refreshOverlayStatus() {
     getOverlayStatus()
       .then((status) => {
+        if (!mounted.current) return;
         setOverlaysEnabledState(status.enabled);
         setTables(status.tables);
       })
-      .catch(() => undefined);
-    getAnyOverlayMode()
-      .then(setOverlayModeState)
       .catch(() => undefined);
   }
 
   async function toggleOverlaysEnabled() {
     const next = !overlaysEnabled;
     setOverlaysEnabledState(next);
-    await setOverlaysEnabled(next);
+    try {
+      await setOverlaysEnabled(next);
+    } catch (err) {
+      if (mounted.current) {
+        setNotice({ kind: "error", text: `Couldn't turn HUDs ${next ? "on" : "off"}: ${describeError(err)}` });
+      }
+    }
     // The overlay thread creates or tears down the windows asynchronously;
-    // read back what actually happened rather than assuming.
+    // read back what actually happened rather than assuming. On a failure this
+    // also puts the button back to the real state.
     window.setTimeout(refreshOverlayStatus, 300);
   }
 
@@ -189,10 +219,30 @@ export function HudProfilesView({ onSelectPlayer }: HudProfilesViewProps) {
     window.setTimeout(refreshOverlayStatus, 300);
   }
 
-  async function toggleOverlayMode() {
-    const next: OverlayMode = overlayMode === "reposition" ? "normal" : "reposition";
-    await setAllOverlayModes(next);
-    setOverlayModeState(next);
+  /**
+   * Forgets every dragged chip position, for every table size. Each open
+   * overlay hears `seat-templates-changed` and snaps back to the default
+   * layout by itself.
+   */
+  async function handleResetSeatLayout() {
+    if (resetPending.current) return;
+    resetPending.current = true;
+    setResetting(true);
+    setNotice(null);
+    try {
+      await resetSeatPositions(null);
+      if (!mounted.current) return;
+      setNotice({
+        kind: "ok",
+        text: "Seat layout reset. Every table size is back to the default layout.",
+      });
+    } catch (err) {
+      if (!mounted.current) return;
+      setNotice({ kind: "error", text: `Couldn't reset the seat layout: ${describeError(err)}` });
+    } finally {
+      resetPending.current = false;
+      if (mounted.current) setResetting(false);
+    }
   }
 
   if (state.status === "loading") {
@@ -226,55 +276,87 @@ export function HudProfilesView({ onSelectPlayer }: HudProfilesViewProps) {
     <div>
       <ViewHeader />
 
-      <div className={styles.controls}>
-        <div className={styles.profileSwitcher}>
-          {profiles.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              className={`${styles.profileButton} ${
-                activeProfile?.id === p.id ? styles.profileButtonActive : ""
-              }`}
-              onClick={() => handleSelectProfile(p.id)}
-            >
-              {p.name}
-            </button>
-          ))}
-        </div>
-
-        <div className={styles.rightControls}>
-          <label className={styles.minHandsLabel}>
-            Min hands
-            <input
-              className={styles.minHandsInput}
-              type="number"
-              min={0}
-              value={minHandsInput}
-              onChange={(e) => setMinHandsInput(e.target.value)}
-              onBlur={handleMinHandsBlur}
-            />
-          </label>
-
-          <button type="button" className={styles.overlayButton} onClick={toggleOverlaysEnabled}>
-            {overlaysEnabled ? "Turn HUDs Off" : "Turn HUDs On"}
-          </button>
-
-          {overlaysEnabled && tables.length > 0 && (
-            <button
-              type="button"
-              className={`${styles.lockButton} ${
-                overlayMode === "reposition" ? styles.lockButtonActive : ""
-              }`}
-              onClick={toggleOverlayMode}
-            >
-              {overlayMode === "reposition" ? "Done Repositioning" : "Reposition Cards"}
-            </button>
-          )}
-        </div>
+      <div className={styles.profileCards} role="group" aria-label="HUD model">
+        {profiles.map((p) => {
+          const active = activeProfile?.id === p.id;
+          const recommended = p.id === RECOMMENDED_PROFILE_ID;
+          return (
+            <div key={p.id} className={`${styles.profileCard} ${active ? styles.profileCardActive : ""}`}>
+              <button
+                type="button"
+                className={styles.profileChoice}
+                aria-pressed={active}
+                onClick={() => handleSelectProfile(p.id)}
+              >
+                <span className={styles.profileHead}>
+                  <span className={styles.profileName}>{p.name}</span>
+                  {recommended && <span className={styles.recommended}>Recommended</span>}
+                  {active && <span className={styles.inUse}>In use</span>}
+                </span>
+                <span className={styles.profileDescription}>
+                  {MODEL_DESCRIPTIONS[p.visualModel] ?? MODEL_DESCRIPTIONS.compact}
+                </span>
+              </button>
+              {/* Illustration only: inert, so it is neither clickable nor
+                  focusable, and a click on it falls through to the card. */}
+              <div className={styles.profileSample} inert>
+                <PlayerHudCard player={SAMPLE_PLAYER} profile={p} />
+              </div>
+            </div>
+          );
+        })}
       </div>
+
+      <div className={styles.controls}>
+        <label className={styles.minHandsLabel}>
+          Min hands
+          <input
+            className={styles.minHandsInput}
+            type="number"
+            min={0}
+            value={minHandsInput}
+            onChange={(e) => setMinHandsInput(e.target.value)}
+            onBlur={handleMinHandsBlur}
+          />
+        </label>
+
+        <button type="button" className={styles.overlayButton} onClick={toggleOverlaysEnabled}>
+          {overlaysEnabled ? "Turn HUDs Off" : "Turn HUDs On"}
+        </button>
+      </div>
+
+      <div className={styles.layoutPanel}>
+        <div className={styles.layoutText}>
+          <div className={styles.layoutTitle}>Seat layout</div>
+          <p className={styles.layoutHint}>
+            Drag any chip directly on the table to move it. There is no lock and no edit mode: the
+            table stays clickable the whole time. A position you set applies to that seat on every
+            table of the same size, so one drag covers all your 6-max (or 9-max) tables.
+          </p>
+        </div>
+        <button
+          type="button"
+          className={styles.resetButton}
+          onClick={handleResetSeatLayout}
+          // Not `disabled`: a disabled button drops keyboard focus, and the
+          // user who pressed Space here should still be on it afterwards.
+          aria-disabled={resetting}
+        >
+          {resetting ? "Resetting…" : "Reset seat layout"}
+        </button>
+      </div>
+
+      <p
+        className={`${styles.notice} ${notice?.kind === "error" ? styles.noticeError : ""}`}
+        role="status"
+        aria-live="polite"
+      >
+        {notice?.text ?? ""}
+      </p>
 
       <TrackedTables tables={tables} enabled={overlaysEnabled} onShowTable={handleShowTable} />
 
+      <h2 className={styles.sectionTitle}>Live preview</h2>
       {totalPlayers === 0 ? (
         <div className={styles.stateBox}>
           No hands imported yet. Configure your PokerStars hand history folder in Settings to
@@ -294,9 +376,8 @@ export function HudProfilesView({ onSelectPlayer }: HudProfilesViewProps) {
       <p className={styles.hint}>
         This grid previews the active HUD model with your real tracked players. Every PokerStars
         table you open gets its own overlay automatically, positioned over that table and showing
-        only its players — nothing to click, and no limit on how many. Each overlay opens ready to
-        play: clicks reach the table everywhere except its own control bar and each card&rsquo;s
-        stat-page dots. Use Reposition to drag cards, then leave it again.
+        only its players — nothing to click, and no limit on how many. Clicks reach the table
+        everywhere except the HUD chips themselves.
       </p>
     </div>
   );
@@ -429,7 +510,7 @@ function ViewHeader() {
   return (
     <div className="view-header">
       <h1>HUD Profiles</h1>
-      <p>Choose a HUD model and preview it against your real tracked players.</p>
+      <p>Pick a HUD model. Every PokerStars table you open gets it automatically.</p>
     </div>
   );
 }

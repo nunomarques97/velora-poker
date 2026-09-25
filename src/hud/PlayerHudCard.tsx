@@ -1,266 +1,145 @@
-import { useState } from "react";
-import type { Player, HudProfile } from "../data/types";
-import {
-  STAT_COLUMN_COLORS,
-  STAT_LABELS,
-  bbDepthTier,
-  formatBb,
-  formatChips,
-  formatStatValue,
-} from "./statFormat";
-import { JivaroHudCard } from "./JivaroHudCard";
+import type { ClassificationResult, HudProfile, Player, PlayerStats } from "../data/types";
+import { NO_OPPORTUNITY, STAT_LABELS } from "./statFormat";
 import styles from "./PlayerHudCard.module.css";
 
 /**
- * Sample-size confidence shading. Stat values fade toward
- * `MIN_STAT_OPACITY` as a player's hand count drops toward zero, reaching full
- * opacity at the active profile's `min_hands` — the same threshold that
- * already gates archetype classification, reused deliberately as the single
- * confidence anchor rather than computing each stat's own denominator
- * (simplicity over precision for a purely cosmetic signal).
- *
- * Purely visual: it never hides a value and never gates classification.
+ * How many stats the compact chip shows: the first three of the profile's
+ * first stat page (VPIP/PFR/3-bet by default). More would not fit one line on
+ * a minimum-size table.
  */
-const MIN_STAT_OPACITY = 0.35;
+const COMPACT_STAT_COUNT = 3;
 
-function sampleConfidence(hands: number, minHands: number): number {
-  if (minHands <= 0) return 1;
-  const ratio = Math.min(1, Math.max(0, hands / minHands));
-  return MIN_STAT_OPACITY + (1 - MIN_STAT_OPACITY) * ratio;
+/** Left edge of a chip with no archetype to show. */
+const NEUTRAL_EDGE = "#4a5266";
+
+/**
+ * The archetype the chip may show, or `null`. An automatic archetype needs
+ * the profile's `min_hands` sample, whatever the classifier itself decided,
+ * so the HUD never labels a player on too few hands. A manual override is
+ * the user's own colour and always shows, the same rule as the Players view
+ * and the detail panel.
+ */
+function shownArchetype(
+  classification: ClassificationResult | undefined,
+  hands: number,
+  minHands: number,
+): ClassificationResult | null {
+  if (!classification || !classification.available) return null;
+  if (classification.isOverride) return classification;
+  if (classification.classification === "unknown") return null;
+  return hands >= minHands ? classification : null;
 }
 
+/** Whole numbers on the chip: "24", not "24.3%". AF keeps one decimal. */
+function chipValue(key: keyof PlayerStats, stats: PlayerStats): string {
+  const value = stats[key];
+  if (value === null || value === undefined) return NO_OPPORTUNITY;
+  return key === "aggressionFactor" ? value.toFixed(1) : String(Math.round(value));
+}
 
 interface PlayerHudCardProps {
   player: Player;
   profile: HudProfile;
   onOpenDetail?: (player: Player) => void;
   /**
-   * Overlay usage passes drag handlers down; main-app previews leave it off.
-   * These land on the card root, so the whole card is the drag surface — it
-   * used to be only the 64px avatar ring, which made repositioning fiddly.
-   * Only the pagination dots opt out.
+   * Overlay only: the chip is also its own drag handle. The overlay defers
+   * pointer capture until the pointer really moves, so a plain click still
+   * reaches `onClick`.
    */
-  dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
-  /**
-   * HUD Profiles preview only: pins the card to one width per visual model so
-   * the preview's wrapping row falls into even columns instead of being sized
-   * by each player's name and chip count. The overlay leaves this off — cards
-   * there are positioned freely and stay content-sized.
-   */
-  fixedWidth?: boolean;
-  /**
-   * Overlay usage only: hands back the pagination-dot cluster's DOM node so
-   * the overlay can register it as an always-clickable hot zone with the
-   * native hit test. Without it the dots would be dead in the overlay's
-   * normal, table-interactive mode, since every other point on the window
-   * falls through to the table underneath.
-   */
-  dotClusterRef?: (el: HTMLDivElement | null) => void;
-  /**
-   * Overlay usage only: hands back the content button's own DOM node so the
-   * overlay can register it as an always-clickable hot zone with the native
-   * hit test, same reason as `dotClusterRef` — without it, clicking a
-   * card to open its detail drawer falls through to the table underneath.
-   */
+  dragHandleProps?: Pick<React.HTMLAttributes<HTMLButtonElement>, "onPointerDown">;
+  /** Overlay only: the chip's node, registered as a clickable hot zone. */
   contentRef?: (el: HTMLButtonElement | null) => void;
-  /**
-   * Jivaro model only: mirrors the element so its info card sits outboard on
-   * the table's right-hand seats. The three original models ignore it — their
-   * layout is the same on both sides.
-   */
-  mirrored?: boolean;
+  /** HUD Profiles preview only: one width per model, so the preview lines up in columns. */
+  fixedWidth?: boolean;
+  /** This player's detail panel is open. */
+  expanded?: boolean;
+  /** Overlay only: the chip is being dragged. */
+  dragging?: boolean;
 }
 
+/**
+ * One player's HUD chip. Two designs, picked by the profile:
+ * - `compact` (the default, and what any unknown model renders as): one line
+ *   with the first stat page's values and the hand count;
+ * - `badge`: initials and the hand count, stats one click away.
+ * Either way the chip is one button: click opens the detail panel, drag
+ * moves it. Its size comes from the overlay (`--chip-font`, `--chip-w`,
+ * `--chip-h`), which scales it with the table.
+ */
 export function PlayerHudCard({
   player,
   profile,
   onOpenDetail,
   dragHandleProps,
-  fixedWidth,
-  dotClusterRef,
   contentRef,
-  mirrored,
+  fixedWidth,
+  expanded,
+  dragging,
 }: PlayerHudCardProps) {
-  const [pageIndex, setPageIndex] = useState(0);
+  const model = profile.visualModel === "badge" ? "badge" : "compact";
+  const archetype = shownArchetype(player.classification, player.hands, profile.minHands);
+  const smallSample = player.hands < profile.minHands;
+  const handsText = `${player.hands.toLocaleString()} hand${player.hands === 1 ? "" : "s"}`;
 
-  // The Jivaro model is a different shape, not a restyle of the
-  // three below: a segmented gauge with an info card behind it. It renders
-  // from its own component so that this one and its stylesheet stay exactly
-  // as the three shipped models left them.
-  if (profile.visualModel === "jivaro") {
-    return (
-      <JivaroHudCard
-        player={player}
-        profile={profile}
-        onOpenDetail={onOpenDetail}
-        dragHandleProps={dragHandleProps}
-        fixedWidth={fixedWidth}
-        dotClusterRef={dotClusterRef}
-        contentRef={contentRef}
-        mirrored={mirrored}
-      />
-    );
-  }
+  const keys = (profile.statPages[0]?.statKeys ?? []).slice(0, COMPACT_STAT_COUNT);
+  const values = keys.map((key) => chipValue(key, player.stats));
+  const statsText = keys.map((key, i) => `${STAT_LABELS[key]} ${values[i]}`).join(", ");
 
-  const classification = player.classification;
-  const color = classification?.color ?? "#6b7480";
-  const initials = player.name.slice(0, 2).toUpperCase();
+  // The colour is never the only signal: the archetype's name is in the
+  // chip's accessible name and tooltip, and the detail panel spells it out.
+  const description = [
+    player.name,
+    handsText,
+    model === "compact" && statsText ? statsText : null,
+    archetype ? archetype.label : null,
+    smallSample ? `under ${profile.minHands} hands, small sample` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
 
-  // The badge model puts nothing on the table but a small pill: initials and
-  // hand count, and a click that opens the detail drawer with the player's
-  // stats and tendencies. It renders the same way in the overlay and in the
-  // HUD Profiles preview, so what the preview shows is what lands on a table.
-  if (profile.visualModel === "badge") {
-    // The outline turns accent-coloured only when opening this player
-    // actually shows something written: a tendency/exploit line, or an
-    // archetype. Without that, a badge is just a name and a hand count and
-    // the click leads to an empty drawer — the colour is the difference
-    // between the two, so a glance says which players are worth opening.
-    // Notes are deliberately not part of it: the overlay's player payload
-    // does not load them (`build_player_payload(..., include_note: false)`),
-    // and adding a per-player note query to the live refresh path is a cost
-    // this doesn't justify.
-    const hasWrittenInfo =
-      (player.descriptions?.length ?? 0) > 0 ||
-      Boolean(
-        classification &&
-          classification.available &&
-          (classification.isOverride || classification.classification !== "unknown"),
-      );
+  // Badge only: the outline turns accent-coloured when opening this player
+  // shows something written (a read or an archetype), so a glance says which
+  // players are worth opening.
+  const hasWrittenInfo = (player.descriptions?.length ?? 0) > 0 || archetype !== null;
 
-    return (
-      <div
-        className={`${styles.badgeCard} ${dragHandleProps ? styles.draggable : ""}`}
-        {...dragHandleProps}
-      >
-        <button
-          type="button"
-          ref={contentRef}
-          className={`${styles.badge} ${hasWrittenInfo ? styles.badgeHasInfo : ""}`}
-          // No `stopPropagation`, unlike the full card's content button
-          // below: the pill IS the whole drag surface, so the wrapper's
-          // `dragHandleProps.onPointerDown` must see this press. That stays
-          // safe because `OverlayApp.tsx` defers pointer capture until real
-          // movement crosses a threshold, so a plain tap never captures and
-          // this button's own click still fires.
-          onClick={() => onOpenDetail?.(player)}
-          aria-label={`Open detailed stats for ${player.name}`}
-          title={player.name}
-        >
-          <span className={styles.badgeName}>{initials}</span>
-          <span className={styles.badgeHands}>{player.hands}</span>
-        </button>
-      </div>
-    );
-  }
-
-  const pages = profile.statPages.length > 0 ? profile.statPages : [];
-  const activePage = pages[pageIndex] ?? pages[0];
-  // `resolve_for_player` already decided what may be shown (same
-  // contract JivaroHudCard's `tint` reads). A manual override always carries
-  // `isOverride`; the automatic archetype only ever arrives when this build
-  // has `auto-classification` compiled in — otherwise it comes back as the
-  // neutral, build-level "unavailable" result, and repeating that full
-  // sentence next to every player's name would be noise, not information.
-  // A genuine "Unknown" (available, no rule matched, or below its own
-  // min_hands) still renders, same as before.
-  const label =
-    classification && (classification.isOverride || classification.classification !== "unknown")
-      ? classification.label
-      : classification?.available
-        ? classification.label
-        : null;
-  const statConfidence = sampleConfidence(player.hands, profile.minHands);
+  const className = [
+    styles.chip,
+    model === "badge" ? styles.badge : styles.compact,
+    model === "badge" && hasWrittenInfo ? styles.hasInfo : "",
+    smallSample ? styles.smallSample : "",
+    dragHandleProps ? styles.draggable : "",
+    dragging ? styles.dragging : "",
+    expanded ? styles.expanded : "",
+    fixedWidth ? styles.fixedWidth : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <div
-      className={`${styles.card} ${styles[profile.visualModel] ?? ""} ${
-        dragHandleProps ? styles.draggable : ""
-      } ${fixedWidth ? styles.fixedWidth : ""}`}
-      style={{ ["--player-color" as string]: color }}
+    <button
+      type="button"
+      ref={contentRef}
+      className={className}
+      style={{ ["--edge" as string]: archetype?.color ?? NEUTRAL_EDGE }}
+      onClick={() => onOpenDetail?.(player)}
+      aria-label={`${description}. Open details`}
+      aria-expanded={expanded === undefined ? undefined : expanded}
+      title={description}
       {...dragHandleProps}
     >
-      <div className={styles.ring}>
-        <div className={styles.ringSegments} />
-        <div className={styles.avatar}>{initials}</div>
-        <span className={styles.handsInRing}>{player.hands}</span>
-        {pages.length > 1 && (
-          <div
-            ref={dotClusterRef}
-            className={styles.dots}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            {pages.map((page, idx) => (
-              <button
-                key={page.id}
-                type="button"
-                className={`${styles.dot} ${idx === pageIndex ? styles.dotActive : ""}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPageIndex(idx);
-                }}
-                aria-label={`Show ${page.label} stats`}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      <button
-        type="button"
-        ref={contentRef}
-        className={styles.content}
-        // Stops the card root's drag-handle pointerdown (dragHandleProps,
-        // overlay usage only) from capturing this press and swallowing the
-        // click before it fires — the same guard the pagination dots use
-        // above, now needed here too now that this button is interactive.
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={() => onOpenDetail?.(player)}
-        aria-label={`Open detailed stats for ${player.name}`}
-      >
-        <div className={styles.identityRow}>
-          <span className={styles.name} title={player.name}>
-            {player.name}
-          </span>
-          {label && <span className={styles.classificationLabel}>{label}</span>}
-        </div>
-
-        {player.snapshot ? (
-          <div className={styles.stackRow}>
-            <span className={styles.chips}>
-              {formatChips(player.snapshot.stack, player.snapshot.currency, player.snapshot.format)}
+      {model === "badge" ? (
+        <span className={styles.initials}>{player.name.slice(0, 2).toUpperCase()}</span>
+      ) : (
+        <span className={styles.stats}>
+          {values.map((value, i) => (
+            <span key={keys[i]}>
+              {i > 0 && <span className={styles.sep}>/</span>}
+              {value}
             </span>
-            <span className={`${styles.bbValue} ${styles[bbDepthTier(player.snapshot.stackBb)]}`}>
-              {formatBb(player.snapshot.stackBb)}
-            </span>
-            <span className={styles.bbLabel}>BB</span>
-          </div>
-        ) : (
-          <div className={styles.stackRow}>
-            <span className={styles.noSnapshot}>No recent hand</span>
-          </div>
-        )}
-
-        {activePage && (
-          <div
-            className={styles.statRow}
-            key={activePage.id}
-            style={{ ["--stat-confidence" as string]: statConfidence }}
-          >
-            {activePage.statKeys.map((key, i) => (
-              <div key={key} className={styles.statCell}>
-                <span
-                  className={`${styles.statValue} tabular`}
-                  style={{ color: STAT_COLUMN_COLORS[i % STAT_COLUMN_COLORS.length] }}
-                >
-                  {formatStatValue(key, player.stats)}
-                </span>
-                <span className={styles.statLabel}>{STAT_LABELS[key]}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </button>
-    </div>
+          ))}
+        </span>
+      )}
+      <span className={styles.hands}>{player.hands}</span>
+    </button>
   );
 }

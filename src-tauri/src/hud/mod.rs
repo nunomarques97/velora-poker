@@ -57,53 +57,26 @@ fn canonical_stat_pages() -> Vec<StatPage> {
 pub fn builtin_profiles() -> Vec<HudProfile> {
     let pages = canonical_stat_pages();
     vec![
+        // Compact model: one line per player with the first stat page (VPIP,
+        // PFR, 3-bet) and the hand count. Small enough for a minimum-size
+        // table, readable without a click. The default for new installs.
         HudProfile {
-            id: "velora-hud".to_string(),
-            name: "Velora HUD".to_string(),
-            visual_model: "velora_hud".to_string(),
-            stat_pages: pages.clone(),
-            min_hands: 25,
-            is_builtin: true,
-        },
-        HudProfile {
-            id: "velora-classic".to_string(),
-            name: "Velora Classic".to_string(),
-            visual_model: "velora_classic".to_string(),
-            stat_pages: pages.clone(),
-            min_hands: 25,
-            is_builtin: true,
-        },
-        HudProfile {
-            id: "minimal".to_string(),
-            name: "Minimal".to_string(),
-            visual_model: "minimal".to_string(),
+            id: COMPACT_PROFILE_ID.to_string(),
+            name: "Compact".to_string(),
+            visual_model: "compact".to_string(),
             stat_pages: pages.clone(),
             min_hands: 25,
             is_builtin: true,
         },
         // Badge model: no stats on the table at all, just a small clickable
         // pill with the player's initials and hand count. The stats live one
-        // click away, in the detail drawer. Built for multi-tabling, where
-        // full cards on every table cover the tables themselves. It carries
-        // the same stat pages as the others so switching models never loses
-        // a page configuration; the frontend simply doesn't render them.
+        // click away, in the detail drawer. It carries the same stat pages as
+        // Compact so switching models never loses a page configuration; the
+        // frontend simply doesn't render them.
         HudProfile {
             id: "badge".to_string(),
             name: "Badge".to_string(),
             visual_model: "badge".to_string(),
-            stat_pages: pages.clone(),
-            min_hands: 25,
-            is_builtin: true,
-        },
-        // The Jivaro-style model. Backend-wise it is deliberately nothing new: the
-        // same canonical stat pages, the same 25-hand gate and the same
-        // `classification::resolve_for_player` colour source as the other three
-        // — the whole difference lives in the frontend's rendering of it
-        // (`src/hud/JivaroHudCard.tsx`).
-        HudProfile {
-            id: "jivaro".to_string(),
-            name: "Jivaro".to_string(),
-            visual_model: "jivaro".to_string(),
             stat_pages: pages,
             min_hands: 25,
             is_builtin: true,
@@ -112,11 +85,33 @@ pub fn builtin_profiles() -> Vec<HudProfile> {
 }
 
 pub const ACTIVE_PROFILE_SETTING: &str = "active_hud_profile_id";
-/// The badge model: a new install lands on the smallest HUD there is, one
-/// clickable pill per player, and the full cards are one click away in HUD
-/// Profiles. Chosen as the default because the full cards cover the tables
-/// themselves once more than one is open.
-const DEFAULT_PROFILE_ID: &str = "badge";
+/// The compact model. A new install lands on the stat line that still fits a
+/// minimum-size table, so the HUD is useful without choosing anything.
+pub const COMPACT_PROFILE_ID: &str = "compact";
+const DEFAULT_PROFILE_ID: &str = COMPACT_PROFILE_ID;
+
+/// Builtin profile ids that no longer exist. `jivaro-inspired` is the oldest
+/// name of `velora-hud` (see `migrate_legacy_jivaro_profile`) and is listed so
+/// a setting that somehow still points at it is carried over too.
+pub const RETIRED_PROFILE_IDS: &[&str] = &[
+    "velora-hud",
+    "velora-classic",
+    "minimal",
+    "jivaro",
+    "jivaro-inspired",
+];
+
+/// Visual models the frontend no longer renders.
+pub const RETIRED_VISUAL_MODELS: &[&str] = &[
+    "velora_hud",
+    "velora_classic",
+    "minimal",
+    "jivaro",
+    "jivaro_inspired",
+];
+
+/// Settings flag of `consolidate_profiles_to_compact`.
+pub const PROFILES_CONSOLIDATED_FLAG: &str = "hud_profiles_consolidated_to_compact";
 
 /// Renames the old "jivaro-inspired" builtin profile (from before the
 /// product's own default HUD visual was implemented) to "velora-hud" in
@@ -149,10 +144,56 @@ fn migrate_legacy_jivaro_profile(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-pub fn seed_builtin_profiles(conn: &Connection) -> rusqlite::Result<()> {
-    migrate_legacy_jivaro_profile(conn)?;
+/// The HUD models were reduced to Compact and Badge. Runs once (settings
+/// flag), before seeding:
+/// - an active profile that is one of the retired builtins moves to Compact,
+///   and Compact takes over that profile's `min_hands`, so the sample-size
+///   gate the user chose is not silently reset;
+/// - a user's own profile on a retired visual model is switched to `compact`
+///   (its id, name, pages and `min_hands` are kept);
+/// - the retired builtin rows are deleted. `builtin_profiles` no longer lists
+///   them, so nothing seeds them back.
+pub fn consolidate_profiles_to_compact(conn: &Connection) -> rusqlite::Result<()> {
+    if db::get_setting(conn, PROFILES_CONSOLIDATED_FLAG)?.is_some() {
+        return Ok(());
+    }
 
-    for profile in builtin_profiles() {
+    if let Some(active_id) = db::get_setting(conn, ACTIVE_PROFILE_SETTING)? {
+        if RETIRED_PROFILE_IDS.contains(&active_id.as_str()) {
+            let carried_min_hands: Option<i64> = conn
+                .query_row(
+                    "SELECT min_hands FROM hud_profiles WHERE id = ?1",
+                    params![active_id],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            insert_builtin_if_missing(conn, COMPACT_PROFILE_ID)?;
+            if let Some(min_hands) = carried_min_hands {
+                set_profile_min_hands(conn, COMPACT_PROFILE_ID, min_hands)?;
+            }
+            db::set_setting(conn, ACTIVE_PROFILE_SETTING, COMPACT_PROFILE_ID)?;
+        }
+    }
+
+    for model in RETIRED_VISUAL_MODELS {
+        conn.execute(
+            "UPDATE hud_profiles SET visual_model = 'compact' WHERE visual_model = ?1 AND is_builtin = 0",
+            params![model],
+        )?;
+    }
+    for id in RETIRED_PROFILE_IDS {
+        conn.execute(
+            "DELETE FROM hud_profiles WHERE id = ?1 AND is_builtin = 1",
+            params![id],
+        )?;
+    }
+
+    db::set_setting(conn, PROFILES_CONSOLIDATED_FLAG, "true")?;
+    Ok(())
+}
+
+fn insert_builtin_if_missing(conn: &Connection, id: &str) -> rusqlite::Result<()> {
+    for profile in builtin_profiles().into_iter().filter(|p| p.id == id) {
         let pages_json =
             serde_json::to_string(&profile.stat_pages).unwrap_or_else(|_| "[]".to_string());
         conn.execute(
@@ -167,6 +208,16 @@ pub fn seed_builtin_profiles(conn: &Connection) -> rusqlite::Result<()> {
                 db::now_iso(),
             ],
         )?;
+    }
+    Ok(())
+}
+
+pub fn seed_builtin_profiles(conn: &Connection) -> rusqlite::Result<()> {
+    migrate_legacy_jivaro_profile(conn)?;
+    consolidate_profiles_to_compact(conn)?;
+
+    for profile in builtin_profiles() {
+        insert_builtin_if_missing(conn, &profile.id)?;
     }
     if db::get_setting(conn, ACTIVE_PROFILE_SETTING)?.is_none() {
         db::set_setting(conn, ACTIVE_PROFILE_SETTING, DEFAULT_PROFILE_ID)?;

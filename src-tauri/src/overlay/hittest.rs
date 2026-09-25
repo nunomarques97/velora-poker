@@ -16,7 +16,7 @@
 //!
 //! What is needed is that same decision made *per point*: click-through
 //! everywhere except a handful of small rectangles the frontend keeps up to
-//! date (its control bar, and each visible card's pagination-dot cluster).
+//! date (its HUD chips, its "Show" pill and an open detail panel).
 //!
 //! ## Why not WM_NCHITTEST
 //!
@@ -47,20 +47,25 @@
 //! A dedicated thread reads `GetCursorPos` at ~60Hz, maps it into the
 //! overlay's client area, and sets or clears `CLICK_THROUGH_BITS` so the
 //! style always matches the point the cursor is actually on: cleared over a
-//! registered hot zone, set everywhere else, and cleared unconditionally in
-//! reposition mode. The style is only written when the answer changes, so the
-//! steady state is one `GetCursorPos` per frame and nothing else.
+//! registered hot zone, set everywhere else. `wants_click_through` is that
+//! whole decision, and it depends on nothing but the zones and the point:
+//! there is no mode that makes a whole window capture the mouse. (There used
+//! to be — a "Reposition" mode that cleared click-through for the entire
+//! overlay so a card could be dragged, which took Fold/Call/Raise away from
+//! the player until they found the control to leave it. Chips are now
+//! dragged straight from their own hot zone.) The style is only written when
+//! the answer changes, so the steady state is one `GetCursorPos` per frame and
+//! nothing else.
 //!
 //! Same class of native work as `table_track::win`'s `SetWinEventHook`: one
 //! polling thread started once at startup, driven by process-wide statics.
 //!
 //! ## One instance became a registry
 //!
-//! This started as a single global instance — one HWND, one mode, one hot-zone
-//! list — because there was only ever one overlay window to hit-test against.
-//! With one overlay per tracked table that shape would have every overlay
-//! sharing the last one's hot zones and leaking Reposition mode into its
-//! neighbours. Each registered overlay now owns its own entry; the cursor is
+//! This started as a single global instance — one HWND, one hot-zone list —
+//! because there was only ever one overlay window to hit-test against. With
+//! one overlay per tracked table that shape would have every overlay sharing
+//! the last one's hot zones. Each registered overlay now owns its own entry; the cursor is
 //! still read once per tick for all of them, since only one window can be
 //! under it anyway and the rest simply resolve to "not over a hot zone",
 //! which is the right answer for them regardless.
@@ -75,8 +80,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetCursorPos, GetWindowLongPtrW, IsWindowVisible, SetWindowLongPtrW, GWL_EXSTYLE,
     WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TRANSPARENT,
 };
-
-use super::OverlayMode;
 
 /// A hot-zone rectangle in the overlay window's *client* pixels (already
 /// multiplied by the window's scale factor — the frontend reports CSS pixels).
@@ -101,7 +104,6 @@ struct OverlayHitState {
     /// — the key every command addresses this entry by.
     label: String,
     hwnd: isize,
-    mode: OverlayMode,
     zones: Vec<ClientRect>,
     /// Mirror of the style last written for this window, so the steady state
     /// costs no `GetWindowLongPtrW`.
@@ -144,7 +146,6 @@ static STYLE_WRITES: AtomicU64 = AtomicU64::new(0);
 pub struct Probe {
     pub label: String,
     pub hwnd: isize,
-    pub mode: OverlayMode,
     pub hot_zones: usize,
     pub click_through: bool,
 }
@@ -159,7 +160,6 @@ pub fn probe() -> (Vec<Probe>, u64, u64) {
                 .map(|o| Probe {
                     label: o.label.clone(),
                     hwnd: o.hwnd,
-                    mode: o.mode,
                     hot_zones: o.zones.len(),
                     click_through: o.click_through,
                 })
@@ -171,25 +171,6 @@ pub fn probe() -> (Vec<Probe>, u64, u64) {
         TICKS.load(Ordering::SeqCst),
         STYLE_WRITES.load(Ordering::SeqCst),
     )
-}
-
-pub fn set_mode(label: &str, mode: OverlayMode) {
-    if let Ok(mut overlays) = OVERLAYS.lock() {
-        if let Some(overlay) = overlays.iter_mut().find(|o| o.label == label) {
-            overlay.mode = mode;
-        }
-    }
-    // Don't wait up to a frame for the tracker to notice: leaving reposition
-    // mode has to make the table clickable the instant the button is
-    // released, and entering it has to stop the next click reaching the table.
-    apply_for_current_cursor();
-}
-
-pub fn mode(label: &str) -> Option<OverlayMode> {
-    OVERLAYS
-        .lock()
-        .ok()
-        .and_then(|overlays| overlays.iter().find(|o| o.label == label).map(|o| o.mode))
 }
 
 pub fn set_hot_zones(label: &str, zones: Vec<ClientRect>) {
@@ -205,7 +186,7 @@ pub fn set_hot_zones(label: &str, zones: Vec<ClientRect>) {
 
 /// Registers one overlay window and starts the shared cursor tracker, which
 /// owns that window's extended style from here on. Idempotent per label: a
-/// re-registered label keeps its mode and zones but takes the new HWND.
+/// re-registered label keeps its zones but takes the new HWND.
 pub fn install(label: &str, hwnd_raw: isize) {
     if hwnd_raw == 0 {
         return;
@@ -216,7 +197,6 @@ pub fn install(label: &str, hwnd_raw: isize) {
             None => overlays.push(OverlayHitState {
                 label: label.to_string(),
                 hwnd: hwnd_raw,
-                mode: OverlayMode::Normal,
                 zones: Vec::new(),
                 click_through: false,
             }),
@@ -240,7 +220,8 @@ pub fn remove(label: &str) {
     }
 }
 
-pub fn is_installed(label: &str) -> bool {
+#[cfg(test)]
+fn is_installed(label: &str) -> bool {
     OVERLAYS
         .lock()
         .map(|overlays| overlays.iter().any(|o| o.label == label))
@@ -265,24 +246,31 @@ fn apply_for_current_cursor() {
             continue;
         }
 
-        let want_click_through = if overlay.mode == OverlayMode::Reposition {
-            // The whole window captures, so a card can be dragged from anywhere.
-            false
-        } else if !cursor_ok {
-            // Never guess "opaque" on a failed read: that is the state that
-            // takes the table away from the player.
-            true
-        } else {
+        let point = if cursor_ok {
             let mut pt = cursor;
-            if unsafe { ScreenToClient(hwnd, &mut pt) }.as_bool() {
-                !overlay.claims_point(pt.x, pt.y)
-            } else {
-                true
-            }
+            unsafe { ScreenToClient(hwnd, &mut pt) }
+                .as_bool()
+                .then_some((pt.x, pt.y))
+        } else {
+            None
         };
+        let want_click_through = wants_click_through(&overlay.zones, point);
 
         overlay.click_through = want_click_through;
         apply_style(hwnd, want_click_through);
+    }
+}
+
+/// The whole click-through decision for one overlay, free of any OS call:
+/// clicks pass through to the table at every point outside the overlay's own
+/// hot zones, and only a point inside one of them stays with the overlay.
+/// `None` is a cursor that could not be read or mapped into the window; it
+/// passes through too, because guessing "opaque" is the failure that takes
+/// the table away from the player.
+pub fn wants_click_through(zones: &[ClientRect], point: Option<(i32, i32)>) -> bool {
+    match point {
+        Some((x, y)) => !zones.iter().any(|z| z.contains(x, y)),
+        None => true,
     }
 }
 
@@ -298,9 +286,9 @@ fn apply_style(hwnd: HWND, click_through: bool) {
     unsafe {
         let current = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
 
-        // Clicking a pagination dot must not pull focus off the table.
+        // Clicking the overlay must not pull focus off the table.
         // Measured before this was added: with the table focused, one real
-        // click on a dot flipped the page *and* made the overlay the
+        // click on a (since removed) pagination dot flipped the page *and* made the overlay the
         // foreground window, so the player's own table quietly stopped being
         // the active window mid-hand. `WS_EX_NOACTIVATE` declines that
         // activation while still delivering the click; the overlay takes no
@@ -316,14 +304,6 @@ fn apply_style(hwnd: HWND, click_through: bool) {
             SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next);
             STYLE_WRITES.fetch_add(1, Ordering::SeqCst);
         }
-    }
-}
-
-impl OverlayHitState {
-    /// Whether a point in *this* overlay's client area falls in one of its own
-    /// hot zones — never another overlay's.
-    fn claims_point(&self, x: i32, y: i32) -> bool {
-        self.zones.iter().any(|z| z.contains(x, y))
     }
 }
 
@@ -347,7 +327,7 @@ mod tests {
             Ok(overlays) => overlays
                 .iter()
                 .find(|o| o.label == label)
-                .map(|o| o.claims_point(x, y))
+                .map(|o| !wants_click_through(&o.zones, Some((x, y))))
                 .unwrap_or(false),
             Err(_) => false,
         }
@@ -366,6 +346,38 @@ mod tests {
     /// The tracker's decision, isolated from the OS calls around it: a point
     /// inside any registered zone keeps the overlay clickable, and everything
     /// else lets the click through to the table.
+    /// The pure decision the tracker applies: outside every zone the click
+    /// goes to the table, inside any zone it stays with the overlay, and an
+    /// unreadable cursor never makes the window capture.
+    #[test]
+    fn click_through_is_decided_only_by_the_hot_zones() {
+        let chip = ClientRect { x: 100, y: 200, width: 60, height: 22 };
+        let pill = ClientRect { x: 700, y: 10, width: 40, height: 18 };
+        let zones = [chip, pill];
+
+        assert!(!wants_click_through(&zones, Some((100, 200))), "chip top-left");
+        assert!(!wants_click_through(&zones, Some((159, 221))), "chip bottom-right pixel");
+        assert!(!wants_click_through(&zones, Some((720, 20))), "Show pill");
+        assert!(wants_click_through(&zones, Some((160, 210))), "just right of the chip");
+        assert!(wants_click_through(&zones, Some((400, 300))), "bare table");
+        assert!(wants_click_through(&zones, Some((-5, -5))), "outside the window");
+        assert!(wants_click_through(&zones, None), "cursor unreadable");
+        assert!(wants_click_through(&[], Some((100, 200))), "no zones: all click-through");
+    }
+
+    /// No state inverts the decision for a whole window: with a zone covering
+    /// one corner, every sampled point outside it is click-through.
+    #[test]
+    fn no_point_outside_the_zones_ever_captures() {
+        let zones = [ClientRect { x: 0, y: 0, width: 50, height: 50 }];
+        for x in (0..800).step_by(25) {
+            for y in (0..600).step_by(25) {
+                let inside = x < 50 && y < 50;
+                assert_eq!(wants_click_through(&zones, Some((x, y))), !inside, "({x},{y})");
+            }
+        }
+    }
+
     #[test]
     fn only_registered_zones_keep_the_overlay_clickable() {
         let label = "overlay901";
@@ -377,13 +389,9 @@ mod tests {
                 ClientRect { x: 230, y: 449, width: 36, height: 8 },
             ],
         );
-        assert!(point_in_hot_zone(label, 1300, 20), "control bar");
-        assert!(point_in_hot_zone(label, 248, 453), "a card's pagination dots");
+        assert!(point_in_hot_zone(label, 1300, 20), "Show pill");
+        assert!(point_in_hot_zone(label, 248, 453), "a chip");
         assert!(!point_in_hot_zone(label, 700, 600), "bare overlay");
-        assert!(
-            !point_in_hot_zone(label, 340, 400),
-            "a card's own body is not a hot zone"
-        );
         set_hot_zones(label, Vec::new());
         assert!(
             !point_in_hot_zone(label, 1300, 20),
@@ -392,11 +400,10 @@ mod tests {
         remove(label);
     }
 
-    /// The reason the registry exists: one global zone list and one global
-    /// mode meant table B's cards decided whether table A's overlay
-    /// swallowed a click.
+    /// The reason the registry exists: one global zone list meant table B's
+    /// cards decided whether table A's overlay swallowed a click.
     #[test]
-    fn overlays_do_not_share_hot_zones_or_modes() {
+    fn overlays_do_not_share_hot_zones() {
         let (a, b) = ("overlay902", "overlay903");
         register(a);
         register(b);
@@ -409,14 +416,6 @@ mod tests {
         assert!(point_in_hot_zone(b, 550, 550), "B's own zone");
         assert!(!point_in_hot_zone(a, 550, 550), "B's zone must not claim A's points");
 
-        set_mode(a, OverlayMode::Reposition);
-        assert_eq!(mode(a), Some(OverlayMode::Reposition));
-        assert_eq!(
-            mode(b),
-            Some(OverlayMode::Normal),
-            "repositioning one overlay must leave every other table clickable"
-        );
-
         remove(a);
         remove(b);
     }
@@ -424,17 +423,15 @@ mod tests {
     /// A destroyed overlay must leave nothing behind for the 60Hz tracker to
     /// walk into, and must not answer for its old label.
     #[test]
-    fn removing_an_overlay_forgets_its_zones_and_mode() {
+    fn removing_an_overlay_forgets_its_zones() {
         let label = "overlay904";
         register(label);
         set_hot_zones(label, vec![ClientRect { x: 0, y: 0, width: 10, height: 10 }]);
-        set_mode(label, OverlayMode::Reposition);
         assert!(is_installed(label));
 
         remove(label);
 
         assert!(!is_installed(label));
-        assert_eq!(mode(label), None);
         assert!(!point_in_hot_zone(label, 5, 5));
     }
 }

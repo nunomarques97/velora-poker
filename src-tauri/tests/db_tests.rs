@@ -365,118 +365,70 @@ fn active_hand_includes_a_sitting_newer_than_the_tracked_tables_own_first_seen_a
     assert_eq!(hand.hand_id, "400000000002");
 }
 
-/// A fresh database seeds every table size from 2 to 10 seats, not just
-/// the six measured 6-max rows — multi-table tournaments are typically
-/// 9-max, so a 9-max table must never fall back to `OverlayApp`'s
-/// stacking grid.
+/// A seat position is the user's own drag and outlives every restart:
+/// reopening re-runs the migrations and seeding on the same file.
 #[test]
-fn nine_max_table_is_seeded_with_nine_distinct_seat_offsets() {
-    let conn = setup_db();
-
-    let nine_max = db::list_seat_templates(&conn, 9).unwrap();
-    assert_eq!(nine_max.len(), 9, "expected all 9 offsets seeded, got {nine_max:?}");
-
-    let mut offsets: Vec<i64> = nine_max.iter().map(|row| row.seat_offset).collect();
-    offsets.sort_unstable();
-    offsets.dedup();
-    assert_eq!(
-        offsets,
-        (0..9).collect::<Vec<i64>>(),
-        "every offset 0..9 must have its own distinct derived position"
-    );
-}
-
-/// Seeding runs on every `db::open`, not just the first — a user who
-/// dragged a seat on a derived (non-6-max) table size must keep that position
-/// forever, exactly like the already-covered 6-max case.
-#[test]
-fn seeding_never_overwrites_a_users_dragged_position_on_a_derived_table_size() {
+fn a_saved_seat_position_survives_reopening_the_database() {
     let dir = tempfile::tempdir().expect("temp dir");
     let db_path = dir.path().join("velora.db");
 
     {
-        let conn = db::open(&db_path).expect("first open seeds the derived layout");
-        db::set_seat_template(&conn, 9, 2, 0.5, 0.5).expect("save the user's own drag");
+        let conn = db::open(&db_path).expect("first open");
+        assert_eq!(db::list_seat_positions(&conn, 9, db::SeatFrame::Hero).unwrap(), vec![]);
+        db::set_seat_position(&conn, 9, db::SeatFrame::Hero, 2, 0.5, 0.25).expect("save a drag");
+        db::set_seat_position(&conn, 9, db::SeatFrame::Absolute, 7, 0.6, 0.35).expect("save a drag");
     }
 
-    // Reopening re-runs `seed_defaults`/`seed_builtin_seat_templates` on the
-    // same database — the regression this guards is the derived-ellipse pass
-    // clobbering a user's own row the same way the measured 6-max pass
-    // already never does.
-    let conn = db::open(&db_path).expect("second open re-seeds");
+    let conn = db::open(&db_path).expect("second open");
     assert_eq!(
-        db::get_seat_template(&conn, 9, 2).unwrap(),
-        Some((0.5, 0.5)),
-        "a user-dragged position on a derived table size must survive reseeding"
+        db::list_seat_positions(&conn, 9, db::SeatFrame::Hero).unwrap(),
+        vec![db::SeatPositionRow { seat_key: 2, x: 0.5, y: 0.25 }]
+    );
+    assert_eq!(
+        db::list_seat_positions(&conn, 9, db::SeatFrame::Absolute).unwrap(),
+        vec![db::SeatPositionRow { seat_key: 7, x: 0.6, y: 0.35 }]
     );
 }
 
-/// The on-screen bound for seeded seat positions, *and* the one place where
-/// two requirements on those positions contradict each other, resolved here
-/// in code.
-///
-/// A seat card is anchored at its top-left corner, so a position too close to
-/// an edge draws part of the card outside the overlay window. Hence two
-/// bounds, deliberately different:
-///
-/// - **Hard bound — every size 2..=10, 6-max included:** `0.0 < x,y < 1.0`.
-///   Outside this a card is born off the overlay entirely. Nothing may ever
-///   be seeded there, measured or derived.
-/// - **Safe margin `0.02..=0.92`** — the intended margin
-///   "for every size 2..10". Every *derived* position satisfies it by
-///   construction (`db::ellipse_seat_template` clamps to it). Exactly one
-///   seeded position does not, and cannot be made to: the hand-measured
-///   `BUILTIN_SEAT_TEMPLATES` row `(6, 1)` is `x = 0.01080431`, and
-///   the six measured rows must stay byte-for-byte identical. The margin and
-///   the measured rows cannot both hold literally for 6-max; the measured
-///   rows win, because those six points are the live-measured
-///   calibration every derived layout is fitted against, and a real
-///   client does render a seat there.
-///
-/// So the safe margin is asserted as a guarantee of the *generator*, and the
-/// single measured exception is asserted explicitly instead of being
-/// skipped: if a future change ever adds a second position outside the
-/// margin, or moves this one, this test fails and the conflict comes back to
-/// a person rather than shipping silently.
+/// End to end through `db::open`: a database from before `seat_positions`
+/// (its migration flag absent) holding one seeded row and one dragged row
+/// comes back with only the dragged row, centre-anchored, and the legacy
+/// table untouched. A second open changes nothing.
 #[test]
-fn every_table_size_stays_on_screen_and_only_the_measured_six_max_row_leaves_the_safe_margin() {
-    let conn = setup_db();
+fn opening_a_legacy_database_carries_over_only_dragged_seats() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let db_path = dir.path().join("velora.db");
 
-    const SAFE_MIN: f64 = 0.02;
-    const SAFE_MAX: f64 = 0.92;
-    let mut outside_safe_margin: Vec<(i64, i64, f64, f64)> = Vec::new();
-
-    for max_players in 2..=10i64 {
-        let rows = db::list_seat_templates(&conn, max_players).unwrap();
-        assert_eq!(
-            rows.len(),
-            max_players as usize,
-            "{max_players}-max must have one row per seat"
-        );
-        for row in rows {
-            assert!(
-                row.x > 0.0 && row.x < 1.0 && row.y > 0.0 && row.y < 1.0,
-                "{max_players}-max offset {}: ({}, {}) would place a card off the overlay \
-                 window entirely",
-                row.seat_offset,
-                row.x,
-                row.y
-            );
-            if !(SAFE_MIN..=SAFE_MAX).contains(&row.x)
-                || !(SAFE_MIN..=SAFE_MAX).contains(&row.y)
-            {
-                outside_safe_margin.push((max_players, row.seat_offset, row.x, row.y));
-            }
-        }
+    {
+        let conn = db::open(&db_path).expect("create");
+        conn.execute("DELETE FROM settings WHERE key = ?1", [db::SEAT_POSITIONS_MIGRATION_FLAG])
+            .unwrap();
+        let (seeded_x, seeded_y) = db::legacy_seeded_seat_template(9, 0).unwrap();
+        conn.execute(
+            "INSERT INTO seat_templates (max_players, seat_offset, x, y, updated_at) VALUES
+             (9, 0, ?1, ?2, 'old'), (9, 3, 0.2, 0.4, 'old')",
+            rusqlite::params![seeded_x, seeded_y],
+        )
+        .unwrap();
     }
 
-    assert_eq!(
-        outside_safe_margin,
-        vec![(6, 1, 0.01080431, 0.49984758)],
-        "the hand-measured 6-max row (6, 1) is the only seeded position allowed outside \
-         the {SAFE_MIN}..={SAFE_MAX} safe margin (the measured rows are frozen \
-         byte-for-byte); every derived position must be inside it"
-    );
+    let expected = {
+        let (x, y) = db::legacy_top_left_to_centre(0.2, 0.4);
+        vec![db::SeatPositionRow { seat_key: 3, x, y }]
+    };
+    for pass in 0..2 {
+        let conn = db::open(&db_path).expect("reopen");
+        assert_eq!(
+            db::list_seat_positions(&conn, 9, db::SeatFrame::Hero).unwrap(),
+            expected,
+            "pass {pass}"
+        );
+        let legacy_rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM seat_templates", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(legacy_rows, 2, "the legacy table stays as a backup (pass {pass})");
+    }
+    assert!(expected[0].x > 0.2 && expected[0].y > 0.4, "the anchor moved to the chip centre");
 }
 
 /// A reused table name reopening before a fresh hand deals

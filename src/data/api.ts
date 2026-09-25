@@ -5,13 +5,13 @@ import type {
   DashboardSummary,
   DetectedDir,
   DirValidation,
-  HudPosition,
   HudProfile,
   ImportStatus,
   IngestionHealth,
   OnboardingReadinessPayload,
   Player,
-  SeatTemplate,
+  SeatFrame,
+  SeatPosition,
   Session,
 } from "./types";
 
@@ -294,44 +294,6 @@ export async function isOverlayDismissed(tableId: number): Promise<boolean> {
   return invoke<boolean>("is_overlay_dismissed", { tableId });
 }
 
-/**
- * How an overlay window answers mouse input.
- *
- * - `normal` — table-interactive, and where every overlay opens. Clicks pass
- *   through to the table everywhere except two hot zones that stay clickable
- *   no matter what: that overlay's own control bar and each of its visible
- *   cards' pagination dots.
- * - `reposition` — the whole window captures pointer events so a card can be
- *   dragged from anywhere on it. Nothing on that table is clickable meanwhile.
- *
- * Per table: repositioning one table's cards leaves every other
- * table clickable.
- */
-export type OverlayMode = "normal" | "reposition";
-
-export async function setOverlayMode(tableId: number, mode: OverlayMode): Promise<void> {
-  assertTauriAvailable();
-  return invoke("set_overlay_mode", { tableId, mode });
-}
-
-/** Puts every overlay in one mode — the main window's single Reposition control. */
-export async function setAllOverlayModes(mode: OverlayMode): Promise<void> {
-  assertTauriAvailable();
-  return invoke("set_all_overlay_modes", { mode });
-}
-
-/** One overlay's live mode, read from native hit-test state rather than any window's own flag. */
-export async function getOverlayMode(tableId: number): Promise<OverlayMode> {
-  assertTauriAvailable();
-  return invoke<OverlayMode>("get_overlay_mode", { tableId });
-}
-
-/** `reposition` if any overlay is repositioning — what the main window's one control reads. */
-export async function getAnyOverlayMode(): Promise<OverlayMode> {
-  assertTauriAvailable();
-  return invoke<OverlayMode>("get_any_overlay_mode");
-}
-
 /** One always-clickable rectangle, in CSS pixels relative to one overlay's viewport. */
 export interface OverlayHotZone {
   x: number;
@@ -341,8 +303,9 @@ export interface OverlayHotZone {
 }
 
 /**
- * Registers the rectangles that stay clickable in `normal` mode on one
- * overlay. Reported by that overlay after every layout change, because a rect
+ * Registers the rectangles that stay clickable on one overlay: its HUD chips,
+ * its "Show" pill and an open detail panel. Everywhere else clicks pass
+ * through to the table; there is no mode that captures the window. Reported by that overlay after every layout change, because a rect
  * that outlives the control it describes would keep swallowing table clicks at
  * a point where nothing of Velora's is drawn any more.
  */
@@ -354,42 +317,36 @@ export async function setOverlayHotZones(
   return invoke("set_overlay_hot_zones", { tableId, zones });
 }
 
+// ---------------------------------------------------------------------
+// Seat positions
+// ---------------------------------------------------------------------
+
+/** The chip centres the user dragged for one table size in one frame. */
+export async function getSeatPositions(maxPlayers: number, frame: SeatFrame): Promise<SeatPosition[]> {
+  assertTauriAvailable();
+  return invoke<SeatPosition[]>("get_seat_positions", { maxPlayers, frame });
+}
+
 /**
- * Saves one player's manually-dragged card position.
- *
- * Deliberately not table-scoped, unlike its neighbours. A saved position
- * is keyed by player and expressed as a fraction of the overlay window, which
- * mirrors whichever table that player is sitting at — there is no
- * table-specific component to store. The backend clamps `x`/`y` into 0..1.
+ * Saves one seat's chip centre (fractions of the overlay window) for every
+ * table of `maxPlayers` in `frame`. The backend validates the frame and seat
+ * and clamps `x`/`y`, then broadcasts `seat-templates-changed`.
  */
-export async function saveHudPosition(playerId: string, x: number, y: number): Promise<void> {
-  assertTauriAvailable();
-  return invoke("save_hud_position", { playerId, x, y });
-}
-
-export async function getHudPositions(): Promise<HudPosition[]> {
-  assertTauriAvailable();
-  return invoke<HudPosition[]>("get_hud_positions");
-}
-
-// ---------------------------------------------------------------------
-// Seat-mapping templates
-// ---------------------------------------------------------------------
-
-export async function getSeatTemplates(maxPlayers: number): Promise<SeatTemplate[]> {
-  assertTauriAvailable();
-  return invoke<SeatTemplate[]>("get_seat_templates", { maxPlayers });
-}
-
-/** `seatOffset` is the seat's distance from the hero, not an absolute PokerStars seat number. */
-export async function saveSeatTemplate(
+export async function saveSeatPosition(
   maxPlayers: number,
-  seatOffset: number,
+  frame: SeatFrame,
+  seatKey: number,
   x: number,
   y: number,
 ): Promise<void> {
   assertTauriAvailable();
-  return invoke("save_seat_template", { maxPlayers, seatOffset, x, y });
+  return invoke("save_seat_position", { maxPlayers, frame, seatKey, x, y });
+}
+
+/** "Reset seat layout": forgets the dragged positions of one size, or of every size when `null`. */
+export async function resetSeatPositions(maxPlayers: number | null): Promise<void> {
+  assertTauriAvailable();
+  return invoke("reset_seat_positions", { maxPlayers });
 }
 
 export async function setAutoCenterEnabled(enabled: boolean): Promise<void> {
@@ -542,27 +499,6 @@ export async function onOverlayDismissedChanged(
 }
 
 /**
- * Fires in every window whenever the overlay's interaction mode changes,
- * whichever window triggered it. Emitted from `overlay::set_mode` in Rust
- * only after the native state actually changed, so this is the single source
- * of truth for the mode.
- *
- * The main window and the overlay each own a mode control, and before this
- * existed neither could see the other's toggle. That let a button's label say
- * the opposite of what it would do, which during live play left the overlay
- * capturing while the control offered to make it capture — swallowing clicks
- * intended for the table underneath (same bug class as a visibility flag kept in sync by hand).
- */
-export async function onOverlayModeChanged(
-  callback: (change: { tableId: number; mode: OverlayMode }) => void,
-): Promise<UnlistenFn> {
-  return listen<{ tableId: number; mode: OverlayMode }>(
-    "overlay-mode-changed",
-    (event) => callback(event.payload),
-  );
-}
-
-/**
  * Fires whenever the set of tracked PokerStars table windows changes — a
  * table opened, closed, was renamed or was minimized — so the HUD page's table
  * list stays live without polling. Replaced an earlier bare count broadcast, which
@@ -575,15 +511,15 @@ export async function onTrackedTablesChanged(
 }
 
 /**
- * Fires whenever a seat template is calibrated by a drag, carrying the table
- * size it was saved for. A template is shared by every same-sized table,
- * and with one overlay per table the others have no other way to learn
- * that a card just moved.
+ * Fires whenever saved seat positions change: a chip dragged on any table
+ * (payload: that table size) or a reset (payload: the size, or `null` for
+ * every size). A position is shared by every same-sized table, and with one
+ * overlay per table the others have no other way to learn that a chip moved.
  */
 export async function onSeatTemplatesChanged(
-  callback: (maxPlayers: number) => void,
+  callback: (maxPlayers: number | null) => void,
 ): Promise<UnlistenFn> {
-  return listen<number>("seat-templates-changed", (event) => callback(event.payload));
+  return listen<number | null>("seat-templates-changed", (event) => callback(event.payload));
 }
 
 /** One table window as the tracker sees it, as broadcast by `onTrackedTablesChanged`. */

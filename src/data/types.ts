@@ -98,10 +98,10 @@ export interface Player {
   /** This player's absolute PokerStars seat at the currently active table. `null`/absent outside that context (e.g. the Players view). */
   seat?: number | null;
   /**
-   * The same seat rotated so the hero sits at offset 0 — the key a
-   * saved HUD card position is stored under, because PokerStars' "Auto-Center
-   * me" makes the hero, not any absolute seat number, the fixed screen
-   * anchor. `null` when the active hand has no recorded hero or table size.
+   * The same seat rotated so the hero sits at offset 0 — the seat key of the
+   * `hero` frame, because PokerStars' "Auto-Center me" makes the hero, not
+   * any absolute seat number, the fixed screen anchor. `null` when the active
+   * hand has no recorded hero or table size.
    */
   seatOffset?: number | null;
 }
@@ -153,12 +153,13 @@ export interface StatPage {
   statKeys: (keyof PlayerStats)[];
 }
 
-export type HudVisualModel =
-  | "velora_hud"
-  | "velora_classic"
-  | "minimal"
-  | "jivaro"
-  | "badge";
+/**
+ * The two HUD designs the overlay renders. `compact` is one line of stats per
+ * player; `badge` is initials plus a hand count, with the stats one click
+ * away. The backend migrated every retired model to `compact`; the overlay
+ * also renders anything unexpected as `compact`.
+ */
+export type HudVisualModel = "compact" | "badge";
 
 export interface HudProfile {
   id: string;
@@ -170,27 +171,21 @@ export interface HudProfile {
 }
 
 /**
- * `x`/`y` are fractions (0..1) of the overlay window, not
- * absolute screen pixels — the overlay window itself tracks the PokerStars
- * table window, so a saved fraction stays correct as the table moves/resizes.
+ * How a saved chip position is keyed. `hero`: the seat's offset from the hero
+ * (PokerStars' "Auto-Center me" on, so the hero is always bottom centre).
+ * `absolute`: PokerStars' own seat number (Auto-Center off).
  */
-export interface HudPosition {
-  playerId: string;
-  x: number;
-  y: number;
-}
+export type SeatFrame = "hero" | "absolute";
 
 /**
- * One calibrated card position for a given table size (2/6/9-max), reused
- * automatically on every future table of that size. Same 0..1 fraction scheme
- * as `HudPosition`.
- *
- * Keyed by the seat's offset from the hero, not its absolute PokerStars seat
- * number — "Auto-Center me" rotates the display so the hero is the
- * fixed screen anchor, which makes distance-from-hero the only stable key.
+ * A chip centre the user dragged, shared by every table of one size in one
+ * frame. `x`/`y` are fractions (0..1) of the overlay window, which tracks the
+ * PokerStars table window, so the position follows the table as it moves or
+ * resizes. Seats without one use the overlay's computed default.
  */
-export interface SeatTemplate {
-  seatOffset: number;
+export interface SeatPosition {
+  /** Seat offset from the hero in the `hero` frame, PokerStars seat number in `absolute`. */
+  seatKey: number;
   x: number;
   y: number;
 }

@@ -24,6 +24,7 @@ npm-debug.log*
 /node_modules/
 /dist/
 /dist-ssr/
+/.test-build/
 *.local
 
 # Rust / Tauri build output

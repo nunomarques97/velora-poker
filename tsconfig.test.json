@@ -1,0 +1,21 @@
+{
+  // Compiles the pure layout engine and its node:test suite to plain ESM
+  // JavaScript in .test-build/ (gitignored, never bundled by Vite), run by
+  // `npm run test:layout`. No @types/node: src/overlay/node-test-shims.d.ts declares the
+  // two node: modules the suite uses.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": [],
+    "rootDir": ".",
+    "outDir": ".test-build",
+    "skipLibCheck": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "files": ["src/overlay/node-test-shims.d.ts", "src/overlay/seatLayout.ts", "src/overlay/seatLayout.test.ts"]
+}

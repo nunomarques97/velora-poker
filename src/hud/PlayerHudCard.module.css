@@ -1,536 +1,120 @@
-.card {
-  --player-color: #6b7480;
-  position: relative;
-  display: flex;
-  align-items: center;
-  min-height: 76px;
-  width: max-content;
-  max-width: 100%;
-  background: #12151c;
-  border: 1.5px solid var(--player-color);
-  border-radius: 38px 14px 14px 38px;
-  box-shadow:
-    0 0 10px 0 color-mix(in srgb, var(--player-color) 55%, transparent),
-    0 0 22px 2px color-mix(in srgb, var(--player-color) 30%, transparent),
-    0 10px 22px rgba(0, 0, 0, 0.45);
-  padding: 4px 16px 4px 4px;
-  gap: 12px;
-  user-select: none;
-  overflow: hidden;
-  transition: box-shadow 160ms ease;
-}
-
-/* HUD Profiles preview only. `width: max-content` sizes every card to its own
-   content, so in the preview grid a long screen name or a seven-digit chip
-   count made one card wider than its neighbour and the columns never lined up.
-   Pinning one width per visual model turns the wrapping flex row into even
-   columns without touching the layout itself; `.name` already truncates with
-   an ellipsis, so nothing new overflows. The overlay deliberately does NOT set
-   this — cards there are dragged to arbitrary positions around a real table
-   and must stay sized to their content. See `.minimal.fixedWidth` below for
-   the narrower model. */
-.card.fixedWidth {
-  width: 300px;
-}
-
-/* Overlay-only: the entire card is the drag surface (the
-   old handle was just the avatar ring, which was hard to hit). */
-.draggable {
-  cursor: grab;
-}
-
-.draggable:active {
-  cursor: grabbing;
-}
-
-/* The stats area is a <button> for the main-app "open detail" affordance; in
-   the overlay there is no detail view, so it must not advertise a click. */
-.draggable .content {
-  cursor: inherit;
-}
-
 /*
- * Badge model — the whole on-table element. No pill chrome from `.card`
- * (background/border/shadow/padding come from the button itself), sized to
- * its content, same reasoning `.card` already uses.
+ * One player's HUD chip. Sized by the overlay through three custom
+ * properties, so it scales with the table and never drops under the readable
+ * floor (`seatLayout.ts`, `chipMetrics`):
+ *   --chip-font  text size (10-12px)
+ *   --chip-w     minimum width (the layout's nominal chip width)
+ *   --chip-h     height
+ * Nothing is painted outside the chip itself: no halo, no glow, no card.
+ *
+ * Contrast, on the chip's own ~#0f131a surface:
+ *   values  #e8ebf2  ~15:1
+ *   hands   #9aa4b8  ~7.4:1 (also the small-sample value colour)
+ *   slashes #7d879b  ~5.1:1
  */
-.badgeCard {
-  position: relative;
-  display: inline-flex;
-  width: max-content;
-}
-
-/*
- * A single small button: initials + hand count, nothing else. Neutral
- * surface tokens (`--bg-surface`, `--border-subtle`) rather than the
- * classification colours the full cards use — the point of this model is
- * that the table stays readable, so the badge reads as chrome, not as a
- * signal competing with the cards on the felt.
- */
-.badge {
+.chip {
+  --edge: #4a5266;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 11px;
-  background: rgba(18, 22, 32, 0.92);
-  border: 1px solid #232a38;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+  justify-content: space-between;
+  gap: 0.45em;
+  box-sizing: border-box;
+  height: var(--chip-h, 20px);
+  min-width: var(--chip-w, auto);
+  margin: 0;
+  padding: 0 0.45em 0 0.5em;
+  background: rgba(12, 15, 22, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-left: 3px solid var(--edge);
+  border-radius: 4px;
+  color: #e8ebf2;
   font-family: inherit;
+  font-size: var(--chip-font, 12px);
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   cursor: pointer;
+  user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
-.badge:hover {
-  border-color: #6f8fff;
+.chip:hover {
+  border-color: rgba(137, 164, 255, 0.7);
+  border-left-color: var(--edge);
+}
+
+.chip:focus-visible {
+  outline: 2px solid #89a4ff;
+  outline-offset: 1px;
+}
+
+/* The chip whose detail panel is open. */
+.expanded {
+  border-color: #89a4ff;
+  border-left-color: var(--edge);
+}
+
+.stats {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.sep {
+  color: #7d879b;
+  font-weight: 500;
+  padding: 0 0.08em;
+}
+
+.hands {
+  color: #9aa4b8;
+  font-size: 0.9em;
+  font-weight: 500;
 }
 
 /*
- * "There is something to read here": set when the player has tendencies,
- * exploits or an archetype. Accent border plus a faint halo so it reads at a
- * glance over the table without becoming a second HUD element.
+ * Under the profile's min_hands: the values stay (a small sample is still a
+ * read) but drop to the secondary colour and normal weight, so a glance tells
+ * a 6-hand number from a 600-hand one. The accessible name says it in words.
  */
-.badgeHasInfo {
-  border-color: #6f8fff;
-  box-shadow:
-    0 0 0 1px rgba(111, 143, 255, 0.25),
-    0 2px 6px rgba(0, 0, 0, 0.45);
-}
-
-.badgeHasInfo .badgeName {
-  color: #ffffff;
-}
-
-/* Keyboard focus: the overlay is mouse-driven, but the HUD Profiles preview
-   is reachable by tab and the full cards have no focus style either (a known
-   accessibility gap) — this one at least does not add to it. */
-.badge:focus-visible {
-  outline: 2px solid #6f8fff;
-  outline-offset: 2px;
-}
-
-/* While dragging the overlay element the pill must not advertise a click,
-   same rule `.draggable .content` applies to the full cards. */
-.draggable .badge {
-  cursor: inherit;
-}
-
-.badgeName {
-  max-width: 68px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1;
-  color: #e8ebf2;
-}
-
-.badgeHands {
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1;
+.smallSample .stats {
   color: #9aa4b8;
-  font-variant-numeric: tabular-nums;
+  font-weight: 500;
 }
 
-/* --- Ring / avatar --- */
-
-.ring {
-  position: relative;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.ringSegments {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background:
-    repeating-conic-gradient(from -140deg, transparent 0deg 2.2deg, rgba(0, 0, 0, 0.55) 2.2deg 4.4deg),
-    conic-gradient(from -140deg, var(--player-color) 0deg 280deg, rgba(255, 255, 255, 0.06) 280deg 360deg);
-  -webkit-mask: radial-gradient(circle, transparent 65%, black 70%);
-  mask: radial-gradient(circle, transparent 65%, black 70%);
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--player-color) 70%, transparent));
-}
-
-.avatar {
-  position: absolute;
-  inset: 7px;
-  border-radius: 50%;
-  background: #0a0c10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding-bottom: 6px;
-  font-size: 15px;
-  font-weight: 800;
-  color: var(--text-primary);
-  letter-spacing: 0.02em;
-}
-
-.handsInRing {
-  position: absolute;
-  bottom: 6px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 42px;
-  max-width: calc(100% - 10px);
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  text-align: center;
-  font-size: 9px;
-  font-weight: 600;
-  color: #838da3;
-  z-index: 2;
-}
-
-/* --- Content --- */
-
-.content {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  min-width: 150px;
-  background: transparent;
-  border: none;
-  padding: 6px 0;
-  font-family: inherit;
-  color: inherit;
-  cursor: pointer;
-  text-align: left;
-}
-
-.identityRow {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-}
-
-.name {
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--text-primary);
-  white-space: nowrap;
+/* Badge model: initials instead of stats. */
+.initials {
+  max-width: 3em;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 128px;
-  min-width: 0;
 }
 
-.classificationLabel {
-  font-size: 8.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--player-color);
-  white-space: nowrap;
+/*
+ * Badge only: "there is something to read here" (a read or an archetype).
+ * Accent outline on the three plain sides; the left edge keeps the player
+ * colour.
+ */
+.hasInfo {
+  border-color: #6f8fff;
+  border-left-color: var(--edge);
 }
 
-.stackRow {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  margin-top: 1px;
+.draggable {
+  cursor: grab;
+  touch-action: none;
 }
 
-.chips {
-  font-size: 16px;
-  font-weight: 800;
-  color: #f4f6fa;
-  font-variant-numeric: tabular-nums;
+.dragging {
+  cursor: grabbing;
+  border-color: #89a4ff;
+  border-left-color: var(--edge);
 }
 
-.bbValue {
-  font-size: 13px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
+/* HUD Profiles preview only: one width per model, so the preview lines up. */
+.compact.fixedWidth {
+  width: 7.5em;
 }
 
-/* Stack-depth color tiers (all HUD models): short/medium/
-   deep stack is a quick read the eye needs faster than the BB number itself. */
-.bbShort {
-  color: #ff5c5c;
-}
-
-.bbMedium {
-  color: #4fd1ff;
-}
-
-.bbDeep {
-  color: #4ade80;
-}
-
-.bbLabel {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--text-tertiary);
-}
-
-.noSnapshot {
-  font-size: 10.5px;
-  color: var(--text-tertiary);
-}
-
-.statRow {
-  display: flex;
-  align-items: flex-start;
-  margin-top: 3px;
-  animation: statPageIn 180ms ease;
-}
-
-@keyframes statPageIn {
-  from {
-    opacity: 0;
-    transform: translateY(2px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* The divider was `rgba(255, 255, 255, 0.08)`, which against the card's
-   #12151c background rendered as no visible line at all — the three stat
-   values read as one run of text ("6.0% 2.5% 0.0%") instead of three columns.
-   0.2 is the lowest alpha that reads as a deliberate separator at the card's
-   real on-screen size without turning into a hard grid rule. */
-.statCell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 0 10px;
-  border-left: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.statCell:first-child {
-  padding-left: 0;
-  border-left: none;
-}
-
-/* Sample-size confidence shading: `--stat-confidence` is set per card
-   from the player's hand count vs. the active profile's min_hands. Values on a
-   thin sample read as less certain; labels stay at full strength so the card
-   is still scannable. Defaults to 1 wherever the variable isn't set. */
-.statValue {
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 1;
-  opacity: var(--stat-confidence, 1);
-  transition: opacity 200ms ease;
-}
-
-.statLabel {
-  font-size: 8px;
-  margin-top: 3px;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-/* The pager is anchored in the ring's corner precisely so it adds zero card
-   height — everything below stays inside the existing footprint (absolutely
-   positioned, 4px dots), so none of this grows the card.
-   "Dots are hard to see" had two causes. Contrast: against
-   the bright segmented ring they washed out, so the backdrop is now near
-   opaque, every dot carries a dark 1px rim, and active/inactive differ in
-   lightness and hue rather than by opacity alone. (Active used to also scale
-   1.5x; that made the row read as one big dot next to small ones instead of
-   an even row, so the size is now fixed and only colour changes.) Geometry: at
-   `left/bottom: -2px` the pill sat in the card's rounded bottom-left corner —
-   *outside* the 38px border-radius, so `overflow: hidden` sheared the active
-   dot in half. A fixed `left: 4px` fixed that but was never about being
-   centred, and it left the pill visibly lopsided under a round avatar.
-   It is now centred on the ring instead. The ring's transparent gap was measured
-   on the live render rather than derived from the conic-gradient angles: the
-   gap spans ~75° centred at 179.8°/180.1°/179.8° for default/Classic/Minimal,
-   i.e. dead bottom-centre, so the gap's centre already coincides with the
-   ring's horizontal centre and only the pill had to move. `left: 50%` +
-   `translateX(-50%)` therefore aligns pill-centre to gap-centre for every ring
-   size in one rule: it resolves to 14px on the 64px rings (a 10px shift right)
-   and to 4px on Minimal's 44px ring, which was already centred by coincidence
-   — hence no per-model override. It also *increases* the corner clearance
-   on the default model (bottom-left pill corner moves from 1.6px to 8.9px
-   inside the 38px arc), and still clears the hand-count label. */
-.dots {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: 0;
-  display: flex;
-  gap: 4px;
-  padding: 2px 4px;
-  border-radius: 6px;
-  background: rgba(4, 6, 10, 0.88);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55);
-  z-index: 3;
-}
-
-/* The button used to *be* the dot: 4x4px with `padding: 0`, so the whole
-   pointer target was 4x4px — effectively unhittable, especially mid-session on
-   a laptop trackpad. The button's own box therefore stays exactly 4x4px and
-   keeps painting the visible dot; the larger target is an absolutely
-   positioned, fully transparent `::after` layered over it. Taking the hit area
-   out of flow this way means the pill's layout and paint are completely
-   untouched by it — an earlier attempt used `padding: 6px` with `margin: -6px`
-   on the button instead, which worked for hit-testing but is a far easier
-   thing to reason about wrongly. Targets extend past the pill and overlap
-   slightly, which is the intended trade: a near-miss lands on the adjacent
-   page rather than on nothing at all. */
-.dot {
-  position: relative;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.7);
-  border: none;
-  padding: 0;
-  cursor: pointer;
-  transition: background-color 120ms ease;
-}
-
-/* The horizontal half of this used to be `-6px` all round, which made
-   each dot's hit area 16px wide on an 8px pitch — every dot's target
-   overlapped both of its neighbours', and since the later sibling paints on
-   top, each clickable band ended up sitting ~6px to the left of the dot it
-   belongs to. Measured with real OS clicks: pressing the visible centre of
-   dot 2 selected page 3. Horizontal growth is now capped at half the 4px gap,
-   so the bands tile the pill exactly and each one is centred on its own dot.
-   Vertical growth is unconstrained by neighbours, so it stays generous — the
-   target is 8x24px, which is what makes a 4px dot clickable at all. */
-.dot::after {
-  content: "";
-  position: absolute;
-  inset: -10px -2px;
-}
-
-.dot:hover {
-  background: rgba(255, 255, 255, 0.8);
-}
-
-/* No coloured outer glow here, deliberately. The pill is 8px tall and the dot
-   4px, so there are exactly 2px of headroom above and below the dot; the glow
-   this rule used to carry (`0 0 6px 1px`) reached ~7px and therefore always
-   spilled past the pill's edge. Measured on the live app via DevTools: the
-   spill brightened the backdrop around whichever dot was active and its fade
-   read as a notch/step in the pill's top edge, next to the active dot. Any
-   outer glow is geometrically impossible to contain here, so active state is
-   carried by fill colour alone. The 1px rim below is spread-only (no blur), so
-   it lands inside the 2px headroom and leaves the pill a clean rounded rect. */
-.dotActive {
-  background: var(--player-color);
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.8);
-}
-
-.dotActive:hover {
-  background: var(--player-color);
-}
-
-/* --- Velora Classic: same structure, calmer/flatter treatment --- */
-
-.velora_classic {
-  border-radius: 14px;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
-}
-
-/* Classic keeps its flat, solid ring — no segment dividers, no glow — but it
-   must still carry the default model's 80° gap at the same angle. `from
-   -140deg` with colour running 0-280deg puts that gap over the bottom-left arc
-   where `.dots` sits. A full 0-360deg ring, which is what this rule used
-   to be, drew its stroke straight across the pagination pill in this model
-   only. */
-.velora_classic .ringSegments {
-  background: conic-gradient(
-    from -140deg,
-    var(--player-color) 0deg 280deg,
-    transparent 280deg 360deg
-  );
-  filter: none;
-}
-
-.velora_classic .avatar {
-  inset: 8px;
-}
-
-/* --- Minimal: small, flat, no glow, no classification text --- */
-
-.minimal {
-  min-height: 52px;
-  border-radius: 26px 10px 10px 26px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  padding: 3px 12px 3px 3px;
-  gap: 8px;
-}
-
-.minimal .ring {
-  width: 44px;
-  height: 44px;
-}
-
-.minimal .avatar {
-  font-size: 11px;
-  inset: 5px;
-  padding-bottom: 4px;
-}
-
-.minimal .handsInRing {
-  bottom: 3px;
-  width: 30px;
-  font-size: 7px;
-}
-
-/* Minimal is the "min stats" model — the stat-page
-   pagination dots don't fit it even when a card has more than one page. */
-.minimal .dots {
-  display: none;
-}
-
-.minimal .content {
-  min-width: 100px;
-  padding: 3px 0;
-  gap: 1px;
-}
-
-.minimal .name {
-  font-size: 11px;
-  max-width: 90px;
-}
-
-.minimal .classificationLabel {
-  display: none;
-}
-
-.minimal .chips {
-  font-size: 12.5px;
-}
-
-.minimal .bbValue {
-  font-size: 10.5px;
-}
-
-.minimal .statCell {
-  padding: 0 6px;
-}
-
-.minimal .statValue {
-  font-size: 12px;
-}
-
-.minimal .statLabel {
-  font-size: 7px;
-}
-
-/* Must stay after `.card.fixedWidth` — equal specificity, so source order is
-   what makes the narrower model win. Kept close to this model's natural
-   content width (~205px measured): Minimal exists to fit more players on
-   screen, and padding it out to the default card's width cost a whole column
-   at typical window sizes. */
-.minimal.fixedWidth {
-  width: 216px;
+.badge.fixedWidth {
+  width: 5em;
 }

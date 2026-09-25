@@ -5,118 +5,80 @@
   background: transparent;
 }
 
-.controlBar {
+/*
+ * One chip, centred on its layout position (`seatLayout.ts` works in chip
+ * centres). The wrapper itself paints nothing: no card, no halo.
+ */
+.chipWrap {
   position: absolute;
-  top: 12px;
+  transform: translate(-50%, -50%);
+  line-height: 0;
+}
+
+/*
+ * The only control a collapsed HUD leaves on the table: top centre, above
+ * the top seat and away from the board, the hole cards and the action
+ * buttons. Registered as a hot zone, so it is clickable while every other
+ * point of the window passes clicks through.
+ */
+.showPill {
+  position: absolute;
+  top: 4px;
   left: 50%;
   transform: translateX(-50%);
-  display: flex;
-  gap: 6px;
-  z-index: 10;
-}
-
-.controlButton {
-  background: rgba(18, 22, 32, 0.85);
+  background: rgba(12, 15, 22, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.14);
   color: #e8ebf2;
+  font-family: inherit;
   font-size: 11px;
   font-weight: 600;
-  padding: 6px 12px;
-  border-radius: 6px;
-  backdrop-filter: blur(6px);
+  padding: 3px 10px;
+  border-radius: 999px;
+  cursor: pointer;
 }
 
-.controlButton:hover {
+.showPill:hover {
   border-color: #6f8fff;
 }
 
-/*
- * Reposition mode captures the whole window, so nothing on the table is
- * clickable while it lasts. That is a mode the user must be able to see they
- * are in without clicking anything to find out.
- */
-.controlBarActive .controlButton {
-  border-color: #ffb454;
-  color: #ffd8a4;
+.showPill:focus-visible {
+  outline: 2px solid #89a4ff;
+  outline-offset: 1px;
 }
 
 /*
- * A minimal, corner-anchored per-table drag-unlock, deliberately not part of
- * `.controlBar` above (kept out of the middle of the table on purpose — a
- * control there blocks the view of the table). Small font/padding and low resting
- * opacity so it stays out of the way when not needed; full opacity while
- * active so it's unambiguous the whole window is capturing clicks.
- */
-.repositionCorner {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  z-index: 10;
-  background: rgba(18, 22, 32, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  color: #e8ebf2;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 3px 7px;
-  border-radius: 5px;
-  backdrop-filter: blur(6px);
-  opacity: 0.35;
-  transition: opacity 0.15s ease;
-}
-
-.repositionCorner:hover {
-  opacity: 1;
-  border-color: #6f8fff;
-}
-
-.repositionCornerActive {
-  opacity: 1;
-  border-color: #ffb454;
-  color: #ffd8a4;
-}
-
-.cardWrap {
-  position: absolute;
-}
-
-/*
- * Shown only while no player cards have anything to
- * render yet (waiting for the current hand to finish and the first hand's
- * data to arrive) — small and out of the way rather than a splash, in the
- * same dark/blurred style as .controlButton, so an empty overlay reads as
- * "starting up" instead of "not working". `pointer-events: none` because it
- * is purely decorative; real click-through is governed by the native hot
- * zones, not the DOM.
+ * Shown only until the first hand arrives: small, top centre (never over the
+ * board), purely informational. `pointer-events: none` and no hot zone, so a
+ * click on it falls through to the table.
  */
 .loadingIndicator {
   position: absolute;
-  top: 50%;
+  top: 4px;
   left: 50%;
-  transform: translate(-50%, -50%);
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 14px;
-  background: rgba(18, 22, 32, 0.85);
+  gap: 6px;
+  padding: 3px 10px;
+  background: rgba(12, 15, 22, 0.85);
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 999px;
-  backdrop-filter: blur(6px);
-  color: #9aa3b8;
+  color: #9aa4b8;
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  white-space: nowrap;
   pointer-events: none;
   z-index: 5;
 }
 
 .loadingDots {
   display: flex;
-  gap: 4px;
+  gap: 3px;
 }
 
 .loadingDots span {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
   border-radius: 50%;
   background: #6f8fff;
   animation: loadingPulse 1.2s ease-in-out infinite;
@@ -149,130 +111,4 @@
     animation: none;
     opacity: 0.6;
   }
-}
-
-/*
- * --- Jivaro model chrome ---
- *
- * Applied only while the Jivaro visual model is active. The control bar keeps
- * its element, its ref and therefore its hot zone — this moves and
- * restyles it, and nothing about the native hit test changes.
- */
-.controlBarDocked {
-  top: auto;
-  bottom: 18px;
-  left: 22px;
-  transform: none;
-  align-items: center;
-  gap: 6px;
-  padding: 0 9px;
-  height: 34px;
-  /* Both docked pieces are absolutely positioned (the bar has to keep its own
-     element and ref, which is what the native hot test registers), so
-     the strip cannot flex around the bar. This caps the bar instead: its
-     widest content is the wordmark plus "Reposition" plus "Hide", and
-     `.sessionStrip` starts clear of that. Measured on the live overlay, where
-     an uncapped bar ran under the strip's first label. */
-  max-width: 228px;
-  overflow: hidden;
-  background: linear-gradient(180deg, #1e2228, #121519);
-  border: 1px solid #2b3039;
-  border-radius: 5px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-}
-
-.controlBarDocked .controlButton {
-  background: #191d23;
-  border-color: #333a43;
-  border-radius: 3px;
-  padding: 5px 9px;
-  font-size: 10.5px;
-  backdrop-filter: none;
-}
-
-.dockLogo {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.16em;
-  color: #c9d0d8;
-  background: #0b0e12;
-  border: 1px solid #2f353d;
-  border-radius: 3px;
-  padding: 4px 6px;
-}
-
-/*
- * The session strip. Informational only: it registers no hot zone and takes no
- * pointer events, so clicks on it reach the table like any other empty point
- * of the overlay. The reference's own strip carries tournament fields Velora
- * does not compute (entrants, places paid, pot odds); this shows the session
- * numbers that exist.
- */
-.sessionStrip {
-  position: absolute;
-  bottom: 18px;
-  left: 262px;
-  right: 22px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 0 16px;
-  background: linear-gradient(180deg, #1e2228, #121519);
-  border: 1px solid #2b3039;
-  border-radius: 5px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.sessionTitle {
-  font-size: 12px;
-  font-weight: 700;
-  color: #e6eaf2;
-  white-space: nowrap;
-}
-
-.sessionTitle em {
-  display: block;
-  font-size: 8.5px;
-  font-weight: 600;
-  font-style: normal;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #6b7480;
-}
-
-.sessionCell {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  white-space: nowrap;
-}
-
-.sessionCell b {
-  font-size: 13px;
-  font-weight: 700;
-  color: #e6eaf2;
-  font-variant-numeric: tabular-nums;
-}
-
-.sessionCell span {
-  font-size: 8.5px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #6b7480;
-}
-
-.netUp {
-  color: #6fbf44;
-}
-
-.netDown {
-  color: #e0524f;
-}
-
-.sessionSpacer {
-  flex: 1 1 auto;
 }

@@ -88,7 +88,7 @@ use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindo
 
 use super::plan::{self, Assignment, SlotState};
 use super::{
-    OverlayDismissed, OverlayMode, OverlayVisibility, OVERLAY_DISMISSED_EVENT,
+    OverlayDismissed, OverlayVisibility, OVERLAY_DISMISSED_EVENT,
     OVERLAY_PROTOTYPE_LABEL, OVERLAY_VISIBILITY_EVENT,
 };
 use crate::table_track::{self, TrackedTable, WindowRect};
@@ -347,13 +347,12 @@ fn repoint_window(app_handle: &AppHandle, label: &str, table: &TrackedTable) {
         return;
     };
 
-    // Hot zones and mode describe the previous table's cards. Cleared before
+    // Hot zones describe the previous table's cards. Cleared before
     // this window is claimed, so it can never spend a frame claiming clicks
     // over a point where the new table's HUD draws nothing.
     #[cfg(windows)]
     {
         super::hittest::set_hot_zones(label, Vec::new());
-        super::hittest::set_mode(label, OverlayMode::Normal);
     }
 
     // Re-pointing by URL, not by an event, keeps the window's own URL the one
@@ -448,7 +447,6 @@ fn create_window(app_handle: &AppHandle, label: &str, table: &TrackedTable) {
         match window.hwnd() {
             Ok(hwnd) => {
                 super::hittest::install(&label, hwnd.0 as isize);
-                super::hittest::set_mode(&label, OverlayMode::Normal);
             }
             // Without hit-testing this window would capture every click across
             // its whole footprint, including the ones meant for Fold/Call/Raise
@@ -523,7 +521,6 @@ fn release_window(app_handle: &AppHandle, label: &str) {
         // would keep claiming those points on a window that is about to be
         // handed to a different table.
         super::hittest::set_hot_zones(label, Vec::new());
-        super::hittest::set_mode(label, OverlayMode::Normal);
     }
 
     if let Some(window) = app_handle.get_webview_window(label) {

@@ -31,6 +31,66 @@
   overflow-y: auto;
 }
 
+/*
+ * Overlay variant: a floating panel docked to one side of the table window,
+ * no backdrop, so every point of the table outside it stays visible and
+ * click-through. Compact spacing: it has to fit a minimum-size (~483x359)
+ * table. The overlay registers exactly this rect as a hot zone.
+ */
+.panel {
+  position: absolute;
+  top: 4px;
+  /* Stops above the Fold/Check/Bet band (seatLayout's ACTIONS_ZONE, bottom
+     17% of the table), so an open panel never hides the action buttons. */
+  bottom: calc(17vh + 4px);
+  width: min(300px, 62vw);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow-elevated);
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  font-size: 12px;
+}
+
+.panelLeft {
+  left: 4px;
+}
+
+.panelRight {
+  right: 4px;
+}
+
+.panel .header {
+  padding: 10px 10px 8px 12px;
+}
+
+.panel .section {
+  padding: 10px 12px;
+}
+
+.panel .avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  font-size: 12px;
+}
+
+.panel .name {
+  font-size: 14px;
+}
+
+.panel .sectionTitle {
+  margin-bottom: 8px;
+}
+
+.closeButton:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 1px;
+}
+
 .header {
   padding: 24px 24px 20px;
   border-bottom: 1px solid var(--border-subtle);
