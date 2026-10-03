@@ -7,6 +7,8 @@
 //! function of stored, completed hands — no in-hand state, no network.
 
 pub mod facts;
+pub mod postflop;
+pub mod pot;
 pub mod preflop;
 
 use rusqlite::Connection;
@@ -15,6 +17,8 @@ pub use facts::{
     load_player_hands, ActionFact, Counterparty, HandEvents, HandFacts, Relation, SeatFact,
     StatEvent, StatKey,
 };
+pub use postflop::{extract_player_postflop, extract_postflop};
+pub use pot::{parse_total_pot, replay_pot, PotReplay, SizeBucket, SizedAction, UncalledReturn};
 pub use preflop::{extract_player_preflop, extract_preflop};
 
 /// Loads one player's hands (a bounded number of queries) and extracts their
@@ -22,4 +26,11 @@ pub use preflop::{extract_player_preflop, extract_preflop};
 pub fn player_preflop_events(conn: &Connection, player_id: i64) -> rusqlite::Result<Vec<HandEvents>> {
     let hands = load_player_hands(conn, player_id)?;
     Ok(extract_player_preflop(&hands, player_id))
+}
+
+/// Loads one player's hands and extracts their postflop events, oldest hand
+/// first.
+pub fn player_postflop_events(conn: &Connection, player_id: i64) -> rusqlite::Result<Vec<HandEvents>> {
+    let hands = load_player_hands(conn, player_id)?;
+    Ok(extract_player_postflop(&hands, player_id))
 }

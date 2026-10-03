@@ -1,0 +1,645 @@
+PokerStars Hand #300000000301: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/11 21:01:00 ET
+Table 'Engine II' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Ugo ($50.00 in chips)
+Seat 5: Hal ($50.00 in chips)
+Seat 6: Cole ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [9c 4d]
+Ugo: raises $1 to $1.50
+Hal: folds
+Cole: folds
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [Kc 7d 2s]
+Bob: checks
+Ugo: bets $2
+Bob: folds
+Uncalled bet ($2) returned to Ugo
+Ugo collected $3.10 from pot
+*** SUMMARY ***
+Total pot $3.25 | Rake $0.15
+Board [Kc 7d 2s]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) folded on the Flop
+Seat 4: Ugo collected ($3.10)
+Seat 5: Hal folded before Flop (didn't bet)
+Seat 6: Cole folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000302: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/11 21:02:00 ET
+Table 'Engine II' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Ugo ($50.00 in chips)
+Seat 5: Hal ($50.00 in chips)
+Seat 6: Cole ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Ts 9s]
+Ugo: folds
+Hal: raises $1 to $1.50
+Cole: calls $1.50
+Hero: calls $1.50
+Sam: folds
+Bob: folds
+*** FLOP *** [Qh 8c 4d]
+Hal: bets $3
+Cole: folds
+Hero: calls $3
+*** TURN *** [Qh 8c 4d] [2s]
+Hal: checks
+Hero: bets $7.50
+Hal: folds
+Uncalled bet ($7.50) returned to Hero
+Hero collected $10.75 from pot
+*** SUMMARY ***
+Total pot $11.25 | Rake $0.50
+Board [Qh 8c 4d 2s]
+Seat 1: Hero (button) collected ($10.75)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) folded before Flop
+Seat 4: Ugo folded before Flop (didn't bet)
+Seat 5: Hal folded on the Turn
+Seat 6: Cole folded on the Flop
+
+
+PokerStars Hand #300000000303: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/11 21:03:00 ET
+Table 'Engine II' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Ugo ($50.00 in chips)
+Seat 5: Hal ($50.00 in chips)
+Seat 6: Cole ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Ah 5h]
+Ugo: folds
+Hal: folds
+Cole: folds
+Hero: raises $0.75 to $1.25
+Sam: folds
+Bob: calls $0.75
+*** FLOP *** [Jd 6h 3c]
+Bob: checks
+Hero: bets $1.50
+Bob: calls $1.50
+*** TURN *** [Jd 6h 3c] [9s]
+Bob: checks
+Hero: bets $5
+Bob: calls $5
+*** RIVER *** [Jd 6h 3c 9s] [2d]
+Bob: checks
+Hero: bets $18
+Bob: folds
+Uncalled bet ($18) returned to Hero
+Hero collected $15.05 from pot
+*** SUMMARY ***
+Total pot $15.75 | Rake $0.70
+Board [Jd 6h 3c 9s 2d]
+Seat 1: Hero (button) collected ($15.05)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) folded on the River
+Seat 4: Ugo folded before Flop (didn't bet)
+Seat 5: Hal folded before Flop (didn't bet)
+Seat 6: Cole folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000304: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/11 21:04:00 ET
+Table 'Engine II' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Ugo ($50.00 in chips)
+Seat 5: Hal ($50.00 in chips)
+Seat 6: Cole ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [8h 2c]
+Ugo: folds
+Hal: folds
+Cole: raises $1 to $1.50
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [Ac 9d 5h]
+Bob: checks
+Cole: checks
+*** TURN *** [Ac 9d 5h] [Ts]
+Bob: checks
+Cole: bets $2.25
+Bob: calls $2.25
+*** RIVER *** [Ac 9d 5h Ts] [4c]
+Bob: checks
+Cole: checks
+*** SHOW DOWN ***
+Bob: shows [9h 9s] (three of a kind, Nines)
+Cole: mucks hand
+Bob collected $7.40 from pot
+*** SUMMARY ***
+Total pot $7.75 | Rake $0.35
+Board [Ac 9d 5h Ts 4c]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) showed [9h 9s] and won ($7.40) with three of a kind, Nines
+Seat 4: Ugo folded before Flop (didn't bet)
+Seat 5: Hal folded before Flop (didn't bet)
+Seat 6: Cole mucked [Kd Qd]
+
+
+PokerStars Hand #300000000305: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/11 21:05:00 ET
+Table 'Engine II' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Ugo ($50.00 in chips)
+Seat 5: Hal ($50.00 in chips)
+Seat 6: Cole ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Jc 3h]
+Ugo: folds
+Hal: raises $1 to $1.50
+Cole: folds
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [8s 7s 2h]
+Bob: checks
+Hal: checks
+*** TURN *** [8s 7s 2h] [Kd]
+Bob: bets $2
+Hal: folds
+Uncalled bet ($2) returned to Bob
+Bob collected $3.10 from pot
+*** SUMMARY ***
+Total pot $3.25 | Rake $0.15
+Board [8s 7s 2h Kd]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) collected ($3.10)
+Seat 4: Ugo folded before Flop (didn't bet)
+Seat 5: Hal folded on the Turn
+Seat 6: Cole folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000306: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/11 21:06:00 ET
+Table 'Engine II' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Ugo ($50.00 in chips)
+Seat 5: Hal ($50.00 in chips)
+Seat 6: Cole ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [6s 2s]
+Ugo: raises $1 to $1.50
+Hal: folds
+Cole: folds
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [6d 5c 4h]
+Bob: bets $2
+Ugo: raises $4 to $6
+Bob: folds
+Uncalled bet ($4) returned to Ugo
+Ugo collected $6.90 from pot
+*** SUMMARY ***
+Total pot $7.25 | Rake $0.35
+Board [6d 5c 4h]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) folded on the Flop
+Seat 4: Ugo collected ($6.90)
+Seat 5: Hal folded before Flop (didn't bet)
+Seat 6: Cole folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000307: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/11 21:07:00 ET
+Table 'Engine II' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Ugo ($50.00 in chips)
+Seat 5: Hal ($50.00 in chips)
+Seat 6: Cole ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Kh 4s]
+Ugo: folds
+Hal: folds
+Cole: raises $1 to $1.50
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [Th 6c 2c]
+Bob: checks
+Cole: bets $2
+Bob: raises $4 to $6
+Cole: folds
+Uncalled bet ($4) returned to Bob
+Bob collected $6.90 from pot
+*** SUMMARY ***
+Total pot $7.25 | Rake $0.35
+Board [Th 6c 2c]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) collected ($6.90)
+Seat 4: Ugo folded before Flop (didn't bet)
+Seat 5: Hal folded before Flop (didn't bet)
+Seat 6: Cole folded on the Flop
+
+
+PokerStars Hand #300000000308: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/11 21:08:00 ET
+Table 'Engine II' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Ugo ($50.00 in chips)
+Seat 5: Hal ($50.00 in chips)
+Seat 6: Cole ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Qc 5d]
+Ugo: raises $1 to $1.50
+Hal: raises $48.50 to $50 and is all-in
+Cole: folds
+Hero: folds
+Sam: folds
+Bob: folds
+Ugo: calls $48.50 and is all-in
+*** FLOP *** [Kh Td 3s]
+*** TURN *** [Kh Td 3s] [7c]
+*** RIVER *** [Kh Td 3s 7c] [2h]
+*** SHOW DOWN ***
+Ugo: shows [Ac Ad] (a pair of Aces)
+Hal: shows [Kd Ks] (three of a kind, Kings)
+Hal collected $97.75 from pot
+*** SUMMARY ***
+Total pot $100.75 | Rake $3
+Board [Kh Td 3s 7c 2h]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) folded before Flop
+Seat 4: Ugo showed [Ac Ad] and lost with a pair of Aces
+Seat 5: Hal showed [Kd Ks] and won ($97.75) with three of a kind, Kings
+Seat 6: Cole folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000309: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/11 21:09:00 ET
+Table 'Engine II' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Ugo ($50.00 in chips)
+Seat 5: Hal ($50.00 in chips)
+Seat 6: Cole ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [7d 3d]
+Ugo: folds
+Hal: raises $1 to $1.50
+Cole: folds
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [Js 9h 4c]
+Bob: checks
+Hal: bets $1
+Bob: calls $1
+*** TURN *** [Js 9h 4c] [3d]
+Bob: checks
+Hal: checks
+*** RIVER *** [Js 9h 4c 3d] [Qs]
+Bob: bets $6
+Hal: raises $12 to $18
+Bob: calls $12
+*** SHOW DOWN ***
+Hal: shows [Kh Th] (a straight, Nine to King)
+Bob: mucks hand
+Hal collected $39.25 from pot
+*** SUMMARY ***
+Total pot $41.25 | Rake $2
+Board [Js 9h 4c 3d Qs]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) mucked [Qd 8d]
+Seat 4: Ugo folded before Flop (didn't bet)
+Seat 5: Hal showed [Kh Th] and won ($39.25) with a straight, Nine to King
+Seat 6: Cole folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000310: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/11 21:10:00 ET
+Table 'Engine II' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Ugo ($50.00 in chips)
+Seat 5: Hal ($50.00 in chips)
+Seat 6: Cole ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Td 2h]
+Ugo: calls $0.50
+Hal: calls $0.50
+Cole: folds
+Hero: folds
+Sam: calls $0.25
+Bob: checks
+*** FLOP *** [9c 9d 3h]
+Sam: checks
+Bob: bets $1
+Ugo: folds
+Hal: calls $1
+Sam: folds
+*** TURN *** [9c 9d 3h] [Jc]
+Bob: checks
+Hal: checks
+*** RIVER *** [9c 9d 3h Jc] [5s]
+Bob: checks
+Hal: checks
+*** SHOW DOWN ***
+Bob: shows [Jh Td] (two pair, Jacks and Nines)
+Hal: shows [Ac 4c] (a pair of Nines)
+Bob collected $3.80 from pot
+*** SUMMARY ***
+Total pot $4 | Rake $0.20
+Board [9c 9d 3h Jc 5s]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded on the Flop
+Seat 3: Bob (big blind) showed [Jh Td] and won ($3.80) with two pair, Jacks and Nines
+Seat 4: Ugo folded on the Flop
+Seat 5: Hal showed [Ac 4c] and lost with a pair of Nines
+Seat 6: Cole folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000311: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/11 21:11:00 ET
+Table 'Engine II' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Ugo ($50.00 in chips)
+Seat 5: Hal ($50.00 in chips)
+Seat 6: Cole ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Kc Kh]
+Ugo: raises $1 to $1.50
+Hal: folds
+Cole: folds
+Hero: calls $1.50
+Sam: folds
+Bob: folds
+*** FLOP *** [Ad Kd 7c]
+Ugo: bets $2.50
+Hero: raises $7 to $9.50
+Ugo: raises $39 to $48.50 and is all-in
+Hero: calls $39 and is all-in
+*** TURN *** [Ad Kd 7c] [5s]
+*** RIVER *** [Ad Kd 7c 5s] [8h]
+*** SHOW DOWN ***
+Ugo: shows [Ac Ah] (three of a kind, Aces)
+Hero: shows [Kc Kh] (three of a kind, Kings)
+Ugo collected $97.75 from pot
+*** SUMMARY ***
+Total pot $100.75 | Rake $3
+Board [Ad Kd 7c 5s 8h]
+Seat 1: Hero (button) showed [Kc Kh] and lost with three of a kind, Kings
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) folded before Flop
+Seat 4: Ugo showed [Ac Ah] and won ($97.75) with three of a kind, Aces
+Seat 5: Hal folded before Flop (didn't bet)
+Seat 6: Cole folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000312: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/11 21:12:00 ET
+Table 'Engine II' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Ugo ($50.00 in chips)
+Seat 5: Hal ($50.00 in chips)
+Seat 6: Cole ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [5c 2d]
+Ugo: raises $1 to $1.50
+Hal: folds
+Cole: calls $1.50
+Hero: folds
+Sam: folds
+Bob: folds
+*** FLOP *** [Ts 8s 3d]
+Ugo: bets $2
+Cole: calls $2
+*** TURN *** [Ts 8s 3d] [6h]
+Ugo: checks
+Cole: checks
+*** RIVER *** [Ts 8s 3d 6h] [Kc]
+Ugo: checks
+Cole: bets $5
+Ugo: folds
+Uncalled bet ($5) returned to Cole
+Cole collected $7.40 from pot
+*** SUMMARY ***
+Total pot $7.75 | Rake $0.35
+Board [Ts 8s 3d 6h Kc]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) folded before Flop
+Seat 4: Ugo folded on the River
+Seat 5: Hal folded before Flop (didn't bet)
+Seat 6: Cole collected ($7.40)
+
+
+PokerStars Hand #300000000313: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/11 21:13:00 ET
+Table 'Engine II' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Ugo ($50.00 in chips)
+Seat 5: Hal ($50.00 in chips)
+Seat 6: Cole ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Ad 4d]
+Ugo: folds
+Hal: folds
+Cole: folds
+Hero: raises $0.75 to $1.25
+Sam: folds
+Bob: calls $0.75
+*** FLOP *** [Qc 7h 7d]
+Bob: checks
+Hero: checks
+*** TURN *** [Qc 7h 7d] [3s]
+Bob: checks
+Hero: checks
+*** RIVER *** [Qc 7h 7d 3s] [2c]
+Bob: bets $1
+Hero: calls $1
+*** SHOW DOWN ***
+Bob: shows [Qs Jd] (two pair, Queens and Sevens)
+Hero: mucks hand
+Bob collected $4.55 from pot
+*** SUMMARY ***
+Total pot $4.75 | Rake $0.20
+Board [Qc 7h 7d 3s 2c]
+Seat 1: Hero (button) mucked [Ad 4d]
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) showed [Qs Jd] and won ($4.55) with two pair, Queens and Sevens
+Seat 4: Ugo folded before Flop (didn't bet)
+Seat 5: Hal folded before Flop (didn't bet)
+Seat 6: Cole folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000314: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/11 21:14:00 ET
+Table 'Engine II' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Ugo ($50.00 in chips)
+Seat 5: Hal ($50.00 in chips)
+Seat 6: Cole ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [9d 6c]
+Ugo: folds
+Hal: folds
+Cole: raises $1 to $1.50
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [Kd 9c 4s]
+Bob: checks
+Cole: bets $2
+Bob: calls $2
+*** TURN *** [Kd 9c 4s] [2h]
+Bob: checks
+Cole: bets $5
+Bob: calls $5
+*** RIVER *** [Kd 9c 4s 2h] [7c]
+Bob: checks
+Cole: checks
+*** SHOW DOWN ***
+Bob: shows [Kh Qh] (a pair of Kings)
+Cole: shows [Ah Kc] (a pair of Kings - Ace kicker)
+Cole collected $16.45 from pot
+*** SUMMARY ***
+Total pot $17.25 | Rake $0.80
+Board [Kd 9c 4s 2h 7c]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) showed [Kh Qh] and lost with a pair of Kings
+Seat 4: Ugo folded before Flop (didn't bet)
+Seat 5: Hal folded before Flop (didn't bet)
+Seat 6: Cole showed [Ah Kc] and won ($16.45) with a pair of Kings
+
+
+PokerStars Hand #300000000315: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/11 21:15:00 ET
+Table 'Engine II' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Ugo ($50.00 in chips)
+Seat 5: Hal ($50.00 in chips)
+Seat 6: Cole ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [8c 3s]
+Ugo: folds
+Hal: raises $1 to $1.50
+Cole: folds
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [Ah 6s 5d]
+Bob: checks
+Hal: bets $2
+Bob: calls $2
+*** TURN *** [Ah 6s 5d] [Jh]
+Bob: checks
+Hal: bets $5
+Bob: folds
+Uncalled bet ($5) returned to Hal
+Hal collected $6.90 from pot
+*** SUMMARY ***
+Total pot $7.25 | Rake $0.35
+Board [Ah 6s 5d Jh]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) folded on the Turn
+Seat 4: Ugo folded before Flop (didn't bet)
+Seat 5: Hal collected ($6.90)
+Seat 6: Cole folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000316: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/11 21:16:00 ET
+Table 'Engine II' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Ugo ($50.00 in chips)
+Seat 5: Hal ($50.00 in chips)
+Seat 6: Cole ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Jd 2s]
+Ugo: folds
+Hal: raises $1 to $1.50
+Cole: folds
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [Tc 8d 3h]
+Bob: checks
+Hal: bets $2
+Bob: calls $2
+*** TURN *** [Tc 8d 3h] [Qs]
+Bob: checks
+Hal: bets $5
+Bob: calls $5
+*** RIVER *** [Tc 8d 3h Qs] [4d]
+Bob: checks
+Hal: bets $10
+Bob: calls $10
+*** SHOW DOWN ***
+Hal: shows [9h 7h] (high card Queen)
+Bob: shows [Ts 9s] (a pair of Tens)
+Bob collected $35.40 from pot
+*** SUMMARY ***
+Total pot $37.25 | Rake $1.85
+Board [Tc 8d 3h Qs 4d]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) showed [Ts 9s] and won ($35.40) with a pair of Tens
+Seat 4: Ugo folded before Flop (didn't bet)
+Seat 5: Hal showed [9h 7h] and lost with high card Queen
+Seat 6: Cole folded before Flop (didn't bet)
+
+

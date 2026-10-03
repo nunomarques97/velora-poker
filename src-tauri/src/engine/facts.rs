@@ -241,6 +241,22 @@ pub enum StatKey {
     OpenShove,
     CallVsShove,
     Reshove,
+    CbetFlop,
+    CbetTurn,
+    CbetRiver,
+    FoldToCbetFlop,
+    FoldToCbetTurn,
+    FoldToCbetRiver,
+    DelayedCbet,
+    CheckRaiseFlop,
+    DonkFlop,
+    ProbeTurn,
+    FloatFlop,
+    RiverBet,
+    RiverRaise,
+    Wtsd,
+    Wsd,
+    Wwsf,
 }
 
 impl StatKey {
@@ -275,6 +291,26 @@ impl StatKey {
         StatKey::Reshove,
     ];
 
+    /// Every postflop key (catalogue rows F01–F12).
+    pub const POSTFLOP: [StatKey; 16] = [
+        StatKey::CbetFlop,
+        StatKey::CbetTurn,
+        StatKey::CbetRiver,
+        StatKey::FoldToCbetFlop,
+        StatKey::FoldToCbetTurn,
+        StatKey::FoldToCbetRiver,
+        StatKey::DelayedCbet,
+        StatKey::CheckRaiseFlop,
+        StatKey::DonkFlop,
+        StatKey::ProbeTurn,
+        StatKey::FloatFlop,
+        StatKey::RiverBet,
+        StatKey::RiverRaise,
+        StatKey::Wtsd,
+        StatKey::Wsd,
+        StatKey::Wwsf,
+    ];
+
     /// The spec's stat key (table 4.3).
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -305,12 +341,30 @@ impl StatKey {
             StatKey::OpenShove => "open_shove",
             StatKey::CallVsShove => "call_vs_shove",
             StatKey::Reshove => "reshove",
+            StatKey::CbetFlop => "cbet_flop",
+            StatKey::CbetTurn => "cbet_turn",
+            StatKey::CbetRiver => "cbet_river",
+            StatKey::FoldToCbetFlop => "fold_to_cbet_flop",
+            StatKey::FoldToCbetTurn => "fold_to_cbet_turn",
+            StatKey::FoldToCbetRiver => "fold_to_cbet_river",
+            StatKey::DelayedCbet => "delayed_cbet",
+            StatKey::CheckRaiseFlop => "check_raise_flop",
+            StatKey::DonkFlop => "donk_flop",
+            StatKey::ProbeTurn => "probe_turn",
+            StatKey::FloatFlop => "float_flop",
+            StatKey::RiverBet => "river_bet",
+            StatKey::RiverRaise => "river_raise",
+            StatKey::Wtsd => "wtsd",
+            StatKey::Wsd => "wsd",
+            StatKey::Wwsf => "wwsf",
         }
     }
 }
 
 /// Where the player sits relative to the spot's creator once the hand goes
-/// postflop (the button acts last; heads-up, the button is in position).
+/// postflop (the button acts last; heads-up, the button is in position). A
+/// postflop spot with no creator (c-bet, river bet, WTSD) is placed against
+/// the whole field: in position only when the player acts last.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Relation {
     InPosition,
@@ -326,6 +380,11 @@ pub struct Counterparty {
     /// 4-bettor answering this player's own raise, the first limper for an
     /// isolation spot. `None` for an unopened pot (RFI, steal, limp, open
     /// shove) and for the dealt-in stats (VPIP, PFR).
+    ///
+    /// Postflop: the c-bettor or barreller faced (fold to c-bet, float), the
+    /// bettor faced (check-raise, river raise), the preflop raiser bet into
+    /// (donk) or who checked back (probe). `None` for the player's own
+    /// c-bets, delayed c-bets and river bets, and for WTSD, W$SD and WWSF.
     pub creator: Option<i64>,
     /// The hero opened, raised or otherwise created the spot (`creator` is
     /// the hero).
@@ -336,6 +395,9 @@ pub struct Counterparty {
     /// unopened spot this tells whether the hero sat in the blinds the player
     /// was attacking (spec section 10, `steal_vs_hero`).
     pub hero_position: Option<String>,
+    /// The hero is someone else and had not folded when the spot came up:
+    /// the spot was played against the hero among others.
+    pub hero_in_pot: bool,
 }
 
 /// One opportunity for one player on one stat: `(key, opportunity, success)`
@@ -355,6 +417,9 @@ pub struct StatEvent {
     /// In or out of position relative to the spot's creator; `None` when the
     /// spot has no creator or a position is unknown.
     pub relation: Option<Relation>,
+    /// Postflop: more than two players were in the hand (all-in players
+    /// included) when the spot's street began. `None` for preflop spots.
+    pub multiway: Option<bool>,
     pub counterparty: Counterparty,
 }
 

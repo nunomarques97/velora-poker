@@ -16,6 +16,7 @@
 //!   one. A player who already raised and is re-raised all-in still answers
 //!   their own raise (`fold_to_3bet`, `fold_to_4bet`, limp follow-ups).
 
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
 use super::facts::{
@@ -50,7 +51,7 @@ pub fn is_steal_position(position: &str) -> bool {
 
 /// Postflop acting order: lower acts first, the button acts last. Heads-up
 /// the button (who posted the small blind) is last as well.
-fn postflop_rank(position: &str) -> Option<u8> {
+pub(crate) fn postflop_rank(position: &str) -> Option<u8> {
     Some(match position {
         "SB" => 0,
         "BB" => 1,
@@ -99,6 +100,8 @@ pub fn extract_preflop(hand: &HandFacts, player_id: i64) -> Vec<StatEvent> {
         .map(|s| (s.player_id, s.position.as_deref()))
         .collect();
     let position_of = |id: i64| positions.get(&id).copied().flatten();
+    let hero_folded = Cell::new(false);
+    let mut hero_folded_at_decision = false;
 
     let event = |key: StatKey, success: bool, creator: Option<i64>| StatEvent {
         key,
@@ -108,6 +111,7 @@ pub fn extract_preflop(hand: &HandFacts, player_id: i64) -> Vec<StatEvent> {
         position: seat.position.clone(),
         effective_stack_bb: eff,
         relation: creator.and_then(|c| relation(position, position_of(c))),
+        multiway: None,
         counterparty: Counterparty {
             creator,
             hero_created: match (creator, hero) {
@@ -116,6 +120,7 @@ pub fn extract_preflop(hand: &HandFacts, player_id: i64) -> Vec<StatEvent> {
             },
             hero_in_hand: hero.is_some(),
             hero_position: hero.and_then(|h| h.position.clone()),
+            hero_in_pot: hero.is_some_and(|h| h.player_id != player_id) && !hero_folded.get(),
         },
     };
 
@@ -274,6 +279,9 @@ pub fn extract_preflop(hand: &HandFacts, player_id: i64) -> Vec<StatEvent> {
                 ));
             }
 
+            if !decided {
+                hero_folded_at_decision = hero_folded.get();
+            }
             decided = true;
             entered |= is_call || is_raise;
             raised |= is_raise;
@@ -297,11 +305,18 @@ pub fn extract_preflop(hand: &HandFacts, player_id: i64) -> Vec<StatEvent> {
                 }
                 voluntary.insert(action.player_id);
             }
+            ActionType::Fold => {
+                if hero.is_some_and(|h| h.player_id == action.player_id) {
+                    hero_folded.set(true);
+                }
+            }
             _ => {}
         }
     }
 
     if decided && deep {
+        // VPIP and PFR are the player's first decision.
+        hero_folded.set(hero_folded_at_decision);
         events.insert(0, event(StatKey::Pfr, raised, None));
         events.insert(0, event(StatKey::Vpip, entered, None));
     }
