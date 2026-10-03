@@ -5,13 +5,16 @@
 // PokerStars folder or the Velora app data folder (lib/guard.mjs).
 //
 // Usage:
-//   node scripts/sim/generate.mjs --out <folder> [--format cash|zoom]
+//   node scripts/sim/generate.mjs --out <folder> [--format cash|zoom|mtt|spin]
 //     [--seed s] [--tables 6] [--hands 200] [--pace 0] [--clock sim|live]
 //     [--start 2026-09-12T20:00:00] [--manifest]
 //
-// --hands is per cash table, or in total for Zoom. --pace is real seconds
-// per simulated hand at one table (0 = as fast as possible). --manifest
-// prints the session manifest (files, seating, tilt episodes) as JSON.
+// --hands is per cash table, in total for Zoom, or per tournament seat for
+// mtt (9-max progressive knockouts) and spin (3-max hyper Spin & Go), where
+// --tables is the number of tournaments played at once and a new one
+// starts when the hero's ends. --pace is real seconds per simulated hand at
+// one table (0 = as fast as possible). --manifest prints the session
+// manifest (files, seating, tournaments, tilt episodes) as JSON.
 
 import { pathToFileURL } from "node:url";
 import { runSession } from "./lib/session.mjs";

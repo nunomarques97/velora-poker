@@ -24,10 +24,16 @@ export function splitHands(text) {
 
 /**
  * Checks one hand and returns its facts. Throws with the hand id on the
- * first inconsistency. `bb` and `rakeCapBb` are the table's stakes.
+ * first inconsistency. `bb` and `rakeCapBb` are the table's stakes;
+ * `chips` reads amounts as bare tournament chips (`ante` is then the
+ * level's ante, and a knockout's elimination lines are checked against the
+ * seat bounties).
  */
-export function checkHand(block, { hero, bb, rakeCapBb }) {
+export function checkHand(block, { hero, bb, rakeCapBb, chips = false, ante = 0 }) {
   const lines = block.split(/\r\n/);
+  const AMT = chips ? String.raw`(\d+)` : String.raw`(\$[\d.]+)`;
+  const amount = chips ? (text) => Number(text) : cents;
+  const re = (source) => new RegExp(source.replaceAll("AMT", AMT));
   const id = /Hand #(\d+):/.exec(lines[0])?.[1];
   const fail = (why) => {
     throw new Error(`hand ${id}: ${why}`);
@@ -38,9 +44,9 @@ export function checkHand(block, { hero, bb, rakeCapBb }) {
   const seats = [];
   let i = 2;
   for (; /^Seat \d+: /.test(lines[i]); i++) {
-    const m = /^Seat (\d+): (.+) \((\$[\d.]+) in chips\)$/.exec(lines[i]);
+    const m = re(String.raw`^Seat (\d+): (.+) \(AMT in chips(?:, (\$[\d.]+) bounty)?\)$`).exec(lines[i]);
     if (!m) fail(`bad seat line ${lines[i]}`);
-    seats.push({ seat: Number(m[1]), name: m[2], stack: cents(m[3]) });
+    seats.push({ seat: Number(m[1]), name: m[2], stack: amount(m[3]), bounty: m[4] ? cents(m[4]) : null });
   }
   const byName = new Map(seats.map((s) => [s.name, s]));
   if (!seats.some((s) => s.seat === buttonSeat)) fail("the button is not an occupied seat");
@@ -69,6 +75,8 @@ export function checkHand(block, { hero, bb, rakeCapBb }) {
   let rake = null;
   let sawFlop = false;
   let dealtToHero = false;
+  const eliminations = [];
+  const finishes = [];
 
   const commit = (name, to) => {
     if (!byName.has(name)) fail(`unknown player ${name}`);
@@ -82,13 +90,22 @@ export function checkHand(block, { hero, bb, rakeCapBb }) {
   for (; i < lines.length; i++) {
     const line = lines[i];
     let m;
-    if ((m = /^(.+): posts small blind (\$[\d.]+)$/.exec(line))) {
+    if ((m = re(String.raw`^(.+): posts the ante AMT( and is all-in)?$`).exec(line))) {
+      if (!byName.has(m[1])) fail(`unknown player ${m[1]}`);
+      const paid = amount(m[2]);
+      if (paid > ante || (paid < ante && !m[3])) fail(`${m[1]} posts an ante of ${paid}, not ${ante}`);
+      put.set(m[1], put.get(m[1]) + paid);
+      if (put.get(m[1]) > byName.get(m[1]).stack) fail(`${m[1]} antes more than his stack`);
+    } else if ((m = re(String.raw`^(.+): posts small blind AMT( and is all-in)?$`).exec(line))) {
       if (seatOf(m[1]) !== sbSeat) fail(`small blind posted by ${m[1]} out of position`);
-      commit(m[1], cents(m[2]));
-    } else if ((m = /^(.+): posts big blind (\$[\d.]+)/.exec(line))) {
+      commit(m[1], amount(m[2]));
+      toCall = amount(m[2]);
+    } else if ((m = re(String.raw`^(.+): posts big blind AMT`).exec(line))) {
       if (seatOf(m[1]) !== bbSeat) fail(`big blind posted by ${m[1]} out of position`);
-      commit(m[1], cents(m[2]));
-      toCall = cents(m[2]);
+      commit(m[1], amount(m[2]));
+      // The bet to call is the largest blind posted (a short all-in big
+      // blind may post less than the small blind).
+      toCall = Math.max(toCall, amount(m[2]));
     } else if ((m = /^Dealt to (.+) \[(\w\w) (\w\w)\]$/.exec(line))) {
       if (m[1] !== hero) fail(`cards dealt to ${m[1]}, not the hero`);
       dealtToHero = true;
@@ -100,28 +117,28 @@ export function checkHand(block, { hero, bb, rakeCapBb }) {
       street = new Map();
       toCall = 0;
       lastRaise = bb;
-    } else if ((m = /^(.+): calls (\$[\d.]+)( and is all-in)?$/.exec(line))) {
-      const to = (street.get(m[1]) || 0) + cents(m[2]);
+    } else if ((m = re(String.raw`^(.+): calls AMT( and is all-in)?$`).exec(line))) {
+      const to = (street.get(m[1]) || 0) + amount(m[2]);
       if (to > toCall) fail(`${m[1]} calls more than the bet`);
       if (to < toCall && !m[3]) fail(`${m[1]} calls short without being all-in`);
       commit(m[1], to);
-    } else if ((m = /^(.+): bets (\$[\d.]+)( and is all-in)?$/.exec(line))) {
+    } else if ((m = re(String.raw`^(.+): bets AMT( and is all-in)?$`).exec(line))) {
       if (toCall !== 0) fail(`${m[1]} bets into a bet`);
-      const amount = cents(m[2]);
-      if (amount < bb && !m[3]) fail(`${m[1]} bets less than the big blind`);
-      commit(m[1], amount);
-      toCall = amount;
-      lastRaise = amount;
-    } else if ((m = /^(.+): raises (\$[\d.]+) to (\$[\d.]+)( and is all-in)?$/.exec(line))) {
-      const by = cents(m[2]);
-      const to = cents(m[3]);
+      const bet = amount(m[2]);
+      if (bet < bb && !m[3]) fail(`${m[1]} bets less than the big blind`);
+      commit(m[1], bet);
+      toCall = bet;
+      lastRaise = bet;
+    } else if ((m = re(String.raw`^(.+): raises AMT to AMT( and is all-in)?$`).exec(line))) {
+      const by = amount(m[2]);
+      const to = amount(m[3]);
       if (to - toCall !== by) fail(`${m[1]} raise size does not add up`);
       if (by < lastRaise && !m[4]) fail(`${m[1]} min-raise violated (${by} < ${lastRaise})`);
       commit(m[1], to);
       if (by >= lastRaise) lastRaise = by;
       toCall = to;
-    } else if ((m = /^Uncalled bet \((\$[\d.]+)\) returned to (.+)$/.exec(line))) {
-      const back = cents(m[1]);
+    } else if ((m = re(String.raw`^Uncalled bet \(AMT\) returned to (.+)$`).exec(line))) {
+      const back = amount(m[1]);
       put.set(m[2], put.get(m[2]) - back);
       street.set(m[2], street.get(m[2]) - back);
     } else if ((m = /^(.+): shows \[(\w\w) (\w\w)\] \((.+)\)$/.exec(line))) {
@@ -130,17 +147,23 @@ export function checkHand(block, { hero, bb, rakeCapBb }) {
       shown.push({ name: m[1], score: hand.score });
     } else if ((m = /^(.+): folds$/.exec(line))) {
       folded.add(m[1]);
-    } else if ((m = /^(.+) collected (\$[\d.]+) from (pot|main pot|side pot(?:-(\d+))?)$/.exec(line))) {
-      const amount = cents(m[2]);
+    } else if ((m = re(String.raw`^(.+) collected AMT from (pot|main pot|side pot(?:-(\d+))?)$`).exec(line))) {
+      const won = amount(m[2]);
       const index = m[3].startsWith("side") ? Number(m[4] ?? 1) : 0;
       if (!byPot.has(index)) byPot.set(index, new Map());
       const pot = byPot.get(index);
-      pot.set(m[1], (pot.get(m[1]) || 0) + amount);
-      collected += amount;
+      pot.set(m[1], (pot.get(m[1]) || 0) + won);
+      collected += won;
       winners.add(m[1]);
-    } else if ((m = /^Total pot (\$[\d.]+).*\| Rake (\$[\d.]+)$/.exec(line))) {
-      total = cents(m[1]);
-      rake = cents(m[2]);
+    } else if ((m = /^(.+) wins (\$[\d.]+) for eliminating (.+) and their own bounty increases by (\$[\d.]+) to (\$[\d.]+)$/.exec(line))) {
+      eliminations.push({ by: m[1], player: m[3], cash: cents(m[2]), head: cents(m[4]), to: cents(m[5]) });
+    } else if ((m = /^(.+) finished the tournament in (\d+)(?:st|nd|rd|th) place$/.exec(line))) {
+      finishes.push({ player: m[1], place: Number(m[2]) });
+    } else if ((m = /^(.+) wins the tournament and receives (\$[\d.]+) - congratulations!$/.exec(line))) {
+      finishes.push({ player: m[1], place: 1, prize: cents(m[2]) });
+    } else if ((m = re(String.raw`^Total pot AMT.*\| Rake AMT$`).exec(line))) {
+      total = amount(m[1]);
+      rake = amount(m[2]);
     }
   }
 
@@ -195,5 +218,27 @@ export function checkHand(block, { hero, bb, rakeCapBb }) {
   }
   if (byPot.size !== pots.length) fail(`${pots.length} pot(s) built but ${byPot.size} paid out`);
   const soloSidePots = pots.filter((pot, index) => index > 0 && pot.eligible.length === 1).length;
-  return { id, seats, put, total, rake, shown: shown.length, sawFlop, pots: pots.length, soloSidePots };
+
+  // Busted: nothing left once the pots are paid. In a knockout each one is
+  // paid to a player who won chips from him: half his bounty in cash, half
+  // onto the winner's own bounty.
+  const wonBy = new Map();
+  for (const pot of byPot.values()) for (const [name, got] of pot) wonBy.set(name, (wonBy.get(name) || 0) + got);
+  const busted = seats.filter((s) => s.stack - put.get(s.name) + (wonBy.get(s.name) || 0) === 0).map((s) => s.name);
+  if (seats.some((s) => s.bounty != null)) {
+    const bounties = new Map(seats.map((s) => [s.name, s.bounty]));
+    if (eliminations.length !== busted.length) fail(`${busted.length} busted but ${eliminations.length} elimination line(s)`);
+    for (const e of eliminations) {
+      if (!busted.includes(e.player)) fail(`${e.player} is eliminated with chips left`);
+      if (!winners.has(e.by)) fail(`${e.by} eliminates ${e.player} without winning a pot`);
+      if (e.cash + e.head !== bounties.get(e.player)) fail(`${e.player}'s bounty does not add up`);
+      if (Math.abs(e.cash - e.head) > 1) fail(`${e.player}'s bounty is not split in half`);
+      bounties.set(e.by, bounties.get(e.by) + e.head);
+      if (bounties.get(e.by) !== e.to) fail(`${e.by}'s bounty grows to the wrong amount`);
+    }
+  } else if (eliminations.length > 0) fail("elimination lines without bounties");
+  for (const f of finishes) {
+    if (f.place > 1 && !busted.includes(f.player)) fail(`${f.player} finishes with chips left`);
+  }
+  return { id, seats, put, total, rake, shown: shown.length, sawFlop, pots: pots.length, soloSidePots, busted, eliminations, finishes };
 }

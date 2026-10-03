@@ -5,7 +5,7 @@
 // real showdown hand ranks and the summary section.
 
 import { evaluate, newDeck, postflopStrength, preflopPercentile } from "./cards.mjs";
-import { money } from "./format.mjs";
+import { chips, money, money2 } from "./format.mjs";
 
 const STREET_FOLD = ["before Flop", "on the Flop", "on the Turn", "on the River"];
 /** Starting guess of the share of good-or-better hands in a postflop spot. */
@@ -39,14 +39,21 @@ export function positionGroup(label) {
 /**
  * Plays one hand.
  *
- * `seats`: `[{ seat, name, stack, behaviour, memory }]` (stacks in cents, every
- * stack at least one big blind; `memory` is the player's own object kept
- * across hands, see `spotShare`). `table`: `{ name, maxSeats, sb, bb,
- * rakeCapBb }`. `header`: the first line. Returns the text lines and, per
- * player, the net result in cents and whether he put money in voluntarily.
+ * `seats`: `[{ seat, name, stack, behaviour, memory, bounty }]` (stacks in
+ * cents, or chips in a tournament; `memory` is the player's own object kept
+ * across hands, see `spotShare`; `bounty` in cents for a knockout seat
+ * line). `table`: `{ name, maxSeats, sb, bb, rakeCapBb, ante, chips }`:
+ * `chips` writes amounts as bare tournament chips, `ante` is posted by
+ * every player before the blinds. `header`: the first line. `tail(busted)`
+ * (optional) returns the lines written after the pots are awarded, given
+ * the players who lost their whole stack (`[{ name, by }]`, `by` the winner
+ * of the last pot each was in, smallest stack first). Returns the text
+ * lines and, per player, the net result and whether he put money in
+ * voluntarily.
  */
-export function playHand({ table, seats, button, header, heroName, rng }) {
+export function playHand({ table, seats, button, header, heroName, rng, tail }) {
   const { sb, bb } = table;
+  const fmt = table.chips ? chips : money;
   const deck = rng.shuffle(newDeck());
   const ring = [...seats].sort((a, b) => a.seat - b.seat);
   const at = ring.findIndex((s) => s.seat === button);
@@ -93,7 +100,10 @@ export function playHand({ table, seats, button, header, heroName, rng }) {
 
   const lines = [header];
   lines.push(`Table '${table.name}' ${table.maxSeats}-max Seat #${button} is the button`);
-  for (const s of ring) lines.push(`Seat ${s.seat}: ${s.name} (${money(s.stack)} in chips)`);
+  for (const s of ring) {
+    const bounty = s.bounty == null ? "" : `, ${money2(s.bounty)} bounty`;
+    lines.push(`Seat ${s.seat}: ${s.name} (${fmt(s.stack)} in chips${bounty})`);
+  }
 
   const left = (p) => p.stack - p.invested;
   const st = { currentBet: 0, lastInc: bb, raises: [], limpers: [], callers: [], street: 0, raisesThisStreet: 0 };
@@ -104,15 +114,28 @@ export function playHand({ table, seats, button, header, heroName, rng }) {
   };
   const allInText = (p) => (p.allIn ? " and is all-in" : "");
 
-  // Blinds.
+  // Antes (dead money, in seat order), then the blinds. A player all-in
+  // for less posts what he has; one all-in on the ante posts no blind.
+  if (table.ante > 0) {
+    for (const s of ring) {
+      const p = players.find((x) => x.seat === s.seat);
+      const amount = Math.min(table.ante, left(p));
+      p.invested += amount;
+      if (left(p) === 0) p.allIn = true;
+      lines.push(`${p.name}: posts the ante ${fmt(amount)}${allInText(p)}`);
+    }
+  }
   for (const [p, amount, kind] of [
     [sbP, sb, "small"],
     [bbP, bb, "big"],
   ]) {
-    put(p, Math.min(amount, p.stack));
-    lines.push(`${p.name}: posts ${kind} blind ${money(p.street)}${allInText(p)}`);
+    if (left(p) === 0) continue;
+    put(p, Math.min(amount, left(p)));
+    lines.push(`${p.name}: posts ${kind} blind ${fmt(p.street)}${allInText(p)}`);
   }
-  st.currentBet = bb;
+  // The bet to call is the largest blind posted: a big blind all-in for
+  // less (or on the ante) sets less.
+  st.currentBet = Math.max(sbP.street, bbP.street);
   lines.push("*** HOLE CARDS ***");
   const hero = players.find((p) => p.name === heroName);
   if (hero) lines.push(`Dealt to ${hero.name} [${hero.cards.join(" ")}]`);
@@ -144,7 +167,7 @@ export function playHand({ table, seats, button, header, heroName, rng }) {
             st.limpers.push(p);
           } else if (st.raises.length > 0) st.callers.push(p);
         }
-        lines.push(`${p.name}: calls ${money(amount)}${allInText(p)}`);
+        lines.push(`${p.name}: calls ${fmt(amount)}${allInText(p)}`);
         return;
       }
       default: {
@@ -159,7 +182,7 @@ export function playHand({ table, seats, button, header, heroName, rng }) {
         put(p, to - before);
         const full = increment >= st.lastInc;
         if (full) st.lastInc = increment;
-        const verb = st.currentBet === 0 ? `bets ${money(to)}` : `raises ${money(increment)} to ${money(to)}`;
+        const verb = st.currentBet === 0 ? `bets ${fmt(to)}` : `raises ${fmt(increment)} to ${fmt(to)}`;
         lines.push(`${p.name}: ${verb}${allInText(p)}`);
         if (st.street === 0) {
           st.raises.push({ p, to, allIn: p.allIn, firstIn: st.raises.length === 0 && st.limpers.length === 0 });
@@ -211,7 +234,7 @@ export function playHand({ table, seats, button, header, heroName, rng }) {
         p.invested -= back;
         p.street -= back;
         p.allIn = false;
-        lines.push(`Uncalled bet (${money(back)}) returned to ${p.name}`);
+        lines.push(`Uncalled bet (${fmt(back)}) returned to ${p.name}`);
       }
     }
   };
@@ -297,29 +320,42 @@ export function playHand({ table, seats, button, header, heroName, rng }) {
       winners = winners.filter((p) => hands.get(p).score === best);
     }
     winners = postflopOrder.filter((p) => winners.includes(p));
+    pot.winners = winners;
     const share = Math.floor(pot.amount / winners.length);
     let odd = pot.amount - share * winners.length;
     for (const w of winners) {
       const amount = share + (odd > 0 ? 1 : 0);
       if (odd > 0) odd -= 1;
       collected.set(w, (collected.get(w) || 0) + amount);
-      lines.push(`${w.name} collected ${money(amount)} from ${potName(i)}`);
+      lines.push(`${w.name} collected ${fmt(amount)} from ${potName(i)}`);
     }
   }
   if (!showdown) {
     const [winner] = contenders;
     lines.push(`${winner.name}: doesn't show hand`);
   }
+  if (tail) {
+    // Busted: nothing left after the pots. Knocked out by the winner of
+    // the last pot he was in (the highest side pot his chips reached).
+    const busted = players
+      .filter((p) => p.stack - p.invested + (collected.get(p) || 0) === 0)
+      .sort((a, b) => a.stack - b.stack || a.seat - b.seat)
+      .map((p) => {
+        const last = pots.filter((pot) => pot.eligible.includes(p)).pop();
+        return { name: p.name, by: last?.winners[0]?.name ?? null };
+      });
+    lines.push(...tail(busted));
+  }
 
   lines.push("*** SUMMARY ***");
   const after = total - rake;
-  if (pots.length === 1) lines.push(`Total pot ${money(total)} | Rake ${money(rake)}`);
+  if (pots.length === 1) lines.push(`Total pot ${fmt(total)} | Rake ${fmt(rake)}`);
   else {
     const parts = pots.map((pot, i) => {
       const name = i === 0 ? "Main pot" : pots.length === 2 ? "Side pot" : `Side pot-${i}`;
-      return `${name} ${money(pot.amount)}.`;
+      return `${name} ${fmt(pot.amount)}.`;
     });
-    lines.push(`Total pot ${money(total)} ${parts.join(" ")} | Rake ${money(rake)}`);
+    lines.push(`Total pot ${fmt(total)} ${parts.join(" ")} | Rake ${fmt(rake)}`);
   }
   void after;
   if (lastStreet >= 1) lines.push(`Board [${board.slice(0, lastStreet + 2).join(" ")}]`);
@@ -335,10 +371,10 @@ export function playHand({ table, seats, button, header, heroName, rng }) {
     } else if (showdown) {
       const won = collected.get(p);
       text = won
-        ? `showed [${p.cards.join(" ")}] and won (${money(won)}) with ${hands.get(p).text}`
+        ? `showed [${p.cards.join(" ")}] and won (${fmt(won)}) with ${hands.get(p).text}`
         : `showed [${p.cards.join(" ")}] and lost with ${hands.get(p).text}`;
     } else {
-      text = `collected (${money(collected.get(p) || 0)})`;
+      text = `collected (${fmt(collected.get(p) || 0)})`;
     }
     lines.push(`Seat ${p.seat}: ${p.name}${tags} ${text}`);
   }
@@ -410,8 +446,11 @@ function decidePreflop(p, facing, st, { bb, rng, bbP }) {
       if (p === bbP) return CHECK;
       const open = b.open[p.group] ?? 0;
       if (p.effBb <= 15) {
-        p.openThr = open;
-        return pct < open ? raise(0, true) : FOLD;
+        // Push/fold depth: an open is a shove, from `shove` when the
+        // profile has its own shoving range.
+        const shove = b.shove?.[p.group] ?? open;
+        p.openThr = shove;
+        return pct < shove ? raise(0, true) : FOLD;
       }
       if (pct < open) {
         p.openThr = open;

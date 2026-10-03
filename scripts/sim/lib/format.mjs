@@ -63,3 +63,58 @@ export function tableName(index, offset = 0) {
 export function zoomPoolName(offset = 0) {
   return STARS[offset % STARS.length];
 }
+
+// ------------------------------------------------------------ tournaments
+
+/** Tournament chips: a bare integer (`11262`), as the client writes them. */
+export function chips(n) {
+  return String(n);
+}
+
+/** `$13.50`, `$3.00`: buy-in parts and bounties always carry the cents. */
+export function money2(cents, symbol = "$") {
+  return `${symbol}${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, "0")}`;
+}
+
+/** Roman level number of a tournament header (`6` → `VI`). */
+export function roman(n) {
+  const digits = [
+    [1000, "M"], [900, "CM"], [500, "D"], [400, "CD"], [100, "C"], [90, "XC"],
+    [50, "L"], [40, "XL"], [10, "X"], [9, "IX"], [5, "V"], [4, "IV"], [1, "I"],
+  ];
+  let out = "";
+  for (const [value, text] of digits) {
+    while (n >= value) {
+      out += text;
+      n -= value;
+    }
+  }
+  return out;
+}
+
+/** `$5.00+$5.00+$1.00`: buy-in components in cents. */
+export function buyInText(parts) {
+  return parts.map((p) => money2(p)).join("+");
+}
+
+/**
+ * `PokerStars Hand #N: Tournament #T, $5.00+$5.00+$1.00 USD Hold'em No
+ * Limit - Level VI (75/150) - ...` (one space after the colon, unlike cash).
+ */
+export function tournamentHeader({ handId, tournamentId, buyIn, level, sb, bb, date }) {
+  return `PokerStars Hand #${handId}: Tournament #${tournamentId}, ${buyInText(buyIn)} USD Hold'em No Limit - Level ${roman(
+    level,
+  )} (${chips(sb)}/${chips(bb)}) - ${headerTime(date)}`;
+}
+
+/** `HH20260912 T4100000001 No Limit Hold'em $5.00 + $5.00 + $1.00.txt`. */
+export function tournamentFileName({ date, tournamentId, buyIn }) {
+  return `HH${fileDate(date)} T${tournamentId} No Limit Hold'em ${buyIn.map((p) => money2(p)).join(" + ")}.txt`;
+}
+
+/** `1st`, `2nd`, `3rd`, `11th`: a finishing place. */
+export function ordinal(n) {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  return `${n}${{ 1: "st", 2: "nd", 3: "rd" }[n % 10] ?? "th"}`;
+}

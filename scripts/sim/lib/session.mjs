@@ -1,6 +1,7 @@
 // A simulated session: cash tables (one file per table, like the client) or
 // a Zoom pool (one file per pool), villains seated from the shared profiles,
-// hands written as they finish at a configurable pace.
+// hands written as they finish at a configurable pace. Tournament formats
+// (MTT 9-max with bounties, Spin & Go) are played by tournament.mjs.
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -8,27 +9,30 @@ import { assertSafeOutputDir } from "./guard.mjs";
 import { cashFileName, cashHeader, tableName, zoomPoolName } from "./format.mjs";
 import { hash32, Rng } from "./rng.mjs";
 import { playHand } from "./play.mjs";
+import { trackTilt } from "./tilt.mjs";
+import { runTournaments, TOURNAMENT_FORMATS } from "./tournament.mjs";
 
 export const PROFILES_PATH = new URL("../profiles.json", import.meta.url);
-export const FORMATS = ["cash", "zoom"];
+export const FORMATS = ["cash", "zoom", ...TOURNAMENT_FORMATS];
 /** Default session start (local time), so a seed alone fixes the text. */
 export const DEFAULT_START = () => new Date(2026, 8, 12, 20, 0, 0);
 /** Mean simulated seconds between two hands at one table. */
 const HAND_SECONDS = { cash: 50, zoom: 25 };
-const EOL = "\r\n";
-const BOM = String.fromCharCode(0xfeff);
+export const EOL = "\r\n";
+export const BOM = String.fromCharCode(0xfeff);
 
 export function loadProfiles(path = PROFILES_PATH) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-const defaultSleep = (ms) => new Promise((done) => setTimeout(done, ms));
+export const defaultSleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
 /**
  * Runs one session and returns its manifest.
  *
- * Options: `format` (`cash` | `zoom`), `seed`, `out` (folder), `tables`
- * (cash tables), `hands` (per cash table; in total for Zoom), `pace` (real
+ * Options: `format` (`cash` | `zoom` | `mtt` | `spin`), `seed`, `out`
+ * (folder), `tables` (cash tables, or tournaments played at once), `hands`
+ * (per cash table or tournament seat; in total for Zoom), `pace` (real
  * seconds per simulated hand at one table; 0 writes as fast as possible),
  * `start` (Date), `clock` (`sim`: timestamps from simulated time; `live`:
  * the wall clock when each hand is written), `profiles` (parsed JSON),
@@ -56,6 +60,9 @@ export async function runSession(options) {
   mkdirSync(dir, { recursive: true });
 
   const start = options.start ?? (clock === "live" ? new Date(now()) : DEFAULT_START());
+  if (TOURNAMENT_FORMATS.includes(format)) {
+    return runTournaments({ format, seed, dir, tableCount, hands, pace, clock, start, profiles, sleep, now });
+  }
   const rng = new Rng(`${seed}:${format}`);
   const stakes = profiles.stakes[format];
   const roster = profiles.profiles.flatMap((profile) => profile.players.map((name) => ({ name, profile })));
@@ -201,26 +208,4 @@ export async function runSession(options) {
   }));
   for (const [name, n] of counts) manifest.players[name] = { profile: byName.get(name).profile.id, hands: n };
   return manifest;
-}
-
-/**
- * Tilt (profiles' `tilt` block): after a loss of at least `triggerLossBb`,
- * the player plays his tilt behaviour for his next `hands` hands; a new
- * episode can start only after `cooldownHands` more hands.
- */
-function trackTilt(who, net, handId, state, tiltedThisHand, episodes, bb, played) {
-  const config = who.profile.tilt;
-  if (!config || !state) return;
-  if (tiltedThisHand.includes(who.name)) {
-    state.left -= 1;
-    const episode = episodes.findLast((e) => e.player === who.name);
-    episode.handIds.push(String(handId));
-  }
-  if (state.cooldown > 0) state.cooldown -= 1;
-  if (state.left === 0 && state.cooldown === 0 && net <= -config.triggerLossBb * bb) {
-    state.left = config.hands;
-    state.cooldown = config.hands + config.cooldownHands;
-    // `handsBefore`: his hands up to and including the big loss.
-    episodes.push({ player: who.name, profile: who.profile.id, bigLossHandId: String(handId), handsBefore: played, lossBb: -net / bb, handIds: [] });
-  }
 }
