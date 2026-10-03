@@ -124,15 +124,35 @@ fn parse_action_type(value: &str) -> Option<ActionType> {
 ///
 /// Exactly three queries, whatever the number of hands.
 pub fn load_player_hands(conn: &Connection, player_id: i64) -> rusqlite::Result<Vec<HandFacts>> {
+    load_hands(conn, "SELECT hand_id FROM player_hands WHERE player_id = ?1", player_id)
+}
+
+/// Loads one stored hand by `hands.id` (the latest completed hand at a table,
+/// for the between-hands context).
+pub fn load_hand(conn: &Connection, hand_id: i64) -> rusqlite::Result<Option<HandFacts>> {
+    Ok(load_hands(conn, "SELECT id FROM hands WHERE id = ?1", hand_id)?.pop())
+}
+
+/// Loads up to `limit` stored hands with `hands.id > after_id` (the lowest
+/// ids first). The pool baseline walks the database in these batches so it
+/// never holds every hand in memory at once.
+pub fn load_hands_after(conn: &Connection, after_id: i64, limit: i64) -> rusqlite::Result<Vec<HandFacts>> {
+    let filter = format!("SELECT id FROM hands WHERE id > ?1 ORDER BY id LIMIT {}", limit.max(1));
+    load_hands(conn, &filter, after_id)
+}
+
+/// The shared loader: `hand_ids` is a subquery over one `?1` parameter that
+/// selects the `hands.id`s to load.
+fn load_hands(conn: &Connection, hand_ids: &str, param: i64) -> rusqlite::Result<Vec<HandFacts>> {
     let mut hands: Vec<HandFacts> = conn
-        .prepare(
+        .prepare(&format!(
             "SELECT h.id, h.hand_id, h.played_at, h.format, h.variant, h.table_name,
                     h.small_blind, h.big_blind, h.level, h.buy_in, h.max_seats, h.button_seat
              FROM hands h
-             WHERE h.id IN (SELECT hand_id FROM player_hands WHERE player_id = ?1)
+             WHERE h.id IN ({hand_ids})
              ORDER BY h.played_at, h.id",
-        )?
-        .query_map(params![player_id], |row| {
+        ))?
+        .query_map(params![param], |row| {
             Ok(HandFacts {
                 id: row.get(0)?,
                 hand_ref: row.get(1)?,
@@ -154,14 +174,14 @@ pub fn load_player_hands(conn: &Connection, player_id: i64) -> rusqlite::Result<
 
     let index: HashMap<i64, usize> = hands.iter().enumerate().map(|(i, h)| (h.id, i)).collect();
 
-    let mut seats = conn.prepare(
+    let mut seats = conn.prepare(&format!(
         "SELECT ph.hand_id, ph.player_id, ph.seat, ph.starting_stack, ph.position, ph.is_hero,
                 ph.hole_cards, ph.went_to_showdown, ph.won_at_showdown, ph.net_result, ph.bounty
          FROM player_hands ph
-         WHERE ph.hand_id IN (SELECT hand_id FROM player_hands WHERE player_id = ?1)
+         WHERE ph.hand_id IN ({hand_ids})
          ORDER BY ph.hand_id, ph.seat",
-    )?;
-    let mut rows = seats.query(params![player_id])?;
+    ))?;
+    let mut rows = seats.query(params![param])?;
     while let Some(row) = rows.next()? {
         let hand_id: i64 = row.get(0)?;
         let Some(&i) = index.get(&hand_id) else { continue };
@@ -179,13 +199,13 @@ pub fn load_player_hands(conn: &Connection, player_id: i64) -> rusqlite::Result<
         });
     }
 
-    let mut actions = conn.prepare(
+    let mut actions = conn.prepare(&format!(
         "SELECT a.hand_id, a.player_id, a.street, a.action_index, a.action_type, a.amount, a.is_all_in
          FROM actions a
-         WHERE a.hand_id IN (SELECT hand_id FROM player_hands WHERE player_id = ?1)
+         WHERE a.hand_id IN ({hand_ids})
          ORDER BY a.hand_id, a.action_index, a.id",
-    )?;
-    let mut rows = actions.query(params![player_id])?;
+    ))?;
+    let mut rows = actions.query(params![param])?;
     while let Some(row) = rows.next()? {
         let hand_id: i64 = row.get(0)?;
         let Some(&i) = index.get(&hand_id) else { continue };

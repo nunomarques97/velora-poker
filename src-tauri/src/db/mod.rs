@@ -217,7 +217,73 @@ fn migrate_schema(conn: &Connection) -> rusqlite::Result<()> {
     migrate_seat_templates_to_seat_positions(conn)?;
     repair_ingestion_integrity(conn)?;
     backfill_hand_facts(conn)?;
+    create_engine_generation(conn)?;
     Ok(())
+}
+
+/// The import generation the opponent engine keys its cached pool on
+/// (`engine::pooling::PoolCache`, spec section 4.2), kept by triggers so no
+/// write path has to remember it:
+///
+/// - `import_generation` moves on every new hand, so the pool walks the new
+///   hands once after an import commits;
+/// - `rebuild_generation` moves when a stored hand changes or disappears
+///   (ingestion repair, reparse backfill), which only a full walk can absorb.
+///   A seat or action inserted under an *older* hand (the repair re-adding a
+///   dealt-in player) counts as a change; one inserted under the newest hand
+///   is the import writing that hand.
+///
+/// Idempotent: `IF NOT EXISTS` and `INSERT OR IGNORE` throughout.
+fn create_engine_generation(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS engine_state (
+            key TEXT PRIMARY KEY,
+            value INTEGER NOT NULL DEFAULT 0
+        );
+        INSERT OR IGNORE INTO engine_state (key, value) VALUES ('import_generation', 0);
+        INSERT OR IGNORE INTO engine_state (key, value) VALUES ('rebuild_generation', 0);
+
+        CREATE TRIGGER IF NOT EXISTS engine_gen_hand_insert AFTER INSERT ON hands
+        BEGIN
+            UPDATE engine_state SET value = value + 1 WHERE key = 'import_generation';
+        END;
+        CREATE TRIGGER IF NOT EXISTS engine_gen_hand_update AFTER UPDATE ON hands
+        BEGIN
+            UPDATE engine_state SET value = value + 1 WHERE key = 'rebuild_generation';
+        END;
+        CREATE TRIGGER IF NOT EXISTS engine_gen_hand_delete AFTER DELETE ON hands
+        BEGIN
+            UPDATE engine_state SET value = value + 1 WHERE key = 'rebuild_generation';
+        END;
+        CREATE TRIGGER IF NOT EXISTS engine_gen_seat_insert AFTER INSERT ON player_hands
+        WHEN NEW.hand_id < (SELECT MAX(id) FROM hands)
+        BEGIN
+            UPDATE engine_state SET value = value + 1 WHERE key = 'rebuild_generation';
+        END;
+        CREATE TRIGGER IF NOT EXISTS engine_gen_seat_update AFTER UPDATE ON player_hands
+        BEGIN
+            UPDATE engine_state SET value = value + 1 WHERE key = 'rebuild_generation';
+        END;
+        CREATE TRIGGER IF NOT EXISTS engine_gen_seat_delete AFTER DELETE ON player_hands
+        BEGIN
+            UPDATE engine_state SET value = value + 1 WHERE key = 'rebuild_generation';
+        END;
+        CREATE TRIGGER IF NOT EXISTS engine_gen_action_insert AFTER INSERT ON actions
+        WHEN NEW.hand_id < (SELECT MAX(id) FROM hands)
+        BEGIN
+            UPDATE engine_state SET value = value + 1 WHERE key = 'rebuild_generation';
+        END;
+        CREATE TRIGGER IF NOT EXISTS engine_gen_action_update AFTER UPDATE ON actions
+        BEGIN
+            UPDATE engine_state SET value = value + 1 WHERE key = 'rebuild_generation';
+        END;
+        CREATE TRIGGER IF NOT EXISTS engine_gen_action_delete AFTER DELETE ON actions
+        BEGIN
+            UPDATE engine_state SET value = value + 1 WHERE key = 'rebuild_generation';
+        END;
+        "#,
+    )
 }
 
 /// Spec rule id of the backfill below (catalogue row D04).
