@@ -1,0 +1,612 @@
+{
+  "version": 1,
+  "notes": [
+    "Shared by the generator (scripts/sim), the Rust convergence test (src-tauri/tests/sim_convergence_tests.rs) and the e2e expectations.",
+    "targets: imported stats in percent (stats::PlayerStats keys) with an absolute tolerance in percentage points, for cash 6-max at the sample sizes of the convergence test.",
+    "expected.reads: the engine top read (strategic-analysis build) once the player is past min_hands, as the rule ids (with their chip tags) that may rank first for this profile; context facts (ctx.*, e.g. DEEP) are left out of the comparison. For the tilting player it is the read during a tilt episode (expected.during).",
+    "behaviour: decision ranges as a share of all starting hands (top X%) and postflop frequencies; see scripts/sim/lib/play.mjs."
+  ],
+  "hero": {
+    "name": "SimHero",
+    "buyInBb": 100,
+    "behaviour": {
+      "open": {
+        "EP": 0.15,
+        "MP": 0.19,
+        "CO": 0.27,
+        "BTN": 0.45,
+        "SB": 0.36
+      },
+      "openSize": 2.5,
+      "limp": 0,
+      "iso": 0.15,
+      "overlimp": 0.03,
+      "threeBet": 0.07,
+      "flat": 0.08,
+      "bbDefend": 0.3,
+      "sbFlat": 0.03,
+      "foldTo3bet": 0.55,
+      "fourBet": 0.2,
+      "foldTo4bet": 0.5,
+      "limpFold": 0.5,
+      "limpRaise": 0.1,
+      "callShove": 0.08,
+      "reshove": 0,
+      "cbet": 0.6,
+      "barrel": 0.5,
+      "riverBarrel": 0.5,
+      "stab": 0.6,
+      "donk": 0.06,
+      "foldToCbet": 0.45,
+      "foldToBet": 0.5,
+      "foldToTurn": 0.58,
+      "foldToRiver": 0.65,
+      "raiseVsBet": 0.07,
+      "betSize": 0.55
+    }
+  },
+  "stakes": {
+    "cash": {
+      "sb": 25,
+      "bb": 50,
+      "maxSeats": 6,
+      "rakeCapBb": 6
+    },
+    "zoom": {
+      "sb": 5,
+      "bb": 10,
+      "maxSeats": 6,
+      "rakeCapBb": 6
+    }
+  },
+  "profiles": [
+    {
+      "id": "fish",
+      "label": "Fish / calling station",
+      "players": [
+        "CallMeMaybe77",
+        "LuckyLarry_PT"
+      ],
+      "buyInBb": 100,
+      "targets": {
+        "vpip": {
+          "target": 47,
+          "tol": 6
+        },
+        "pfr": {
+          "target": 6,
+          "tol": 4
+        },
+        "threeBet": {
+          "target": 3,
+          "tol": 3
+        },
+        "foldToThreeBet": {
+          "target": 30,
+          "tol": 15
+        },
+        "cBet": {
+          "target": 45,
+          "tol": 10
+        },
+        "foldToCBet": {
+          "target": 25,
+          "tol": 8
+        },
+        "wtsd": {
+          "target": 42,
+          "tol": 9
+        }
+      },
+      "expected": {
+        "reads": [
+          {
+            "ruleId": "pf.cold_call.high",
+            "tag": "CC+"
+          }
+        ]
+      },
+      "behaviour": {
+        "open": {
+          "EP": 0.06,
+          "MP": 0.07,
+          "CO": 0.09,
+          "BTN": 0.14,
+          "SB": 0.1
+        },
+        "openSize": 3,
+        "limp": 0.32,
+        "iso": 0.05,
+        "overlimp": 0.65,
+        "threeBet": 0.03,
+        "flat": 0.6,
+        "bbDefend": 0.75,
+        "sbFlat": 0.5,
+        "foldTo3bet": 0.3,
+        "fourBet": 0.05,
+        "foldTo4bet": 0.3,
+        "limpFold": 0.2,
+        "limpRaise": 0.02,
+        "callShove": 0.2,
+        "reshove": 0,
+        "cbet": 0.45,
+        "barrel": 0.4,
+        "riverBarrel": 0.4,
+        "stab": 0.4,
+        "donk": 0.08,
+        "foldToCbet": 0.25,
+        "foldToBet": 0.25,
+        "foldToTurn": 0.35,
+        "foldToRiver": 0.4,
+        "raiseVsBet": 0.03,
+        "betSize": 0.5
+      },
+      "tilt": null
+    },
+    {
+      "id": "nit",
+      "label": "Nit",
+      "players": [
+        "RockSolidRui",
+        "FoldEquityFern"
+      ],
+      "buyInBb": 100,
+      "targets": {
+        "vpip": {
+          "target": 11,
+          "tol": 4
+        },
+        "pfr": {
+          "target": 8,
+          "tol": 4
+        },
+        "threeBet": {
+          "target": 3,
+          "tol": 2
+        },
+        "foldToThreeBet": {
+          "target": 70,
+          "tol": 15
+        },
+        "cBet": {
+          "target": 55,
+          "tol": 10
+        },
+        "foldToCBet": {
+          "target": 55,
+          "tol": 10
+        },
+        "wtsd": {
+          "target": 33,
+          "tol": 9
+        }
+      },
+      "expected": {
+        "reads": [
+          {
+            "ruleId": "pf.profile.nit",
+            "tag": "NIT"
+          },
+          {
+            "ruleId": "pf.rfi.tight_early",
+            "tag": "NIT"
+          },
+          {
+            "ruleId": "pf.steal.low",
+            "tag": "ST-"
+          }
+        ]
+      },
+      "behaviour": {
+        "open": {
+          "EP": 0.07,
+          "MP": 0.09,
+          "CO": 0.16,
+          "BTN": 0.26,
+          "SB": 0.2
+        },
+        "openSize": 3,
+        "limp": 0,
+        "iso": 0.06,
+        "overlimp": 0.02,
+        "threeBet": 0.03,
+        "flat": 0.04,
+        "bbDefend": 0.1,
+        "sbFlat": 0.02,
+        "foldTo3bet": 0.7,
+        "fourBet": 0.25,
+        "foldTo4bet": 0.4,
+        "limpFold": 0.5,
+        "limpRaise": 0.1,
+        "callShove": 0.04,
+        "reshove": 0,
+        "cbet": 0.55,
+        "barrel": 0.45,
+        "riverBarrel": 0.45,
+        "stab": 0.5,
+        "donk": 0.03,
+        "foldToCbet": 0.6,
+        "foldToBet": 0.65,
+        "foldToTurn": 0.7,
+        "foldToRiver": 0.72,
+        "raiseVsBet": 0.05,
+        "betSize": 0.5
+      },
+      "tilt": null
+    },
+    {
+      "id": "tag",
+      "label": "TAG regular (steals wide late, overfolds to 3-bets)",
+      "players": [
+        "GrindHouseGus",
+        "ColdDeckCarla"
+      ],
+      "buyInBb": 100,
+      "targets": {
+        "vpip": {
+          "target": 25,
+          "tol": 4
+        },
+        "pfr": {
+          "target": 20.5,
+          "tol": 4
+        },
+        "threeBet": {
+          "target": 7,
+          "tol": 3
+        },
+        "foldToThreeBet": {
+          "target": 78,
+          "tol": 10
+        },
+        "cBet": {
+          "target": 62,
+          "tol": 8
+        },
+        "foldToCBet": {
+          "target": 45,
+          "tol": 8
+        },
+        "wtsd": {
+          "target": 29,
+          "tol": 9
+        }
+      },
+      "expected": {
+        "reads": [
+          {
+            "ruleId": "pf.steal.high",
+            "tag": "ST+"
+          },
+          {
+            "ruleId": "pf.rfi.loose_late",
+            "tag": "ST+"
+          }
+        ]
+      },
+      "behaviour": {
+        "open": {
+          "EP": 0.15,
+          "MP": 0.19,
+          "CO": 0.42,
+          "BTN": 0.7,
+          "SB": 0.55
+        },
+        "openSize": 2.5,
+        "limp": 0,
+        "iso": 0.15,
+        "overlimp": 0.03,
+        "threeBet": 0.07,
+        "flat": 0.08,
+        "bbDefend": 0.3,
+        "sbFlat": 0.03,
+        "foldTo3bet": 0.78,
+        "fourBet": 0.3,
+        "foldTo4bet": 0.5,
+        "limpFold": 0.5,
+        "limpRaise": 0.1,
+        "callShove": 0.08,
+        "reshove": 0,
+        "cbet": 0.62,
+        "barrel": 0.5,
+        "riverBarrel": 0.5,
+        "stab": 0.6,
+        "donk": 0.06,
+        "foldToCbet": 0.45,
+        "foldToBet": 0.5,
+        "foldToTurn": 0.58,
+        "foldToRiver": 0.65,
+        "raiseVsBet": 0.07,
+        "betSize": 0.55
+      },
+      "tilt": null
+    },
+    {
+      "id": "lag",
+      "label": "LAG / maniac",
+      "players": [
+        "SprayAndPray",
+        "TripleBarrelTom"
+      ],
+      "buyInBb": 100,
+      "targets": {
+        "vpip": {
+          "target": 36,
+          "tol": 6
+        },
+        "pfr": {
+          "target": 30,
+          "tol": 6
+        },
+        "threeBet": {
+          "target": 12,
+          "tol": 4
+        },
+        "foldToThreeBet": {
+          "target": 40,
+          "tol": 12
+        },
+        "cBet": {
+          "target": 75,
+          "tol": 8
+        },
+        "foldToCBet": {
+          "target": 35,
+          "tol": 8
+        },
+        "wtsd": {
+          "target": 40,
+          "tol": 9
+        }
+      },
+      "expected": {
+        "reads": [
+          {
+            "ruleId": "pf.rfi.loose_early",
+            "tag": "LSE"
+          },
+          {
+            "ruleId": "pf.4bet.high",
+            "tag": "4B+"
+          }
+        ]
+      },
+      "behaviour": {
+        "open": {
+          "EP": 0.4,
+          "MP": 0.48,
+          "CO": 0.5,
+          "BTN": 0.7,
+          "SB": 0.6
+        },
+        "openSize": 2.5,
+        "limp": 0,
+        "iso": 0.3,
+        "overlimp": 0.05,
+        "threeBet": 0.11,
+        "flat": 0.07,
+        "bbDefend": 0.5,
+        "sbFlat": 0.05,
+        "foldTo3bet": 0.4,
+        "fourBet": 0.3,
+        "foldTo4bet": 0.4,
+        "limpFold": 0.3,
+        "limpRaise": 0.2,
+        "callShove": 0.12,
+        "reshove": 0,
+        "cbet": 0.8,
+        "barrel": 0.65,
+        "riverBarrel": 0.6,
+        "stab": 0.8,
+        "donk": 0.06,
+        "foldToCbet": 0.35,
+        "foldToBet": 0.35,
+        "foldToTurn": 0.55,
+        "foldToRiver": 0.62,
+        "raiseVsBet": 0.12,
+        "betSize": 0.7
+      },
+      "tilt": null
+    },
+    {
+      "id": "short",
+      "label": "Short stack (20bb, reshoves)",
+      "players": [
+        "ShortyShover",
+        "TwentyBigBlinds"
+      ],
+      "buyInBb": 20,
+      "leaveAboveBb": 30,
+      "targets": {
+        "vpip": {
+          "target": 20,
+          "tol": 5
+        },
+        "pfr": {
+          "target": 17,
+          "tol": 5
+        },
+        "threeBet": {
+          "target": 24,
+          "tol": 5
+        },
+        "foldToThreeBet": {
+          "target": 60,
+          "tol": 20
+        },
+        "cBet": {
+          "target": 27,
+          "tol": 10
+        },
+        "foldToCBet": {
+          "target": 40,
+          "tol": 10
+        },
+        "wtsd": {
+          "target": 68,
+          "tol": 10
+        }
+      },
+      "expected": {
+        "reads": [
+          {
+            "ruleId": "stk.reshove.high",
+            "tag": "RSV"
+          },
+          {
+            "ruleId": "pf.squeeze.high",
+            "tag": "SQZ"
+          }
+        ]
+      },
+      "behaviour": {
+        "open": {
+          "EP": 0.12,
+          "MP": 0.15,
+          "CO": 0.22,
+          "BTN": 0.35,
+          "SB": 0.3
+        },
+        "openSize": 2.2,
+        "limp": 0,
+        "iso": 0.12,
+        "overlimp": 0,
+        "threeBet": 0.06,
+        "flat": 0.02,
+        "bbDefend": 0.15,
+        "sbFlat": 0,
+        "foldTo3bet": 0.6,
+        "fourBet": 1,
+        "foldTo4bet": 0.3,
+        "limpFold": 0.5,
+        "limpRaise": 0.5,
+        "callShove": 0.15,
+        "reshove": 0.3,
+        "cbet": 0.7,
+        "barrel": 0.6,
+        "riverBarrel": 0.5,
+        "stab": 0.55,
+        "donk": 0.04,
+        "foldToCbet": 0.4,
+        "foldToBet": 0.4,
+        "foldToTurn": 0.5,
+        "foldToRiver": 0.55,
+        "raiseVsBet": 0.08,
+        "betSize": 0.6
+      },
+      "tilt": null
+    },
+    {
+      "id": "tilter",
+      "label": "Tilting player (solid until a big loss)",
+      "players": [
+        "SteamingSteve",
+        "MonkeyTilt_88"
+      ],
+      "buyInBb": 100,
+      "targets": {
+        "vpip": {
+          "target": 25,
+          "tol": 6
+        },
+        "pfr": {
+          "target": 20,
+          "tol": 5
+        },
+        "threeBet": {
+          "target": 8,
+          "tol": 4
+        },
+        "foldToThreeBet": {
+          "target": 55,
+          "tol": 15
+        },
+        "cBet": {
+          "target": 60,
+          "tol": 8
+        },
+        "foldToCBet": {
+          "target": 40,
+          "tol": 8
+        },
+        "wtsd": {
+          "target": 36,
+          "tol": 10
+        }
+      },
+      "expected": {
+        "reads": [
+          {
+            "ruleId": "rec.tilt",
+            "tag": "TILT"
+          }
+        ],
+        "during": "tilt-episode"
+      },
+      "behaviour": {
+        "open": {
+          "EP": 0.15,
+          "MP": 0.19,
+          "CO": 0.27,
+          "BTN": 0.45,
+          "SB": 0.36
+        },
+        "openSize": 2.5,
+        "limp": 0,
+        "iso": 0.15,
+        "overlimp": 0.03,
+        "threeBet": 0.07,
+        "flat": 0.08,
+        "bbDefend": 0.3,
+        "sbFlat": 0.03,
+        "foldTo3bet": 0.55,
+        "fourBet": 0.2,
+        "foldTo4bet": 0.5,
+        "limpFold": 0.5,
+        "limpRaise": 0.1,
+        "callShove": 0.08,
+        "reshove": 0,
+        "cbet": 0.6,
+        "barrel": 0.5,
+        "riverBarrel": 0.5,
+        "stab": 0.6,
+        "donk": 0.06,
+        "foldToCbet": 0.45,
+        "foldToBet": 0.5,
+        "foldToTurn": 0.58,
+        "foldToRiver": 0.65,
+        "raiseVsBet": 0.07,
+        "betSize": 0.55
+      },
+      "tilt": {
+        "triggerLossBb": 40,
+        "hands": 20,
+        "cooldownHands": 60,
+        "behaviour": {
+          "open": {
+            "EP": 0.7,
+            "MP": 0.75,
+            "CO": 0.8,
+            "BTN": 0.9,
+            "SB": 0.85
+          },
+          "limp": 0.1,
+          "iso": 0.45,
+          "overlimp": 0.5,
+          "threeBet": 0.2,
+          "flat": 0.55,
+          "bbDefend": 0.8,
+          "sbFlat": 0.3,
+          "foldTo3bet": 0.3,
+          "callShove": 0.35,
+          "cbet": 0.8,
+          "foldToCbet": 0.2,
+          "foldToBet": 0.2,
+          "foldToTurn": 0.25,
+          "foldToRiver": 0.25,
+          "raiseVsBet": 0.15
+        }
+      }
+    }
+  ]
+}

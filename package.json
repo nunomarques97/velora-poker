@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit",
     "test:layout": "tsc -p tsconfig.test.json && node --test .test-build/src/overlay/seatLayout.test.js",
+    "test:sim": "node --test scripts/sim/test/*.test.mjs",
     "preview": "vite preview",
     "tauri": "tauri"
   },
