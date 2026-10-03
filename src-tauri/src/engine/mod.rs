@@ -6,13 +6,18 @@
 //! only feeds the `strategic-analysis` payload. Everything here is a pure
 //! function of stored, completed hands — no in-hand state, no network.
 
+pub mod eval;
 pub mod facts;
 pub mod postflop;
 pub mod pot;
 pub mod preflop;
+pub mod showdown;
 
 use rusqlite::Connection;
 
+pub use eval::{
+    board_plays, evaluate, hole_strength, parse_cards, Card, Category, HandValue, HoleStrength,
+};
 pub use facts::{
     load_player_hands, ActionFact, Counterparty, HandEvents, HandFacts, Relation, SeatFact,
     StatEvent, StatKey,
@@ -20,6 +25,11 @@ pub use facts::{
 pub use postflop::{extract_player_postflop, extract_postflop};
 pub use pot::{parse_total_pot, replay_pot, PotReplay, SizeBucket, SizedAction, UncalledReturn};
 pub use preflop::{extract_player_preflop, extract_preflop};
+pub use showdown::{
+    extract_showdowns, load_showdown_boards, parse_board, showdown_record, sizing_tally,
+    sizing_tells, LastAggression, LineStep, ShowdownRecord, ShowdownResult, SizingTell, ValueClass,
+    SIZING_TELL_MIN_SAMPLE,
+};
 
 /// Loads one player's hands (a bounded number of queries) and extracts their
 /// preflop and stack-depth events, oldest hand first.
@@ -33,4 +43,12 @@ pub fn player_preflop_events(conn: &Connection, player_id: i64) -> rusqlite::Res
 pub fn player_postflop_events(conn: &Connection, player_id: i64) -> rusqlite::Result<Vec<HandEvents>> {
     let hands = load_player_hands(conn, player_id)?;
     Ok(extract_player_postflop(&hands, player_id))
+}
+
+/// Loads one player's hands and the boards of his shown showdowns, and
+/// builds his showdown records, oldest hand first.
+pub fn player_showdowns(conn: &Connection, player_id: i64) -> rusqlite::Result<Vec<ShowdownRecord>> {
+    let hands = load_player_hands(conn, player_id)?;
+    let boards = load_showdown_boards(conn, player_id)?;
+    Ok(extract_showdowns(&hands, &boards, player_id))
 }

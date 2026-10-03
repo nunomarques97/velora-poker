@@ -1,0 +1,432 @@
+PokerStars Hand #300000000501: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/12 20:01:00 ET
+Table 'Showdown I' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Vic ($50.00 in chips)
+Seat 5: Otto ($50.00 in chips)
+Seat 6: Tess ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [3c 2d]
+Vic: raises $1 to $1.50
+Otto: folds
+Tess: folds
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [Kc 7d 2s]
+Bob: checks
+Vic: bets $1
+Bob: calls $1
+*** TURN *** [Kc 7d 2s] [4h]
+Bob: checks
+Vic: checks
+*** RIVER *** [Kc 7d 2s 4h] [9c]
+Bob: checks
+Vic: bets $1.50
+Bob: calls $1.50
+*** SHOW DOWN ***
+Vic: shows [Ks Qd] (a pair of Kings)
+Bob: mucks hand
+Vic collected $7.84 from pot
+*** SUMMARY ***
+Total pot $8.25 | Rake $0.41
+Board [Kc 7d 2s 4h 9c]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) mucked
+Seat 4: Vic showed [Ks Qd] and won ($7.84) with a pair of Kings
+Seat 5: Otto folded before Flop (didn't bet)
+Seat 6: Tess folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000502: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/12 20:02:00 ET
+Table 'Showdown I' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Vic ($50.00 in chips)
+Seat 5: Otto ($50.00 in chips)
+Seat 6: Tess ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [3c 2d]
+Vic: raises $1 to $1.50
+Otto: folds
+Tess: folds
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [Jc 8s 3d]
+Bob: checks
+Vic: bets $1
+Bob: calls $1
+*** TURN *** [Jc 8s 3d] [2c]
+Bob: checks
+Vic: bets $2
+Bob: calls $2
+*** RIVER *** [Jc 8s 3d 2c] [6h]
+Bob: checks
+Vic: bets $3
+Bob: calls $3
+*** SHOW DOWN ***
+Vic: shows [Ah Ad] (a pair of Aces)
+Bob: shows [Jh Td] (a pair of Jacks)
+Vic collected $14.49 from pot
+*** SUMMARY ***
+Total pot $15.25 | Rake $0.76
+Board [Jc 8s 3d 2c 6h]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) showed [Jh Td] and lost with a pair of Jacks
+Seat 4: Vic showed [Ah Ad] and won ($14.49) with a pair of Aces
+Seat 5: Otto folded before Flop (didn't bet)
+Seat 6: Tess folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000503: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/12 20:03:00 ET
+Table 'Showdown I' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Vic ($50.00 in chips)
+Seat 5: Otto ($50.00 in chips)
+Seat 6: Tess ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [3c 2d]
+Vic: raises $1 to $1.50
+Otto: folds
+Tess: folds
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [Ts 7c 6d]
+Bob: checks
+Vic: bets $1
+Bob: calls $1
+*** TURN *** [Ts 7c 6d] [Kd]
+Bob: checks
+Vic: checks
+*** RIVER *** [Ts 7c 6d Kd] [2h]
+Bob: checks
+Vic: bets $2
+Bob: calls $2
+*** SHOW DOWN ***
+Vic: shows [9s 8s] (a straight, Six to Ten)
+Bob: mucks hand
+Vic collected $8.79 from pot
+*** SUMMARY ***
+Total pot $9.25 | Rake $0.46
+Board [Ts 7c 6d Kd 2h]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) mucked
+Seat 4: Vic showed [9s 8s] and won ($8.79) with a straight, Six to Ten
+Seat 5: Otto folded before Flop (didn't bet)
+Seat 6: Tess folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000504: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/12 20:04:00 ET
+Table 'Showdown I' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Vic ($50.00 in chips)
+Seat 5: Otto ($50.00 in chips)
+Seat 6: Tess ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [3c 2d]
+Vic: folds
+Otto: raises $1 to $1.50
+Tess: folds
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [Ah Kh 2c]
+Bob: checks
+Otto: bets $1.50
+Bob: calls $1.50
+*** TURN *** [Ah Kh 2c] [9s]
+Bob: checks
+Otto: checks
+*** RIVER *** [Ah Kh 2c 9s] [Jd]
+Bob: checks
+Otto: bets $8
+Bob: calls $8
+*** SHOW DOWN ***
+Otto: shows [6h 5h] (high card Ace)
+Bob: shows [Ac 3d] (a pair of Aces)
+Bob collected $21.14 from pot
+*** SUMMARY ***
+Total pot $22.25 | Rake $1.11
+Board [Ah Kh 2c 9s Jd]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) showed [Ac 3d] and won ($21.14) with a pair of Aces
+Seat 4: Vic folded before Flop (didn't bet)
+Seat 5: Otto showed [6h 5h] and lost with high card Ace
+Seat 6: Tess folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000505: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/12 20:05:00 ET
+Table 'Showdown I' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Vic ($50.00 in chips)
+Seat 5: Otto ($50.00 in chips)
+Seat 6: Tess ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [3c 2d]
+Vic: folds
+Otto: raises $1 to $1.50
+Tess: folds
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [9d 8d 2s]
+Bob: checks
+Otto: bets $1
+Bob: calls $1
+*** TURN *** [9d 8d 2s] [3h]
+Bob: checks
+Otto: checks
+*** RIVER *** [9d 8d 2s 3h] [4c]
+Bob: checks
+Otto: bets $7
+Bob: calls $7
+*** SHOW DOWN ***
+Otto: shows [Qc Jc] (high card Queen)
+Bob: shows [9s 7s] (a pair of Nines)
+Bob collected $18.29 from pot
+*** SUMMARY ***
+Total pot $19.25 | Rake $0.96
+Board [9d 8d 2s 3h 4c]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) showed [9s 7s] and won ($18.29) with a pair of Nines
+Seat 4: Vic folded before Flop (didn't bet)
+Seat 5: Otto showed [Qc Jc] and lost with high card Queen
+Seat 6: Tess folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000506: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/12 20:06:00 ET
+Table 'Showdown I' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Vic ($50.00 in chips)
+Seat 5: Otto ($50.00 in chips)
+Seat 6: Tess ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [3c 2d]
+Vic: folds
+Otto: raises $1 to $1.50
+Tess: folds
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [Kc Kd 4h]
+Bob: checks
+Otto: bets $1
+Bob: calls $1
+*** TURN *** [Kc Kd 4h] [2d]
+Bob: checks
+Otto: checks
+*** RIVER *** [Kc Kd 4h 2d] [Ts]
+Bob: checks
+Otto: bets $7
+Bob: calls $7
+*** SHOW DOWN ***
+Otto: shows [7s 6s] (a pair of Kings)
+Bob: shows [Qh Qc] (two pair, Kings and Queens)
+Bob collected $18.29 from pot
+*** SUMMARY ***
+Total pot $19.25 | Rake $0.96
+Board [Kc Kd 4h 2d Ts]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) showed [Qh Qc] and won ($18.29) with two pair, Kings and Queens
+Seat 4: Vic folded before Flop (didn't bet)
+Seat 5: Otto showed [7s 6s] and lost with a pair of Kings
+Seat 6: Tess folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000507: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/12 20:07:00 ET
+Table 'Showdown I' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Vic ($50.00 in chips)
+Seat 5: Otto ($50.00 in chips)
+Seat 6: Tess ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [3c 2d]
+Vic: folds
+Otto: folds
+Tess: raises $1 to $1.50
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [As 9d 4c]
+Bob: checks
+Tess: bets $3
+Bob: calls $3
+*** TURN *** [As 9d 4c] [3h]
+Bob: checks
+Tess: checks
+*** RIVER *** [As 9d 4c 3h] [2s]
+Bob: checks
+Tess: bets $8
+Bob: calls $8
+*** SHOW DOWN ***
+Tess: shows [Ac Kc] (a pair of Aces)
+Bob: mucks hand
+Tess collected $23.99 from pot
+*** SUMMARY ***
+Total pot $25.25 | Rake $1.26
+Board [As 9d 4c 3h 2s]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) mucked
+Seat 4: Vic folded before Flop (didn't bet)
+Seat 5: Otto folded before Flop (didn't bet)
+Seat 6: Tess showed [Ac Kc] and won ($23.99) with a pair of Aces
+
+
+PokerStars Hand #300000000508: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/12 20:08:00 ET
+Table 'Showdown I' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Vic ($50.00 in chips)
+Seat 5: Otto ($50.00 in chips)
+Seat 6: Tess ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [3c 2d]
+Vic: folds
+Otto: folds
+Tess: raises $1 to $1.50
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [Qs Jh 5d]
+Bob: checks
+Tess: bets $3
+Bob: calls $3
+*** TURN *** [Qs Jh 5d] [3c]
+Bob: checks
+Tess: checks
+*** RIVER *** [Qs Jh 5d 3c] [2c]
+Bob: checks
+Tess: bets $8
+Bob: calls $8
+*** SHOW DOWN ***
+Tess: shows [8d 8c] (a pair of Eights)
+Bob: shows [Qh Tc] (a pair of Queens)
+Bob collected $23.99 from pot
+*** SUMMARY ***
+Total pot $25.25 | Rake $1.26
+Board [Qs Jh 5d 3c 2c]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) showed [Qh Tc] and won ($23.99) with a pair of Queens
+Seat 4: Vic folded before Flop (didn't bet)
+Seat 5: Otto folded before Flop (didn't bet)
+Seat 6: Tess showed [8d 8c] and lost with a pair of Eights
+
+
+PokerStars Hand #300000000509: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/12 20:09:00 ET
+Table 'Showdown I' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Vic ($50.00 in chips)
+Seat 5: Otto ($50.00 in chips)
+Seat 6: Tess ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [3c 2d]
+Vic: raises $1 to $1.50
+Otto: folds
+Tess: folds
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [9h 5c 3d]
+Bob: checks
+Vic: bets $1
+Bob: folds
+Uncalled bet ($1) returned to Vic
+Vic collected $3.09 from pot
+Vic: shows [Qh Qs] (a pair of Queens)
+*** SUMMARY ***
+Total pot $3.25 | Rake $0.16
+Board [9h 5c 3d]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) folded on the Flop
+Seat 4: Vic collected ($3.09)
+Seat 5: Otto folded before Flop (didn't bet)
+Seat 6: Tess folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000510: Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/12 20:10:00 ET
+Table 'Showdown I' 6-max Seat #1 is the button
+Seat 1: Hero ($50.00 in chips)
+Seat 2: Sam ($50.00 in chips)
+Seat 3: Bob ($50.00 in chips)
+Seat 4: Vic ($50.00 in chips)
+Seat 5: Otto ($50.00 in chips)
+Seat 6: Tess ($50.00 in chips)
+Sam: posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [3c 2d]
+Vic: raises $1 to $1.50
+Otto: folds
+Tess: folds
+Hero: folds
+Sam: folds
+Bob: calls $1
+*** FLOP *** [Ac 8h 5s]
+Bob: checks
+Vic: bets $1
+Bob: calls $1
+*** TURN *** [Ac 8h 5s] [4d]
+Bob: checks
+Vic: checks
+*** RIVER *** [Ac 8h 5s 4d] [2h]
+Bob: checks
+Vic: checks
+*** SHOW DOWN ***
+Bob: shows [Ad 9c] (a pair of Aces)
+Vic: mucks hand
+Bob collected $4.99 from pot
+*** SUMMARY ***
+Total pot $5.25 | Rake $0.26
+Board [Ac 8h 5s 4d 2h]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) showed [Ad 9c] and won ($4.99) with a pair of Aces
+Seat 4: Vic mucked
+Seat 5: Otto folded before Flop (didn't bet)
+Seat 6: Tess folded before Flop (didn't bet)
+
+
