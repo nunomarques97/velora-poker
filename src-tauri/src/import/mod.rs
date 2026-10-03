@@ -38,6 +38,12 @@ pub fn import_text(conn: &mut Connection, text: &str) -> Result<ImportSummary, S
     let parser = PokerStarsParser;
     let results = parser.parse(text);
     let mut summary = ImportSummary::default();
+    // Only the hands this call adds are scanned for auto-notes below.
+    let notes_cursor = if cfg!(feature = "strategic-analysis") {
+        crate::engine::max_hand_row_id(conn).ok()
+    } else {
+        None
+    };
 
     for result in results {
         match result {
@@ -83,6 +89,15 @@ pub fn import_text(conn: &mut Connection, text: &str) -> Result<ImportSummary, S
             Err(_) => {
                 summary.hands_failed += 1;
             }
+        }
+    }
+
+    // Auto-notes (spec section 11), strategic-analysis build only. The hands
+    // are already committed; a detector failure is logged and never undoes
+    // or fails the import.
+    if let Some(cursor) = notes_cursor.filter(|_| summary.hands_imported > 0) {
+        if let Err(err) = crate::engine::generate_auto_notes_after(conn, cursor) {
+            eprintln!("auto-note generation failed after import: {err}");
         }
     }
 

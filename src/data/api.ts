@@ -14,6 +14,7 @@ import type {
   SeatFrame,
   SeatPosition,
   Session,
+  SidePanelSnapshot,
 } from "./types";
 
 export class DesktopAppRequiredError extends Error {
@@ -474,6 +475,21 @@ export async function getClassificationRules(): Promise<ClassificationRule[]> {
 export async function getDiagnosticsReport(): Promise<string> {
   assertTauriAvailable();
   return invoke<string>("get_diagnostics_report");
+}
+
+// ---------------------------------------------------------------------
+// Side panel
+// ---------------------------------------------------------------------
+
+/**
+ * Every tracked table with its villains, for the side panel. Each table's
+ * roster is scoped exactly like its own overlay's. In the default build
+ * `quality`, `tag` and `topRead` are `null`; tables, villains, hand counts
+ * and `otherTableIds` are always present.
+ */
+export async function getSidePanelSnapshot(): Promise<SidePanelSnapshot> {
+  assertTauriAvailable();
+  return invoke<SidePanelSnapshot>("get_side_panel_snapshot");
 }
 
 // ---------------------------------------------------------------------

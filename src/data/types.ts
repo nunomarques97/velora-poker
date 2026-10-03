@@ -480,3 +480,61 @@ export interface OnboardingReadinessPayload {
   clientLanguage: OnboardingClientLanguageReadiness;
   autoCenter: OnboardingAutoCenterReadiness;
 }
+
+// ---------------------------------------------------------------------
+// Side panel (`get_side_panel_snapshot`, spec section 13)
+// ---------------------------------------------------------------------
+
+export type TableQualityLabel = "soft" | "average" | "tough";
+
+/** Mirrors `engine::TableQuality`: 0 (tough) to 100 (soft), 50 neutral. */
+export interface TableQuality {
+  score: number;
+  label: TableQualityLabel;
+  /** The villains' hands in total: the sample behind the score. */
+  basisHands: number;
+}
+
+/** Mirrors `commands::SidePanelRead`: a villain's top-ranked read. */
+export interface SidePanelRead {
+  ruleId: string;
+  observation: string;
+  advice: string;
+  confidencePct: number | null;
+}
+
+/** Mirrors `commands::SidePanelVillain`. */
+export interface SidePanelVillain {
+  playerId: string;
+  name: string;
+  seat: number | null;
+  /** Hands dealt into, all-time. */
+  hands: number;
+  /** Chip tag text; `null` in the default build or when there is no tag. */
+  tag: string | null;
+  /** `null` in the default build or when no read cleared its sample. */
+  topRead: SidePanelRead | null;
+  /** Other tracked tables where this villain is seated, ascending. Empty when none. */
+  otherTableIds: number[];
+}
+
+/** Mirrors `commands::SidePanelTable`: one tracked table. */
+export interface SidePanelTable {
+  tableId: number;
+  /** Parsed from the window title; `null` when the title did not parse. */
+  tableName: string | null;
+  /** `null` before any hand is imported at this table. */
+  maxPlayers: number | null;
+  /** Players dealt into the table's latest hand, the hero included. */
+  playerCount: number;
+  /** `null` in the default build and below the spec's sample. */
+  quality: TableQuality | null;
+  /** Non-hero players of the latest hand, most hands first. */
+  villains: SidePanelVillain[];
+}
+
+/** Mirrors `commands::SidePanelSnapshot`, the `get_side_panel_snapshot` response. */
+export interface SidePanelSnapshot {
+  generatedAt: string;
+  tables: SidePanelTable[];
+}

@@ -82,6 +82,7 @@ pub fn run() {
             commands::get_players,
             commands::get_players_page,
             commands::get_active_table_players,
+            commands::get_side_panel_snapshot,
             commands::set_player_color_override,
             commands::clear_player_color_override,
             commands::set_player_note,

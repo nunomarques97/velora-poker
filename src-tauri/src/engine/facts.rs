@@ -141,6 +141,20 @@ pub fn load_hands_after(conn: &Connection, after_id: i64, limit: i64) -> rusqlit
     load_hands(conn, &filter, after_id)
 }
 
+/// Loads up to `limit` stored hands with `hands.id > after_id` in which at
+/// least one non-hero player's cards were shown (the lowest ids first). The
+/// auto-note detectors read only these, so a backfill never walks hands that
+/// cannot yield a note.
+pub fn load_shown_hands_after(conn: &Connection, after_id: i64, limit: i64) -> rusqlite::Result<Vec<HandFacts>> {
+    let filter = format!(
+        "SELECT DISTINCT hand_id FROM player_hands
+         WHERE is_hero = 0 AND hole_cards IS NOT NULL AND hand_id > ?1
+         ORDER BY hand_id LIMIT {}",
+        limit.max(1)
+    );
+    load_hands(conn, &filter, after_id)
+}
+
 /// The shared loader: `hand_ids` is a subquery over one `?1` parameter that
 /// selects the `hands.id`s to load.
 fn load_hands(conn: &Connection, hand_ids: &str, param: i64) -> rusqlite::Result<Vec<HandFacts>> {

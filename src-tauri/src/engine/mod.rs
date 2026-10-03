@@ -11,6 +11,7 @@ pub mod cache;
 pub mod context;
 pub mod eval;
 pub mod facts;
+pub mod notes;
 pub mod payload;
 pub mod postflop;
 pub mod pooling;
@@ -20,6 +21,7 @@ pub mod rank;
 pub mod recency;
 pub mod rules;
 pub mod showdown;
+pub mod table_quality;
 
 use rusqlite::Connection;
 
@@ -36,8 +38,11 @@ pub use eval::{
     board_plays, evaluate, hole_strength, parse_cards, Card, Category, HandValue, HoleStrength,
 };
 pub use facts::{
-    load_hand, load_hands_after, load_player_hands, ActionFact, Counterparty, HandEvents, HandFacts, Relation, SeatFact,
+    load_hand, load_hands_after, load_player_hands, load_shown_hands_after, ActionFact, Counterparty, HandEvents, HandFacts, Relation, SeatFact,
     StatEvent, StatKey,
+};
+pub use notes::{
+    detect_hand, generate_auto_notes_after, max_hand_row_id, AutoNoteKind, DetectedNote,
 };
 pub use postflop::{extract_player_postflop, extract_postflop};
 pub use pooling::{
@@ -57,6 +62,10 @@ pub use recency::{form_counts, recent_form, recency_weight, FormCounts, FormFlag
 pub use rules::{
     evaluate as evaluate_rules, player_replay, player_rule_input, rule_def, rule_input, templates, EngineEvidence, EngineRuleResult,
     Family, PlayerReplay, RuleDef, RuleInput, ShowdownTally, TemplateKind, RULES,
+};
+pub use table_quality::{
+    multi_table_index, table_quality, villain_softness, MultiTableIndex, QualityLabel, TableQuality,
+    VillainQuality,
 };
 pub use showdown::{
     extract_showdowns, load_showdown_boards, parse_board, showdown_record, sizing_tally,

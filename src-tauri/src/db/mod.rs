@@ -218,7 +218,100 @@ fn migrate_schema(conn: &Connection) -> rusqlite::Result<()> {
     repair_ingestion_integrity(conn)?;
     backfill_hand_facts(conn)?;
     create_engine_generation(conn)?;
+    create_player_auto_notes(conn)?;
+    backfill_auto_notes(conn)?;
     Ok(())
+}
+
+/// Auto-notes (`docs/specs/opponent-engine.md`, section 11): notable shown
+/// hands the engine's detectors found, one row per player, hand and kind.
+/// A table of their own, so the manual `player_notes` (one row per player,
+/// written only by the user) are never touched and the two stay apart.
+///
+/// Idempotent: `IF NOT EXISTS` throughout.
+fn create_player_auto_notes(conn: &Connection) -> rusqlite::Result<()> {
+    conn.execute_batch(
+        r#"
+        CREATE TABLE IF NOT EXISTS player_auto_notes (
+            id INTEGER PRIMARY KEY,
+            player_id INTEGER NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+            hand_id INTEGER NOT NULL REFERENCES hands(id) ON DELETE CASCADE,
+            kind TEXT NOT NULL,
+            text TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(player_id, hand_id, kind)
+        );
+        CREATE INDEX IF NOT EXISTS idx_player_auto_notes_player ON player_auto_notes(player_id);
+        "#,
+    )
+}
+
+/// Settings key set once the auto-note backfill has run on a database.
+pub const AUTO_NOTES_BACKFILL_FLAG: &str = "auto_notes_backfilled_v1";
+
+/// Runs the auto-note detectors once over every hand already stored. Only
+/// the `strategic-analysis` build generates auto-notes (gating matrix,
+/// section 2), so the default build neither runs it nor sets the flag: a
+/// later strategic build still backfills. Re-running is harmless anyway
+/// (`INSERT OR IGNORE` on the unique key).
+fn backfill_auto_notes(conn: &Connection) -> rusqlite::Result<()> {
+    if !cfg!(feature = "strategic-analysis") || get_setting(conn, AUTO_NOTES_BACKFILL_FLAG)?.is_some() {
+        return Ok(());
+    }
+    let tx = conn.unchecked_transaction()?;
+    crate::engine::notes::generate_auto_notes_after(&tx, 0)?;
+    set_setting(&tx, AUTO_NOTES_BACKFILL_FLAG, "true")?;
+    tx.commit()
+}
+
+/// Stores one auto-note. `false` when that player, hand and kind already
+/// has one (a re-import or a second backfill), which is left as it was.
+pub fn insert_auto_note(
+    conn: &Connection,
+    player_id: i64,
+    hand_row_id: i64,
+    kind: &str,
+    text: &str,
+) -> rusqlite::Result<bool> {
+    let inserted = conn.execute(
+        "INSERT OR IGNORE INTO player_auto_notes (player_id, hand_id, kind, text, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![player_id, hand_row_id, kind, text, now_iso()],
+    )?;
+    Ok(inserted > 0)
+}
+
+/// One stored auto-note, with its hand's PokerStars number.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AutoNoteRow {
+    pub id: i64,
+    pub hand_ref: String,
+    pub kind: String,
+    pub text: String,
+    pub created_at: String,
+}
+
+/// A player's auto-notes, newest hand first.
+pub fn list_auto_notes(conn: &Connection, player_id: i64) -> rusqlite::Result<Vec<AutoNoteRow>> {
+    let mut stmt = conn.prepare(
+        "SELECT n.id, h.hand_id, n.kind, n.text, n.created_at
+         FROM player_auto_notes n
+         JOIN hands h ON h.id = n.hand_id
+         WHERE n.player_id = ?1
+         ORDER BY h.played_at DESC, h.id DESC, n.kind ASC",
+    )?;
+    let rows = stmt
+        .query_map(params![player_id], |row| {
+            Ok(AutoNoteRow {
+                id: row.get(0)?,
+                hand_ref: row.get(1)?,
+                kind: row.get(2)?,
+                text: row.get(3)?,
+                created_at: row.get(4)?,
+            })
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
 }
 
 /// The import generation the opponent engine keys its cached pool on

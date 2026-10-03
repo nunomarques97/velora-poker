@@ -6,7 +6,9 @@ use tauri::{Emitter, State};
 use crate::classification::{self, ClassificationResult};
 use crate::db;
 use crate::description_rules::{self, RuleResult};
-use crate::engine::{EngineCache, EnginePayload, HandFacts};
+use crate::engine::{
+    multi_table_index, table_quality, EngineCache, EnginePayload, FormatKey, HandFacts, TableQuality,
+};
 use crate::hud::{self, HudProfile};
 use crate::import;
 use crate::overlay::{self, HotZone};
@@ -390,6 +392,192 @@ pub fn get_active_table_max_players(
     let since = table_track::table_for(table_id).map(|t| t.first_seen_at);
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     db::active_table_max_players(&conn, scope.name(), since.as_deref()).map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------
+// Side panel
+// ---------------------------------------------------------------------
+
+/// Spec rule id of the default-build gate (catalogue row G04): the default
+/// build's side panel carries tables, villains, hand counts and multi-table
+/// flags, never a quality score, tag or read.
+pub const RULE_DEFAULT_BUILD_GATE: &str = "gate.default_build";
+
+/// One tracked table the side panel asks about.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PanelTable {
+    pub table_id: u32,
+    /// The name parsed from the window title; `None` when it did not parse.
+    pub table_name: Option<String>,
+    /// The table window's `first_seen_at`, the floor of its active hand.
+    pub since: Option<String>,
+}
+
+impl From<&table_track::TrackedTable> for PanelTable {
+    fn from(table: &table_track::TrackedTable) -> Self {
+        PanelTable {
+            table_id: table.id,
+            table_name: table.name.clone(),
+            since: Some(table.first_seen_at.clone()),
+        }
+    }
+}
+
+/// A villain's top read as the panel shows it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SidePanelRead {
+    pub rule_id: String,
+    pub observation: String,
+    pub advice: String,
+    pub confidence_pct: Option<u8>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SidePanelVillain {
+    pub player_id: String,
+    pub name: String,
+    pub seat: Option<i64>,
+    /// Hands he was dealt into, all-time.
+    pub hands: i64,
+    /// The chip tag's text; `None` in the default build or without a tag.
+    pub tag: Option<String>,
+    /// His top-ranked read; `None` in the default build or without a read.
+    pub top_read: Option<SidePanelRead>,
+    /// The other tracked tables where he is seated, ascending.
+    pub other_table_ids: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SidePanelTable {
+    pub table_id: u32,
+    pub table_name: Option<String>,
+    pub max_players: Option<i64>,
+    /// Players dealt into the table's latest hand, the hero included.
+    pub player_count: usize,
+    /// `None` in the default build and below the spec's sample.
+    pub quality: Option<TableQuality>,
+    /// Non-hero players of the table's latest hand, most hands first.
+    pub villains: Vec<SidePanelVillain>,
+}
+
+/// `get_side_panel_snapshot` (spec section 13).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SidePanelSnapshot {
+    pub generated_at: String,
+    pub tables: Vec<SidePanelTable>,
+}
+
+/// The side panel's snapshot of `tables`, in their order. Each table's
+/// roster is scoped exactly like its own overlay's (`table_scope`): its
+/// parsed name and `since` floor; an unparsed title keeps the global
+/// fallback only when it is the only table, and is empty otherwise.
+/// Multi-table flags compare the rosters of the tables with a parsed name.
+///
+/// Only the `strategic-analysis` build computes quality, tags and reads
+/// (from the same cached replays the overlays use); the default build runs
+/// no engine code here.
+pub fn side_panel_snapshot(
+    conn: &rusqlite::Connection,
+    engine: &mut EngineCache,
+    tables: &[PanelTable],
+) -> Result<SidePanelSnapshot, String> {
+    let strategic = cfg!(feature = "strategic-analysis");
+    // `None`: no roster. `Some(None)`: the global latest hand.
+    let scope_of = |table: &PanelTable| -> Option<Option<String>> {
+        match &table.table_name {
+            Some(name) => Some(Some(name.clone())),
+            None if tables.len() == 1 => Some(None),
+            None => None,
+        }
+    };
+
+    let mut rosters = Vec::with_capacity(tables.len());
+    for table in tables {
+        let rows = match scope_of(table) {
+            Some(scope) => {
+                db::list_active_table_players_with_seats(conn, scope.as_deref(), table.since.as_deref())
+                    .map_err(|e| e.to_string())?
+            }
+            None => Vec::new(),
+        };
+        rosters.push(rows);
+    }
+    let named: Vec<(u32, Vec<(i64, bool)>)> = tables
+        .iter()
+        .zip(&rosters)
+        .filter(|(table, _)| table.table_name.is_some())
+        .map(|(table, rows)| (table.table_id, rows.iter().map(|r| (r.id, r.is_hero)).collect()))
+        .collect();
+    let index = multi_table_index(&named);
+
+    let mut out = Vec::with_capacity(tables.len());
+    for (table, rows) in tables.iter().zip(rosters) {
+        let scope = scope_of(table);
+        let name = scope.clone().flatten();
+        let since = table.since.as_deref();
+        let max_players = match scope {
+            Some(_) => db::active_table_max_players(conn, name.as_deref(), since)
+                .map_err(|e| e.to_string())?,
+            None => None,
+        };
+        let context_hand = if strategic && !rows.is_empty() {
+            crate::engine::latest_hand_in_scope(conn, name.as_deref(), since)
+                .map_err(|e| e.to_string())?
+        } else {
+            None
+        };
+        let format = context_hand.as_ref().map(FormatKey::of_hand);
+
+        let mut villains = Vec::new();
+        let mut qualities = Vec::new();
+        for row in rows.iter().filter(|r| !r.is_hero) {
+            let payload = player_engine(conn, engine, context_hand.as_ref(), row.id)?;
+            if strategic {
+                qualities.push(
+                    engine.villain_quality(conn, row.id, format).map_err(|e| e.to_string())?,
+                );
+            }
+            villains.push(SidePanelVillain {
+                player_id: row.id.to_string(),
+                name: row.name.clone(),
+                seat: row.seat,
+                hands: row.hands,
+                tag: payload.as_ref().and_then(|p| p.tag.as_ref()).map(|t| t.text.clone()),
+                top_read: payload.as_ref().and_then(|p| p.top_reads.first()).map(|r| SidePanelRead {
+                    rule_id: r.rule_id.clone(),
+                    observation: r.observation.clone(),
+                    advice: r.advice.clone(),
+                    confidence_pct: r.confidence_pct,
+                }),
+                other_table_ids: index.other_tables(table.table_id, row.id),
+            });
+        }
+
+        out.push(SidePanelTable {
+            table_id: table.table_id,
+            table_name: table.table_name.clone(),
+            max_players,
+            player_count: rows.len(),
+            quality: if strategic { table_quality(&qualities) } else { None },
+            villains,
+        });
+    }
+
+    Ok(SidePanelSnapshot { generated_at: db::now_iso(), tables: out })
+}
+
+/// Every tracked table with its villains, for the side panel window. One
+/// connection lock for the whole snapshot.
+#[tauri::command]
+pub fn get_side_panel_snapshot(state: State<AppState>) -> Result<SidePanelSnapshot, String> {
+    let tables: Vec<PanelTable> = table_track::tracked_tables().iter().map(PanelTable::from).collect();
+    let conn = state.conn.lock().map_err(|e| e.to_string())?;
+    let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
+    side_panel_snapshot(&conn, &mut engine, &tables)
 }
 
 #[tauri::command]

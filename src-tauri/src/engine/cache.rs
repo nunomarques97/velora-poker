@@ -14,9 +14,13 @@ use std::collections::HashMap;
 use rusqlite::{params, Connection};
 
 use super::context::EngineContext;
-use super::payload::{engine_payload, EnginePayload};
+use super::aggregate::View;
+use super::facts::StatKey;
+use super::payload::{engine_payload, AutoNotePayload, EnginePayload, NoteSource};
 use super::pooling::{FormatKey, Generation, PoolCache};
 use super::rules::{player_replay, PlayerReplay};
+use super::table_quality::VillainQuality;
+use crate::db;
 
 /// Players kept in memory; the least recently used one is dropped beyond.
 pub const PLAYER_CACHE_CAP: usize = 512;
@@ -33,7 +37,25 @@ struct ReplayKey {
 struct Entry {
     key: ReplayKey,
     replay: PlayerReplay,
+    /// His auto-notes, newest first. Notes are only written for hands as
+    /// they are imported (or by the one-time backfill, before any replay),
+    /// so they change exactly when the key does.
+    notes: Vec<AutoNotePayload>,
     last_used: u64,
+}
+
+fn load_notes(conn: &Connection, player_id: i64) -> rusqlite::Result<Vec<AutoNotePayload>> {
+    Ok(db::list_auto_notes(conn, player_id)?
+        .into_iter()
+        .map(|row| AutoNotePayload {
+            id: row.id,
+            hand_id: row.hand_ref,
+            kind: row.kind,
+            text: row.text,
+            created_at: row.created_at,
+            source: NoteSource::Auto,
+        })
+        .collect())
 }
 
 /// How often players were replayed or served from the cache: a test hook
@@ -95,8 +117,9 @@ impl EngineCache {
             self.counts.hits += 1;
         } else {
             let replay = player_replay(conn, player_id, format)?;
+            let notes = load_notes(conn, player_id)?;
             self.counts.replays += 1;
-            self.players.insert(player_id, Entry { key, replay, last_used: self.tick });
+            self.players.insert(player_id, Entry { key, replay, notes, last_used: self.tick });
             self.evict();
         }
         let entry = self.players.get_mut(&player_id).expect("entry just ensured");
@@ -116,9 +139,42 @@ impl EngineCache {
         self.replay(conn, player_id, format)?;
         // The pool walks only the hands imported since its last call.
         let tally = self.pool.tally(conn)?;
-        let replay = &self.players[&player_id].replay;
+        let entry = &self.players[&player_id];
+        let replay = &entry.replay;
         let prior = |key| tally.prior(replay.format, key);
-        Ok(engine_payload(replay, &prior, context))
+        let mut payload = engine_payload(replay, &prior, context);
+        payload.auto_notes = entry.notes.clone();
+        Ok(payload)
+    }
+
+    /// What the table quality score (section 12) reads of one villain: his
+    /// recency-view shrunk VPIP, PFR and WTSD against the priors of
+    /// `format` (the table's), and his hand count. Reuses his cached replay.
+    pub fn villain_quality(
+        &mut self,
+        conn: &Connection,
+        player_id: i64,
+        format: Option<FormatKey>,
+    ) -> rusqlite::Result<VillainQuality> {
+        self.replay(conn, player_id, format)?;
+        let tally = self.pool.tally(conn)?;
+        let replay = &self.players[&player_id].replay;
+        let stat = |key: StatKey| {
+            let prior = tally.prior(replay.format, key);
+            (replay.agg.stat(View::Recency, key, prior).shrunk, prior)
+        };
+        let (vpip, prior_vpip) = stat(StatKey::Vpip);
+        let (pfr, prior_pfr) = stat(StatKey::Pfr);
+        let (wtsd, prior_wtsd) = stat(StatKey::Wtsd);
+        Ok(VillainQuality {
+            hands: replay.agg.hands,
+            vpip,
+            pfr,
+            wtsd,
+            prior_vpip,
+            prior_pfr,
+            prior_wtsd,
+        })
     }
 
     fn evict(&mut self) {
