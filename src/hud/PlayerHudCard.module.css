@@ -103,6 +103,18 @@
   letter-spacing: 0.02em;
 }
 
+/*
+ * The sample behind the tag ("F3B 41"): hands or opportunities the read
+ * rests on, inside the tag's segment so it reads as the tag's own number,
+ * never as the hand count at the chip's end. Same size and colour as the tag
+ * (so >= 10px and the same contrast), lighter weight to set it apart.
+ */
+.sample {
+  margin-left: 0.3em;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
 .tag-stack {
   background: rgba(217, 180, 74, 0.16);
   color: #e6c97a;

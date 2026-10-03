@@ -160,6 +160,14 @@ const CHIP_BASE_PX: Record<ChipModel, { width: number; height: number }> = {
  */
 export const CHIP_TAG_BASE_PX = 40;
 
+/**
+ * Extra width, at scale 1, of the sample next to the tag: the hands or
+ * opportunities the tagged read rests on, at most three characters ("41",
+ * "312", "12k") in tabular digits plus the gap before them. Counted with the
+ * tag (`tagged`), because every tag a read stands for carries one.
+ */
+export const CHIP_SAMPLE_BASE_PX = 26;
+
 /** Centre of the felt. ASSUMED, from the 6-max plates below. */
 export const TABLE_CENTRE: Point = { x: 0.5, y: 0.47 };
 
@@ -343,7 +351,7 @@ export function chipScale(windowW: number, windowH: number): number {
 
 /**
  * Chip font and box size, in CSS px, for a window and chip design. `tagged`
- * adds the room the engine's tag segment takes.
+ * adds the room the engine's tag segment and its sample take.
  */
 export function chipMetrics(
   windowW: number,
@@ -356,7 +364,7 @@ export function chipMetrics(
   return {
     scale,
     fontPx: Math.max(MIN_FONT_PX, BASE_FONT_PX * scale),
-    widthPx: (base.width + (tagged ? CHIP_TAG_BASE_PX : 0)) * scale,
+    widthPx: (base.width + (tagged ? CHIP_TAG_BASE_PX + CHIP_SAMPLE_BASE_PX : 0)) * scale,
     heightPx: base.height * scale,
   };
 }
@@ -587,8 +595,8 @@ export function clampOverride(point: Point, chip: ChipMetrics, windowW: number, 
  * Lays out every chip of one table: saved overrides exactly where they were
  * put (only clamped into the window), and every other seat at its default,
  * just outside its plate on the side away from the table centre, nudged
- * until it overlaps neither another chip nor a protected zone and stays in
- * the window. Defaults are computed for every seat of the table, occupied
+ * until it overlaps neither another chip, a protected zone nor another
+ * seat's name plate, and stays in the window. Defaults are computed for every seat of the table, occupied
  * or not, so a seat's chip never jumps when another player sits down.
  * Deterministic: the same input always gives the same output.
  */
@@ -650,11 +658,19 @@ export function layoutSeats(input: LayoutInput): SeatLayout {
     return { x: c.cx / w, y: c.cy / h };
   };
 
+  // A default chip never covers another seat's name plate: at the minimum
+  // 9-max size a tag-width chip pushed off its own spot would otherwise land
+  // on its neighbour's plate. Its own plate stays soft (preferred clear,
+  // touched only when nothing else fits).
+  const plates = anchors.map((anchor) => ({ seatKey: anchor.seatKey, box: toBox(seatPlateRect(anchor), w, h) }));
   for (const anchor of anchors) {
     if (placed.has(anchor.seatKey)) continue;
     const plate = { cx: anchor.x * w, cy: anchor.y * h };
     const { start, outward } = outerAnchor(ctx, plate);
-    const p = settle(place(searchCtx, clampCentre(searchCtx, start.cx, start.cy), outward));
+    const neighbours = plates.filter((p) => p.seatKey !== anchor.seatKey).map((p) => p.box);
+    const ownCards = toBox(holeCardsRect(anchor), w, h);
+    const seatCtx: SearchContext = { ...searchCtx, hard: [...searchCtx.hard, ...neighbours, ownCards] };
+    const p = settle(place(seatCtx, clampCentre(searchCtx, start.cx, start.cy), outward));
     placed.set(anchor.seatKey, { seatKey: anchor.seatKey, x: p.x, y: p.y, overridden: false });
     searchCtx.hard.push(chipBox(p));
   }
@@ -690,25 +706,28 @@ export const HOVER_CARD_BASE_FONT_PX = 11;
 export const HOVER_CARD_LINE_HEIGHT = 1.2;
 /**
  * Vertical px the card spends on anything but text lines: its 1px border and
- * 4px padding, top and bottom, and the rule between the two reads (1px, with
- * 3px above and below it). Must match `HoverReadCard.module.css`.
+ * 4px padding, top and bottom, the 2px under the player's name, and the rule
+ * between the two reads (1px, with 3px above and below it). Must match
+ * `HoverReadCard.module.css`.
  */
-export const HOVER_CARD_CHROME_PX = 17;
+export const HOVER_CARD_CHROME_PX = 19;
 /**
- * Text lines of two reads: usually one observation line and two advice
- * lines each; at most two of each (the CSS clamps every block to two lines).
+ * Text lines of the card: the player's name (one line, so a card placed
+ * away from its chip still says whose reads these are), then two reads,
+ * usually one observation line and two advice lines each; at most two of
+ * each (the CSS clamps every block to two lines).
  */
-export const HOVER_CARD_TYPICAL_LINES = 6;
-export const HOVER_CARD_MAX_LINES = 8;
+export const HOVER_CARD_TYPICAL_LINES = 7;
+export const HOVER_CARD_MAX_LINES = 9;
 /** Minimum gap between the card and its own chip, in px. */
 const HOVER_CARD_GAP_PX = 4;
 /** Grid step of the card search, in px. */
 const HOVER_CARD_STEP_PX = 4;
 /**
- * A card at most this far from its chip still reads as "next to it". Every
- * preference is first tried within this gap, so the card stays by its chip
- * (over a plate or an opponent's card backs, at worst) before it is sent
- * across the table to find clear felt.
+ * A card at most this far from its chip still reads as "next to it". Both
+ * preferences are first tried within this gap, so the card stays by its chip
+ * (over a plate or another chip, at worst) before it is sent across the
+ * table to find clear felt.
  */
 const HOVER_CARD_NEAR_PX = 16;
 
@@ -749,11 +768,11 @@ export interface HoverCardInput {
 }
 
 /**
- * Which preferences the chosen place kept. `protectedZones` and the chip
- * itself are never covered; the rest is given up in this order only when
- * nothing else fits.
+ * Which preference the chosen place kept. The hard zones
+ * (`hoverCardHardZones`) are never covered; the other chips are given up
+ * only when nothing else fits.
  */
-export type HoverCardFit = "clear" | "overChips" | "overOpponentCards";
+export type HoverCardFit = "clear" | "overChips";
 
 export interface HoverCardPlacement {
   /** The card's rectangle, as fractions of the window. */
@@ -761,10 +780,22 @@ export interface HoverCardPlacement {
   fit: HoverCardFit;
 }
 
-/** The zones the hover card must never cover: `protectedZones` plus its own chip. */
+/**
+ * The zones the hover card must never cover: `protectedZones` (board and
+ * pot, every bet, the action buttons), every seat's hole cards, the hero's
+ * and the opponents' alike, and its own chip. Every seat's cards, not only
+ * the hero's: the card is read while a hand may be running, and the backs
+ * of an opponent's cards say who is still in it.
+ */
 export function hoverCardHardZones(input: HoverCardInput): Rect[] {
+  const n = validMaxPlayers(input.maxPlayers);
+  const frame: SeatFrame = input.frame === "absolute" ? "absolute" : "hero";
   return [
-    ...protectedZones(input.maxPlayers, input.frame, input.heroSeatKey).map((zone) => zone.rect),
+    // The hero's hole-cards zone is one of every seat's below.
+    ...protectedZones(n, frame, input.heroSeatKey)
+      .filter((zone) => zone.kind !== "holeCards")
+      .map((zone) => zone.rect),
+    ...defaultSeatAnchors(n, frame).map((anchor) => holeCardsRect(anchor)),
     input.chip,
   ];
 }
@@ -779,11 +810,11 @@ function boxGap(a: Box, b: Box): number {
 /**
  * Where the hover card goes for one chip: the in-window place nearest the
  * chip (smallest gap, then nearest centre, then top-most, then left-most,
- * so the answer is deterministic) that covers no protected zone (board and
- * pot, bet chips, the hero's hole cards, action buttons) and not the chip
- * itself, keeping a 4px gap from it. Preferences, given up in order only
- * when nothing fits: the other chips, then the opponents' hole cards; all
- * three are tried within 16px of the chip before anywhere farther.
+ * so the answer is deterministic) that covers none of `hoverCardHardZones`
+ * (board and pot, every bet, every seat's hole cards, action buttons, the
+ * chip itself), keeping a 4px gap from its chip. The other chips are
+ * avoided too, and given up only when nothing else fits; both are tried
+ * within 16px of the chip before anywhere farther.
  * `null` when the card fits nowhere at all; the overlay then retries with
  * the top read only, and shows no card if even that fits nowhere (the
  * chip's accessible name still carries the tag, the drawer every read).
@@ -801,20 +832,18 @@ export function placeHoverCard(input: HoverCardInput): HoverCardPlacement | null
   if (!(cw > 0 && ch > 0) || cw > w || ch > h) return null;
 
   const chipBox = toBox(input.chip, w, h);
+  // `hoverCardHardZones` ends with the chip; it goes in grown by the gap.
   const hard = [
-    ...protectedZones(n, frame, input.heroSeatKey).map((zone) => toBox(zone.rect, w, h)),
+    ...hoverCardHardZones({ ...input, maxPlayers: n, frame })
+      .slice(0, -1)
+      .map((rect) => toBox(rect, w, h)),
     grow(chipBox, HOVER_CARD_GAP_PX),
   ];
-  const hero = frame === "hero" ? 0 : input.heroSeatKey ?? null;
-  const opponentCards = defaultSeatAnchors(n, frame)
-    .filter((anchor) => anchor.seatKey !== hero)
-    .map((anchor) => toBox(holeCardsRect(anchor), w, h));
   const chips = (input.otherChips ?? []).map((rect) => toBox(rect, w, h));
 
   const passes: Array<{ fit: HoverCardFit; avoid: Box[] }> = [
-    { fit: "clear", avoid: [...hard, ...opponentCards, ...chips] },
-    { fit: "overChips", avoid: [...hard, ...opponentCards] },
-    { fit: "overOpponentCards", avoid: hard },
+    { fit: "clear", avoid: [...hard, ...chips] },
+    { fit: "overChips", avoid: hard },
   ];
 
   // Candidate left/top edges: a grid from 0, plus the far edges, so a card

@@ -472,6 +472,36 @@ pub struct EngineEvidence {
     pub shrunk: Option<f64>,
 }
 
+/// What a read's sample counts (section 13).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SampleUnit {
+    /// Hands: VPIP/PFR (one decision per hand dealt), showdowns, recent form.
+    Hands,
+    /// Times the spot came up: every other stat, head-to-head.
+    Opportunities,
+}
+
+/// The sample a read's confidence rests on: the count of its weakest basis
+/// stat (the one its confidence was taken from). `None` for context facts
+/// of the latest hand (stack depth, bounty), which have no sample.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadSample {
+    pub count: u32,
+    pub unit: SampleUnit,
+}
+
+impl ReadSample {
+    fn of(stat: &ShrunkStat) -> ReadSample {
+        let unit = match stat.key {
+            StatKey::Vpip | StatKey::Pfr => SampleUnit::Hands,
+            _ => SampleUnit::Opportunities,
+        };
+        ReadSample { count: stat.opportunities, unit }
+    }
+}
+
 /// One read: the `RuleResult` contract plus the engine's fields (section
 /// 13). Unranked here; ordering and the chip tag are the ranking's job.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -484,6 +514,8 @@ pub struct EngineRuleResult {
     pub confidence_pct: Option<u8>,
     pub confidence_tier: ConfidenceTier,
     pub evidence: Vec<EngineEvidence>,
+    /// What the confidence rests on; the chip shows it next to the tag.
+    pub sample: Option<ReadSample>,
     pub scenario_id: String,
     pub family: Family,
     pub tag: Option<String>,
@@ -811,6 +843,8 @@ struct StatHit {
     deviation: f64,
     confidence: f64,
     tier: ConfidenceTier,
+    /// The weakest leg's sample: the one the confidence came from.
+    sample: ReadSample,
 }
 
 impl StatHit {
@@ -825,6 +859,7 @@ impl StatHit {
             deviation: deviation(stat),
             confidence: stat.confidence,
             tier: stat.tier,
+            sample: ReadSample::of(stat),
         })
     }
 
@@ -834,6 +869,7 @@ impl StatHit {
         if other.confidence < self.confidence {
             self.confidence = other.confidence;
             self.tier = other.tier;
+            self.sample = ReadSample::of(other);
         }
         self.basis.push(*other);
         self
@@ -875,6 +911,7 @@ fn all_of(input: &RuleInput, keys: &[StatKey], dir: Dir, complement: bool) -> Op
         deviation: shown.iter().map(|s| deviation(s)).fold(f64::INFINITY, f64::min),
         confidence: weakest.confidence,
         tier: weakest.tier,
+        sample: ReadSample::of(weakest),
     })
 }
 
@@ -979,6 +1016,7 @@ impl Out<'_> {
         id: &str,
         values: Vec<(&str, String)>,
         evidence: Vec<EngineEvidence>,
+        sample: Option<ReadSample>,
         confidence: f64,
         tier: ConfidenceTier,
         score: Score,
@@ -1002,6 +1040,7 @@ impl Out<'_> {
             confidence_pct: Some((100.0 * confidence).round() as u8),
             confidence_tier: tier,
             evidence,
+            sample,
             scenario_id: def.scenario.to_string(),
             family: def.family,
             tag: tag.or_else(|| def.tag.map(str::to_string)),
@@ -1025,7 +1064,7 @@ impl Out<'_> {
             ("n", hit.n.to_string()),
         ]);
         let evidence = hit.basis.iter().map(stat_evidence).collect();
-        self.push(id, extra, evidence, hit.confidence, hit.tier, Score::Deviation(hit.deviation), None);
+        self.push(id, extra, evidence, Some(hit.sample), hit.confidence, hit.tier, Score::Deviation(hit.deviation), None);
     }
 }
 
@@ -1134,11 +1173,11 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
             let tournament = matches!(ctx.format, FormatKey::Mtt | FormatKey::Spin);
             if tournament && ctx.stack_bucket == Some(StackBucket::PushFold) {
                 let tag = format!("{}bb", eff.floor() as u32);
-                out.push("ctx.short_stack", vec![("eff", one_decimal(eff))], evidence.clone(), 1.0,
+                out.push("ctx.short_stack", vec![("eff", one_decimal(eff))], evidence.clone(), None, 1.0,
                     ConfidenceTier::High, Score::Fixed(2.5), Some(tag));
             }
             if ctx.stack_bucket == Some(StackBucket::Deep) {
-                out.push("ctx.deep_stack", vec![("eff", one_decimal(eff))], evidence, 1.0,
+                out.push("ctx.deep_stack", vec![("eff", one_decimal(eff))], evidence, None, 1.0,
                     ConfidenceTier::High, Score::Fixed(0.5), None);
             }
         }
@@ -1177,6 +1216,7 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
                 "ko.big_bounty",
                 vec![("ratio", one_decimal(ratio)), ("amount", format!("{symbol}{:.2}", bounty.amount))],
                 evidence,
+                None,
                 1.0,
                 ConfidenceTier::High,
                 Score::Fixed((1.0 + ratio / 2.0).min(3.0)),
@@ -1252,7 +1292,8 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
             ("n", stat.opportunities.to_string()),
         ];
         let d = (stat.shrunk - stat.villain_shrunk).abs() / spec.scale;
-        out.push(id, values, evidence, c, tier_of(c), Score::Deviation(d), None);
+        let sample = ReadSample { count: stat.opportunities, unit: SampleUnit::Opportunities };
+        out.push(id, values, evidence, Some(sample), c, tier_of(c), Score::Deviation(d), None);
     }
 
     // ---- showdown-backed tells (M04, M05)
@@ -1304,7 +1345,8 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
                 hits: form.window_hits,
                 shrunk: Some(form.baseline_vpip_pct),
             }];
-            out.push(flag.rule_id(), values, evidence, c, tier_of(c), Score::Fixed(d), None);
+            let sample = ReadSample { count: form.baseline_opportunities, unit: SampleUnit::Hands };
+            out.push(flag.rule_id(), values, evidence, Some(sample), c, tier_of(c), Score::Fixed(d), None);
         }
     }
 
@@ -1338,5 +1380,6 @@ fn push_showdown(out: &mut Out, id: &str, bucket: &str, value: u32, bluff: u32, 
         shrunk: None,
     }];
     // Section 7: 4 × |share − 0.5| × n/(n + 4); the confidence is n/(n + 4).
-    out.push(id, values, evidence, c, tier_of(c), Score::Deviation(4.0 * (share - 0.5).abs()), None);
+    let sample = ReadSample { count: n, unit: SampleUnit::Hands };
+    out.push(id, values, evidence, Some(sample), c, tier_of(c), Score::Deviation(4.0 * (share - 0.5).abs()), None);
 }

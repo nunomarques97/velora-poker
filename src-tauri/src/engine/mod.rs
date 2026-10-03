@@ -61,7 +61,7 @@ pub use rank::{
 pub use recency::{form_counts, recent_form, recency_weight, FormCounts, FormFlag, RecentForm};
 pub use rules::{
     evaluate as evaluate_rules, player_replay, player_rule_input, rule_def, rule_input, templates, EngineEvidence, EngineRuleResult,
-    Family, PlayerReplay, RuleDef, RuleInput, ShowdownTally, TemplateKind, RULES,
+    Family, PlayerReplay, ReadSample, RuleDef, RuleInput, SampleUnit, ShowdownTally, TemplateKind, RULES,
 };
 pub use table_quality::{
     multi_table_index, table_quality, villain_softness, MultiTableIndex, QualityLabel, TableQuality,

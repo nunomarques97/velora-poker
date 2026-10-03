@@ -28,8 +28,10 @@ interface HoverReadCardProps {
 
 /**
  * The peek next to a chip (`strategic-analysis` build only): the player's
- * top reads, each as what they do, what to do about it, and how sure the
- * engine is. Purely informational: it takes no pointer input and is never a
+ * name, then his top reads, each as what they do, what to do about it, and
+ * how sure the engine is. The name is there because the card is not always
+ * beside its chip: it never covers any seat's cards, so near the top seats
+ * it may sit across the table. Purely informational: it takes no pointer input and is never a
  * hot zone, so it can never take a click from the table; the drawer, one
  * click on the chip, has every read.
  */
@@ -39,19 +41,22 @@ export function HoverReadCard({ id, playerName, reads, style, cardRef }: HoverRe
       {reads.length === 0 ? (
         <p className={styles.empty}>No read on {playerName} has enough hands yet.</p>
       ) : (
-        <ol className={styles.reads}>
-          {reads.map((read) => (
-            <li key={read.ruleId} className={styles.read}>
-              <div className={styles.observationRow}>
-                <span className={styles.observation}>{read.observation}</span>
-                <span className={`${styles.confidence} ${styles[`tier-${read.confidenceTier}`] ?? ""}`}>
-                  {confidenceText(read)}
-                </span>
-              </div>
-              <p className={styles.advice}>{read.advice}</p>
-            </li>
-          ))}
-        </ol>
+        <>
+          <p className={styles.name}>{playerName}</p>
+          <ol className={styles.reads}>
+            {reads.map((read) => (
+              <li key={read.ruleId} className={styles.read}>
+                <div className={styles.observationRow}>
+                  <span className={styles.observation}>{read.observation}</span>
+                  <span className={`${styles.confidence} ${styles[`tier-${read.confidenceTier}`] ?? ""}`}>
+                    {confidenceText(read)}
+                  </span>
+                </div>
+                <p className={styles.advice}>{read.advice}</p>
+              </li>
+            ))}
+          </ol>
+        </>
       )}
     </div>
   );

@@ -3,8 +3,9 @@
  * by the overlay (`placeHoverCard`, `hoverCardMetrics` in seatLayout.ts):
  *   --card-font   text size (10-11px, scales with the table like the chip)
  *   width/left/top  set inline from the placement
- * The vertical chrome here (1px border and 4px padding top and bottom, 1px
- * rule with 3px either side) and the 1.2 line height are `HOVER_CARD_CHROME_PX` and
+ * The vertical chrome here (1px border and 4px padding top and bottom, 2px
+ * under the name, 1px rule with 3px either side) and the 1.2 line height are
+ * `HOVER_CARD_CHROME_PX` and
  * `HOVER_CARD_LINE_HEIGHT`: change them together. Every text block is
  * clamped to two lines, so the card is never taller than the layout's
  * `maxHeightPx`.
@@ -13,6 +14,7 @@
  * under it still clicks the table.
  *
  * Contrast, on the card's ~#0f151b surface (96% over green felt):
+ *   name        #9aa4b8  7.3:1
  *   observation #e8ebf2  15.4:1
  *   advice      #a9bcff  9.9:1
  *   confidence  #9aa4b8  7.3:1 (high #57b88b 7.6:1, medium #d9b44a 9.3:1)
@@ -43,6 +45,16 @@
   to {
     opacity: 1;
   }
+}
+
+/* Whose reads these are: one line, the card's own size (so never < 10px). */
+.name {
+  margin: 0 0 2px;
+  overflow: hidden;
+  color: #9aa4b8;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .reads {

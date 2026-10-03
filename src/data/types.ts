@@ -78,9 +78,20 @@ export interface EngineEvidence extends Evidence {
   shrunk: number | null;
 }
 
+/** What a read's sample counts: whole hands, or the times its spot came up. */
+export type SampleUnit = "hands" | "opportunities";
+
+/** The sample a read's confidence rests on (its weakest basis stat). */
+export interface ReadSample {
+  count: number;
+  unit: SampleUnit;
+}
+
 /** One engine read: the `RuleResult` contract plus the engine's fields. */
 export interface EngineRead extends RuleResult {
   evidence: EngineEvidence[];
+  /** `null` for facts of the latest hand (stack depth, bounty), which have no sample. */
+  sample: ReadSample | null;
   /** Catalogue row of the spec (e.g. `P06`). */
   scenarioId: string;
   family: EngineFamily;

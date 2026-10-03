@@ -5,15 +5,19 @@
 // and --dump-dom to read the numbers qa-overlay.html writes to <body>:
 //   - the default layouts: no chip overlaps another chip (overlap=0) and no
 //     chip covers a protected zone, i.e. board, bets, the hero's hole cards or
-//     action buttons (intersections=0), nor an opponent's hole cards;
+//     action buttons (intersections=0), nor an opponent's hole cards, nor
+//     another seat's name plate;
 //   - a scripted drag: exactly one save_seat_position call, for the dragged
 //     seat key; a cancelled drag saves nothing; a plain click opens the
 //     detail panel; a save made by another overlay of the same size moves
 //     this one's chip;
 //   - the strategic-analysis overlay (engine=1): tagged chips still overlap
-//     nothing, tag text >= 10px and in the accessible name; every hover card
-//     stays clear of protected zones, its chip and the window edge, takes no
-//     pointer input and closes on leave; it also closes on the native
+//     nothing and no other seat's name plate, tag text >= 10px and in the
+//     accessible name; the sample behind each read tag is on the chip,
+//     >= 10px, and in words in the accessible name; every hover card stays
+//     clear of protected zones, every seat's hole cards (hero and
+//     opponents), its chip and the window edge, takes no pointer input and
+//     closes on leave; at 800x570 every chip with reads gets one; it also closes on the native
 //     pointer-left event, Esc, blur, drag start, the drawer opening and a
 //     refresh that drops the player; a new hand refreshes it; an older
 //     refresh answering last is ignored; StrictMode leaves one listener per
@@ -161,8 +165,10 @@ async function shot(base, size, params, name) {
 /** `a=1 b=x` → { a: "1", b: "x" } */
 const fields = (s) => Object.fromEntries((s ?? "").split(" ").filter(Boolean).map((kv) => kv.split("=")));
 
-// qa-overlay.html's engine roster: opponents with a tag and with any card at all.
-const ENGINE = { 6: { tags: 4, cards: 5 }, 9: { tags: 7, cards: 8 } };
+// qa-overlay.html's engine roster: opponents with a tag, with a sample on
+// the chip (every read tag; the 9-max stack tag "12bb" has none) and with any
+// card at all.
+const ENGINE = { 6: { tags: 4, samples: 4, cards: 5 }, 9: { tags: 7, samples: 6, cards: 8 } };
 
 /** The `strategic-analysis` overlay: tagged chips, the hover card and its lifecycle. */
 async function engineChecks(base) {
@@ -177,6 +183,8 @@ async function engineChecks(base) {
         check(qa.tags === String(expected.tags), `${label}: ${expected.tags} tagged chips`, `tags=${qa.tags}`);
         check(qa.overlap === "0" && qa.intersections === "0", `${label}: tag-width chips overlap no chip and no protected zone`,
           `overlap=${qa.overlap} intersections=${qa.intersections}`);
+        check(qa["plate-intersections"] === "0", `${label}: no tagged chip over another seat's name plate`,
+          `plates=${qa["plate-intersections"]}`);
         // Opponents' card backs are a soft zone for chips (seatLayout.ts). The
         // wider tagged chip still avoids them at the medium size; at the
         // minimum size it may touch some, which is reported, not failed.
@@ -189,26 +197,40 @@ async function engineChecks(base) {
         check(Number(qa["min-tag-font-px"]) >= 10, `${label}: tag text >= 10px`, `tag font=${qa["min-tag-font-px"]}`);
         check(qa["tag-labels"] === qa.tags, `${label}: every tagged chip's accessible name carries its tag`,
           `${qa["tag-labels"]}/${qa.tags}`);
+        check(qa.samples === String(expected.samples), `${label}: ${expected.samples} chips show the sample behind their tag`,
+          `samples=${qa.samples}`);
+        check(Number(qa["min-sample-font-px"]) >= 10, `${label}: sample text >= 10px`, `sample font=${qa["min-sample-font-px"]}`);
+        check(qa["sample-labels"] === qa.samples, `${label}: every sample is stated in words in the chip's accessible name`,
+          `${qa["sample-labels"]}/${qa.samples}`);
         const listeners = JSON.parse(qa.listeners || "{}");
         check(listeners["hands-imported"] === 1 && listeners["overlay-pointer-left"] === 1,
           `${label}: one listener per event after StrictMode setup/cleanup/setup`, qa.listeners);
 
         const all = await dump(base, size, { max: String(max), frame, engine: "1", action: "hoverall" });
         const r = fields(all["action-result"]);
-        check(r.opened === String(expected.cards), `${label}: a card opens on every chip with an engine payload`, all["action-result"]);
-        check(r.violations === "0", `${label}: no card covers a protected zone, its chip or the window edge`, all["action-result"]);
+        // At the minimum size a 9-max table has no room left for some cards
+        // once every seat's hole cards are hard zones (seatLayout.test.ts);
+        // those chips show no card, which is reported, not failed.
+        if (size.w === SIZES[1].w) {
+          check(r.opened === String(expected.cards), `${label}: a card opens on every chip with an engine payload`, all["action-result"]);
+        } else {
+          console.log(`INFO  ${label}: cards placed ${r.opened}/${expected.cards} (the rest fit nowhere clear of every seat's cards)`);
+        }
+        check(r.violations === "0" && r.hole === "0",
+          `${label}: no card covers a protected zone, any seat's hole cards, its chip or the window edge`, all["action-result"]);
         check(r.hot === "0", `${label}: no card takes pointer input or becomes a hot zone`, all["action-result"]);
         check(r.stuck === "0", `${label}: every card closes on pointer leave`, all["action-result"]);
-        // Opponents' card backs are a last resort, given up only when nothing else fits near the chip.
-        console.log(`INFO  ${label}: cards over an opponent's card backs: ${r.oppHole}; cards with two reads: ${r.twoReads}/${r.opened}`);
+        console.log(`INFO  ${label}: cards with two reads: ${r.twoReads}/${r.opened}`);
       }
       const hover = { max: String(max), engine: "1", action: "hover", seat: String(DRAG.seat) };
       const qa = await dump(base, size, hover);
-      check(qa.card === "1" && qa["card-reads"] !== "0" && qa["card-violations"] === "0" && qa["card-hot"] === "0",
-        `${tag} hover: card open next to the chip, clear of protected zones, not a hot zone`,
-        `card=${qa.card} reads=${qa["card-reads"]} violations=${qa["card-violations"]} hot=${qa["card-hot"]}`);
+      check(qa.card === "1" && qa["card-reads"] !== "0" && qa["card-violations"] === "0" && qa["card-hole"] === "0" && qa["card-hot"] === "0",
+        `${tag} hover: card open, clear of protected zones and every seat's hole cards, not a hot zone`,
+        `card=${qa.card} reads=${qa["card-reads"]} violations=${qa["card-violations"]} hole=${qa["card-hole"]} hot=${qa["card-hot"]}`);
       check(/Folds to 72% of 3-bets/.test(qa["card-text"] ?? "") && /3-bet his opens wider/.test(qa["card-text"] ?? "")
         && /High 81%/.test(qa["card-text"] ?? ""), `${tag} hover: card shows observation, advice and confidence`, qa["card-text"]);
+      // The card may sit away from its chip (never over any seat's cards), so it names its player.
+      check((qa["card-text"] ?? "").startsWith("TightTony"), `${tag} hover: card names the player first`, qa["card-text"]);
       await shot(base, size, { max: String(max), engine: "1" }, `hud-tagged-${tag}.png`);
       await shot(base, size, hover, `hud-hover-${tag}.png`);
     }
@@ -281,13 +303,17 @@ async function main() {
           check(qa.intersections === "0", `${label}: intersections=0`, `intersections=${qa.intersections}`);
           check(qa["opp-hole-intersections"] === "0", `${label}: no chip over an opponent's hole cards`,
             `opp-hole=${qa["opp-hole-intersections"]}`);
+          check(qa["plate-intersections"] === "0", `${label}: no chip over another seat's name plate`,
+            `plates=${qa["plate-intersections"]}`);
           check(qa["save-count"] === "0", `${label}: nothing saved`, `saves=${qa["save-count"]}`);
           check(Number(qa["min-font-px"]) >= 10, `${label}: chip font >= 10px`, `font=${qa["min-font-px"]}`);
-          check(qa.tags === "0" && qa.card === "0", `${label}: no engine (default build), no tag, no card`, `tags=${qa.tags}`);
+          check(qa.tags === "0" && qa.samples === "0" && qa.card === "0", `${label}: no engine (default build), no tag, no sample, no card`,
+            `tags=${qa.tags} samples=${qa.samples}`);
         }
         const badge = await dump(base, size, { max: String(max), model: "badge" });
-        check(badge.overlap === "0" && badge.intersections === "0", `${tag} badge defaults: overlap=0, intersections=0`,
-          `overlap=${badge.overlap} intersections=${badge.intersections}`);
+        check(badge.overlap === "0" && badge.intersections === "0" && badge["plate-intersections"] === "0",
+          `${tag} badge defaults: overlap=0, intersections=0, no other seat's plate`,
+          `overlap=${badge.overlap} intersections=${badge.intersections} plates=${badge["plate-intersections"]}`);
         await shot(base, size, { max: String(max) }, `hud-compact-${tag}.png`);
       }
 

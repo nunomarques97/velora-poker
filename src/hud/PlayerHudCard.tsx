@@ -1,4 +1,4 @@
-import type { ChipTag, ClassificationResult, HudProfile, Player, PlayerStats } from "../data/types";
+import type { ChipTag, ClassificationResult, HudProfile, Player, PlayerStats, ReadSample } from "../data/types";
 import { NO_OPPORTUNITY, STAT_LABELS } from "./statFormat";
 import styles from "./PlayerHudCard.module.css";
 
@@ -38,15 +38,41 @@ function chipValue(key: keyof PlayerStats, stats: PlayerStats): string {
 }
 
 /**
- * The tag in words, for the chip's accessible name: what kind of tag it is
- * and, for a read's tag, the read itself. The tag letters alone ("F3B")
- * mean nothing to a screen reader.
+ * The sample behind the chip's tag: that of the read the tag stands for (the
+ * top read, or the tilt read when TILT took precedence). `null` for a stack
+ * tag, a fact of the latest hand with no sample.
  */
-function tagDescription(tag: ChipTag, player: Player): string {
-  if (tag.source === "tilt") return `tag ${tag.text}, playing far looser than usual lately`;
+function tagSample(tag: ChipTag, player: Player): ReadSample | null {
+  return player.engine?.reads.find((r) => r.ruleId === tag.ruleId)?.sample ?? null;
+}
+
+/**
+ * The sample as the chip prints it: at most three characters, so it fits
+ * the width the layout reserves ("41", "312", "12k"). The accessible name
+ * carries the exact count.
+ */
+export function sampleText(count: number): string {
+  return count < 1000 ? String(count) : `${Math.floor(count / 1000)}k`;
+}
+
+/** "based on 41 opportunities", "based on 1 hand". */
+export function sampleWords(sample: ReadSample): string {
+  const one = sample.count === 1;
+  const unit = sample.unit === "hands" ? (one ? "hand" : "hands") : one ? "opportunity" : "opportunities";
+  return `based on ${sample.count.toLocaleString("en-US")} ${unit}`;
+}
+
+/**
+ * The tag in words, for the chip's accessible name: what kind of tag it is,
+ * for a read's tag the read itself, and the sample it rests on. The tag
+ * letters alone ("F3B") mean nothing to a screen reader.
+ */
+function tagDescription(tag: ChipTag, player: Player, sample: ReadSample | null): string {
+  const based = sample ? `, ${sampleWords(sample)}` : "";
+  if (tag.source === "tilt") return `tag ${tag.text}, playing far looser than usual lately${based}`;
   if (tag.source === "stack") return `tag ${tag.text}, effective stack`;
   const read = player.engine?.reads.find((r) => r.ruleId === tag.ruleId);
-  return read ? `tag ${tag.text}, ${read.observation}` : `tag ${tag.text}`;
+  return read ? `tag ${tag.text}, ${read.observation}${based}` : `tag ${tag.text}${based}`;
 }
 
 /** Pointer and focus handlers the overlay uses to open and close the hover read card. */
@@ -89,8 +115,9 @@ interface PlayerHudCardProps {
  * `--chip-h`), which scales it with the table.
  *
  * `strategic-analysis` build only: when the opponent engine gave the player
- * a tag (`engine.tag`), it leads the chip in its own segment. With no
- * engine (the default build) or no tag the chip is exactly the one above.
+ * a tag (`engine.tag`), it leads the chip in its own segment, followed in
+ * that segment by the sample its read rests on ("F3B 41"). With no engine
+ * (the default build) or no tag the chip is exactly the one above.
  */
 export function PlayerHudCard({
   player,
@@ -113,6 +140,7 @@ export function PlayerHudCard({
   const values = keys.map((key) => chipValue(key, player.stats));
   const statsText = keys.map((key, i) => `${STAT_LABELS[key]} ${values[i]}`).join(", ");
   const tag = player.engine?.tag ?? null;
+  const sample = tag ? tagSample(tag, player) : null;
 
   // The colour is never the only signal: the archetype's name is in the
   // chip's accessible name and tooltip, and the detail panel spells it out.
@@ -122,7 +150,7 @@ export function PlayerHudCard({
     model === "compact" && statsText ? statsText : null,
     archetype ? archetype.label : null,
     smallSample ? `under ${profile.minHands} hands, small sample` : null,
-    tag ? tagDescription(tag, player) : null,
+    tag ? tagDescription(tag, player, sample) : null,
   ]
     .filter(Boolean)
     .join(", ");
@@ -159,12 +187,14 @@ export function PlayerHudCard({
       // otherwise open on top of it.
       title={hoverHandlers && player.engine ? undefined : description}
       data-tag={tag?.text}
+      data-sample={sample ? sample.count : undefined}
       {...hoverHandlers}
       {...dragHandleProps}
     >
       {tag && (
         <span className={`${styles.tag} ${styles[`tag-${tag.source}`] ?? ""}`} aria-hidden="true">
           {tag.text}
+          {sample && <span className={styles.sample}>{sampleText(sample.count)}</span>}
         </span>
       )}
       {model === "badge" ? (

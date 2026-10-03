@@ -18,7 +18,7 @@ use velora_poker_lib::engine::rules::{observation_template, SEAT_SUFFIX};
 use velora_poker_lib::engine::{
     evaluate_rules, latest_table_hand, player_rule_input, rule_def, stat_spec, templates,
     villain_context, EngineContext, EngineRuleResult, Family, FormFlag, FormatKey, H2hKey,
-    RecentForm, RuleInput, ShowdownTally, Side, SizingTell, StackBucket, Stage, StatKey,
+    ReadSample, RecentForm, RuleInput, SampleUnit, ShowdownTally, Side, SizingTell, StackBucket, Stage, StatKey,
     TemplateKind, RULES,
 };
 use velora_poker_lib::engine::{H2hStat, ShrunkStat, SizeBucket};
@@ -965,6 +965,73 @@ fn recent_form_rules_fire_only_with_full_samples() {
     assert!(evaluate_rules(&v).is_empty());
     v.recent_form = Some(form(12, 9, 39, Some(FormFlag::Tilt), 4.0));
     assert!(evaluate_rules(&v).is_empty());
+}
+
+// ------------------------------------------- read sample (section 13, chip)
+
+fn sample_of(r: &EngineRuleResult) -> Option<(u32, SampleUnit)> {
+    r.sample.map(|s| (s.count, s.unit))
+}
+
+#[test]
+fn every_read_carries_the_sample_its_confidence_rests_on() {
+    // One stat: its own opportunities.
+    let reads = evaluate_rules(&cash(&[(FoldTo3betIp, 24, 30)]));
+    let r = read(&reads, "pf.fold_to_3bet.high").unwrap();
+    assert_eq!(sample_of(r), Some((30, SampleUnit::Opportunities)));
+
+    // VPIP-based profile reads count hands (one VPIP decision per hand).
+    let reads = evaluate_rules(&cash(&[(Vpip, 6, 60), (Pfr, 5, 60)]));
+    assert_eq!(sample_of(read(&reads, "pf.profile.nit").unwrap()), Some((60, SampleUnit::Hands)));
+
+    // Several legs: the weakest one, the leg the confidence came from.
+    // Station: VPIP 60 hands, PFR 60 hands, WTSD 40 opportunities.
+    let station = cash(&[(Vpip, 27, 60), (Pfr, 3, 60), (Wtsd, 17, 40)]);
+    let r = read(&evaluate_rules(&station), "pf.profile.station").cloned().unwrap();
+    let legs = [stat(FormatKey::Cash, Vpip, 27, 60), stat(FormatKey::Cash, Pfr, 3, 60), stat(FormatKey::Cash, Wtsd, 17, 40)];
+    let weakest = legs.iter().min_by(|a, b| a.confidence.total_cmp(&b.confidence)).unwrap();
+    let unit = if matches!(weakest.key, Vpip | Pfr) { SampleUnit::Hands } else { SampleUnit::Opportunities };
+    assert_eq!(sample_of(&r), Some((weakest.opportunities, unit)));
+    assert_eq!(r.confidence_pct, Some(weakest.confidence_pct), "sample and confidence come from the same leg");
+
+    // Head-to-head: the spot against the hero.
+    let reads = evaluate_rules(&h2h_input(h2h(H2hKey::ThreeBetVsHeroOpen, 4, 11, 0.08)));
+    let r = read(&reads, "h2h.3bet_vs_hero.high").unwrap();
+    assert_eq!(sample_of(r), Some((11, SampleUnit::Opportunities)));
+
+    // Recent form: the baseline hands its confidence uses.
+    let mut v = cash(&[]);
+    v.recent_form = Some(form(12, 9, 49, Some(FormFlag::Tilt), 3.33));
+    assert_eq!(sample_of(read(&evaluate_rules(&v), "rec.tilt").unwrap()), Some((49, SampleUnit::Hands)));
+
+    // Showdown tells: the hands shown down in that size.
+    let mut v = cash(&[]);
+    v.sizing = vec![tell(SizeBucket::Overbet, 3, 0, 1)];
+    assert_eq!(sample_of(read(&evaluate_rules(&v), "sd.tell.big_is_value").unwrap()), Some((4, SampleUnit::Hands)));
+
+    // A fact of the latest hand has no sample.
+    let mut short = busy_villain(FormatKey::Mtt);
+    short.context = Some(context(FormatKey::Mtt, 12.4));
+    let reads = evaluate_rules(&short);
+    assert_eq!(read(&reads, "ctx.short_stack").unwrap().sample, None);
+    // Every other read has one.
+    for r in reads.iter().filter(|r| r.family != Family::Context) {
+        assert!(r.sample.is_some_and(|s| s.count > 0), "{} has no sample", r.rule_id);
+    }
+}
+
+#[test]
+fn read_sample_serializes_as_count_and_unit() {
+    let reads = evaluate_rules(&cash(&[(FoldTo3betIp, 24, 30)]));
+    let json = serde_json::to_value(read(&reads, "pf.fold_to_3bet.high").unwrap()).unwrap();
+    assert_eq!(json["sample"], serde_json::json!({ "count": 30, "unit": "opportunities" }));
+    let mut short = busy_villain(FormatKey::Mtt);
+    short.context = Some(context(FormatKey::Mtt, 12.4));
+    let reads = evaluate_rules(&short);
+    let json = serde_json::to_value(read(&reads, "ctx.short_stack").unwrap()).unwrap();
+    assert!(json["sample"].is_null());
+    let r: ReadSample = ReadSample { count: 60, unit: SampleUnit::Hands };
+    assert_eq!(serde_json::to_value(r).unwrap(), serde_json::json!({ "count": 60, "unit": "hands" }));
 }
 
 // --------------------------------------------- contract and text guards (G03)

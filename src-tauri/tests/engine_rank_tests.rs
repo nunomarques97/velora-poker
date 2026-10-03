@@ -35,6 +35,7 @@ fn read(id: &str, tag: Option<&str>, deviation: f64, confidence: f64, multiplier
         confidence_pct: Some((100.0 * confidence).round() as u8),
         confidence_tier: ConfidenceTier::High,
         evidence: Vec::new(),
+        sample: None,
         scenario_id: "P06".into(),
         family: Family::Preflop,
         tag: tag.map(str::to_string),
@@ -260,8 +261,10 @@ fn engine_payload_matches_spec_json_contract() {
     assert_eq!(v["tag"]["source"], "read");
     assert_eq!(
         keys(&v["topReads"][0]),
-        ["advice", "category", "confidencePct", "confidenceTier", "evidence", "family", "observation", "ruleId", "scenarioId", "score", "tag"]
+        ["advice", "category", "confidencePct", "confidenceTier", "evidence", "family", "observation", "ruleId", "sample", "scenarioId", "score", "tag"]
     );
+    // The chip's sample (section 13): the count and unit the read's confidence rests on.
+    assert_eq!(keys(&v["topReads"][0]["sample"]), ["count", "unit"]);
     assert_eq!(keys(&v["reads"][0]["evidence"][0]), ["hits", "opportunities", "shrunk", "statName", "value"]);
     assert_eq!(
         keys(&v["context"]),

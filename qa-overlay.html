@@ -32,6 +32,7 @@
         data-qa-overlap            chip pairs that overlap
         data-qa-intersections      chip x protected-zone overlaps (seatLayout.protectedZones)
         data-qa-opp-hole-intersections  chip x opponents' hole cards (avoided by default)
+        data-qa-plate-intersections  chip x another seat's name plate (never by default)
         data-qa-save-count         save_seat_position calls
         data-qa-last-save          last save_seat_position arguments, JSON
         data-qa-hot-zones          zones in the last set_overlay_hot_zones call
@@ -42,11 +43,14 @@
         data-qa-tags               chips showing a tag
         data-qa-min-tag-font-px    smallest tag font size, in CSS px
         data-qa-tag-labels         chips whose accessible name carries their tag
+        data-qa-samples            chips showing the sample behind their tag
+        data-qa-min-sample-font-px smallest sample font size, in CSS px
+        data-qa-sample-labels      chips whose accessible name states their sample in words
         data-qa-card               1 when a hover card is open (placed and visible)
         data-qa-card-reads         reads on the open card
         data-qa-card-text          the open card's text
-        data-qa-card-violations    open card x (protected zones, own chip, window edge)
-        data-qa-card-opp-hole      open card x opponents' hole cards (a last resort)
+        data-qa-card-violations    open card x (protected zones, any seat's hole cards, own chip, window edge)
+        data-qa-card-hole          open card x any seat's hole cards (hero or opponent; must be 0)
         data-qa-card-hot           1 when the card is clickable or a hot zone
         data-qa-listeners          JSON: live event listeners per event
     -->
@@ -257,12 +261,16 @@
 
         // The `strategic-analysis` payload (src/data/types.ts EnginePayload),
         // with tags from the spec vocabulary and wording of realistic length.
+        // `sample` as rules.rs builds it: hands for VPIP-based, recency and
+        // showdown reads, opportunities for the rest, none for a stack fact.
         function read(ruleId, family, tag, observation, advice, pct, n) {
           const tier = pct >= 75 ? "high" : pct >= 50 ? "medium" : "low";
+          const hands = ruleId === "pf.vpip.low" || family === "recency" || family === "showdown";
           return {
             ruleId, category: "exploit", observation, advice,
             confidencePct: pct, confidenceTier: tier, scenarioId: "P06", family, tag, score: pct / 100,
             evidence: [{ statName: ruleId, value: 61, opportunities: n, hits: Math.round(n * 0.61), shrunk: 58 }],
+            sample: family === "stack" ? null : { count: n, unit: hands ? "hands" : "opportunities" },
           };
         }
         function engineFor(name, hands) {
@@ -496,6 +504,12 @@
         let oppHole = 0;
         for (const c of chips)
           for (const a of anchors) if (a.seatKey !== heroKey && overlaps(c, pxRect(holeRect(a)))) oppHole++;
+        // A default chip may touch its own seat's plate, never another's.
+        let plates = 0;
+        for (const b of chipButtons()) {
+          const own = b.parentElement.dataset.seatKey;
+          for (const a of anchors) if (String(a.seatKey) !== own && overlaps(domRect(b), pxRect(seatPlateRect(a)))) plates++;
+        }
         const area = W() * H();
         const maxZone = Math.max(0, ...qa.hotZones.map((z) => (z.width * z.height) / area));
         const fonts = chipButtons().map((b) => parseFloat(getComputedStyle(b).fontSize));
@@ -504,6 +518,7 @@
         d.qaOverlap = String(overlap);
         d.qaIntersections = String(intersections);
         d.qaOppHoleIntersections = String(oppHole);
+        d.qaPlateIntersections = String(plates);
         d.qaSaveCount = String(qa.saves.length);
         d.qaLastSave = qa.saves.length ? JSON.stringify(qa.saves[qa.saves.length - 1]) : "";
         d.qaHotZones = String(qa.hotZones.length);
@@ -515,6 +530,13 @@
         d.qaTags = String(tagged.length);
         d.qaMinTagFontPx = tagFonts.length ? String(Math.min(...tagFonts)) : "";
         d.qaTagLabels = String(tagged.filter((b) => b.getAttribute("aria-label").includes(`tag ${b.dataset.tag}`)).length);
+        // The sample sits inside the tag segment, as its second child.
+        const sampled = [...document.querySelectorAll("[data-hud-chip] > button[data-sample]")];
+        const sampleSpans = sampled.map((b) => b.firstElementChild?.firstElementChild).filter(Boolean);
+        d.qaSamples = String(sampleSpans.filter((el, i) => el.textContent.trim() !== "" && sampled[i].dataset.sample).length);
+        d.qaMinSampleFontPx = sampleSpans.length ? String(Math.min(...sampleSpans.map((el) => parseFloat(getComputedStyle(el).fontSize)))) : "";
+        d.qaSampleLabels = String(sampled.filter((b) =>
+          new RegExp(`based on ${Number(b.dataset.sample).toLocaleString("en-US")} (hands?|opportunit(y|ies))\\b`).test(b.getAttribute("aria-label"))).length);
         const listeners = {};
         for (const [event, byId] of qa.listeners) listeners[event] = byId.size;
         d.qaListeners = JSON.stringify(listeners);
@@ -530,14 +552,16 @@
       /** What the open card covers; `owner` is its chip's button. */
       function cardReport(owner = document.querySelector("[data-hud-chip] > button[aria-describedby]")) {
         const card = openCard();
-        if (!card) return { qaCard: "0", qaCardReads: "0", qaCardText: "", qaCardViolations: "0", qaCardOppHole: "0", qaCardHot: "0" };
+        if (!card) return { qaCard: "0", qaCardReads: "0", qaCardText: "", qaCardViolations: "0", qaCardHole: "0", qaCardHot: "0" };
         const c = domRect(card);
         let violations = 0;
         for (const z of zones) if (overlaps(c, pxRect(z.rect))) violations++;
         if (owner && overlaps(c, domRect(owner))) violations++;
         if (c.x0 < -0.5 || c.y0 < -0.5 || c.x1 > W() + 0.5 || c.y1 > H() + 0.5) violations++;
-        let oppHole = 0;
-        for (const a of anchors) if (a.seatKey !== heroKey && overlaps(c, pxRect(holeRect(a)))) oppHole++;
+        // Every seat's hole cards, the hero's and every opponent's.
+        let hole = 0;
+        for (const a of anchors) if (overlaps(c, pxRect(holeRect(a)))) hole++;
+        violations += hole;
         // Never a control: no pointer input, and the hot zones are the chips alone.
         const hot = getComputedStyle(card).pointerEvents !== "none" || qa.hotZones.length !== chipButtons().length;
         return {
@@ -545,7 +569,7 @@
           qaCardReads: String(card.querySelectorAll("li").length),
           qaCardText: card.textContent.replace(/"/g, "'"),
           qaCardViolations: String(violations),
-          qaCardOppHole: String(oppHole),
+          qaCardHole: String(hole),
           qaCardHot: hot ? "1" : "0",
         };
       }
@@ -603,7 +627,7 @@
         if (action === "hoverall") {
           // Every chip with reads in turn: its card opens next to it, covers
           // nothing protected, and closes when the pointer leaves.
-          let opened = 0, violations = 0, oppHole = 0, hot = 0, stuck = 0, twoReads = 0;
+          let opened = 0, violations = 0, hole = 0, hot = 0, stuck = 0, twoReads = 0;
           for (const b of chipButtons()) {
             const key = Number(b.parentElement.dataset.seatKey);
             if (!playerAt(key)?.engine) continue;
@@ -613,7 +637,7 @@
             if (rep.qaCard === "1") {
               opened++;
               violations += Number(rep.qaCardViolations);
-              oppHole += Number(rep.qaCardOppHole);
+              hole += Number(rep.qaCardHole);
               hot += Number(rep.qaCardHot);
               if (rep.qaCardReads === "2") twoReads++;
             }
@@ -621,7 +645,7 @@
             await sleep(60);
             stuck += cardOpen();
           }
-          return `opened=${opened} violations=${violations} oppHole=${oppHole} hot=${hot} stuck=${stuck} twoReads=${twoReads}`;
+          return `opened=${opened} violations=${violations} hole=${hole} hot=${hot} stuck=${stuck} twoReads=${twoReads}`;
         }
         if (action === "leave") {
           enter(btn);
