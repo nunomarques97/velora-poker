@@ -10,6 +10,7 @@ mod watcher;
 pub mod classification;
 pub mod db;
 pub mod description_rules;
+pub mod engine;
 pub mod hud;
 pub mod import;
 pub mod parser;

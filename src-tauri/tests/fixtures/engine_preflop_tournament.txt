@@ -1,0 +1,153 @@
+PokerStars Hand #300000000201: Tournament #4100000001, €9.00+€1.00 EUR Hold'em No Limit - Level V (100/200) - 2026/09/11 1:01:00 WET [2026/09/10 20:01:00 ET]
+Table '4100000001 1' 6-max Seat #1 is the button
+Seat 1: Hero (8000 in chips)
+Seat 2: Sam (10000 in chips)
+Seat 3: Bob (7000 in chips)
+Seat 4: Ugo (2400 in chips)
+Seat 5: Hal (6000 in chips)
+Seat 6: Cole (4000 in chips)
+Hero: posts the ante 25
+Sam: posts the ante 25
+Bob: posts the ante 25
+Ugo: posts the ante 25
+Hal: posts the ante 25
+Cole: posts the ante 25
+Sam: posts small blind 100
+Bob: posts big blind 200
+*** HOLE CARDS ***
+Dealt to Hero [9d 5c]
+Ugo: raises 2175 to 2375 and is all-in
+Hal: folds
+Cole: folds
+Hero: folds
+Sam: folds
+Bob: folds
+Uncalled bet (2175) returned to Ugo
+Ugo collected 650 from pot
+*** SUMMARY ***
+Total pot 650 | Rake 0
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) folded before Flop
+Seat 4: Ugo collected (650)
+Seat 5: Hal folded before Flop (didn't bet)
+Seat 6: Cole folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000202: Tournament #4100000001, €9.00+€1.00 EUR Hold'em No Limit - Level V (100/200) - 2026/09/11 1:02:00 WET [2026/09/10 20:02:00 ET]
+Table '4100000001 1' 6-max Seat #1 is the button
+Seat 1: Hero (8000 in chips)
+Seat 2: Sam (10000 in chips)
+Seat 3: Bob (7000 in chips)
+Seat 4: Ugo (2400 in chips)
+Seat 5: Hal (6000 in chips)
+Seat 6: Cole (4000 in chips)
+Hero: posts the ante 25
+Sam: posts the ante 25
+Bob: posts the ante 25
+Ugo: posts the ante 25
+Hal: posts the ante 25
+Cole: posts the ante 25
+Sam: posts small blind 100
+Bob: posts big blind 200
+*** HOLE CARDS ***
+Dealt to Hero [Kh 6d]
+Ugo: folds
+Hal: raises 250 to 450
+Cole: raises 3525 to 3975 and is all-in
+Hero: folds
+Sam: folds
+Bob: folds
+Hal: folds
+Uncalled bet (3525) returned to Cole
+Cole collected 1350 from pot
+*** SUMMARY ***
+Total pot 1350 | Rake 0
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) folded before Flop
+Seat 4: Ugo folded before Flop (didn't bet)
+Seat 5: Hal folded before Flop
+Seat 6: Cole collected (1350)
+
+
+PokerStars Hand #300000000203: Tournament #4100000001, €9.00+€1.00 EUR Hold'em No Limit - Level V (100/200) - 2026/09/11 1:03:00 WET [2026/09/10 20:03:00 ET]
+Table '4100000001 1' 6-max Seat #1 is the button
+Seat 1: Hero (8000 in chips)
+Seat 2: Sam (10000 in chips)
+Seat 3: Bob (7000 in chips)
+Seat 4: Ugo (2400 in chips)
+Seat 5: Hal (6000 in chips)
+Seat 6: Cole (4000 in chips)
+Hero: posts the ante 25
+Sam: posts the ante 25
+Bob: posts the ante 25
+Ugo: posts the ante 25
+Hal: posts the ante 25
+Cole: posts the ante 25
+Sam: posts small blind 100
+Bob: posts big blind 200
+*** HOLE CARDS ***
+Dealt to Hero [Qc 8c]
+Ugo: folds
+Hal: raises 250 to 450
+Cole: calls 450
+Hero: folds
+Sam: folds
+Bob: folds
+*** FLOP *** [Kc 7h 2d]
+Hal: bets 600
+Cole: folds
+Uncalled bet (600) returned to Hal
+Hal collected 1350 from pot
+*** SUMMARY ***
+Total pot 1350 | Rake 0
+Board [Kc 7h 2d]
+Seat 1: Hero (button) folded before Flop (didn't bet)
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) folded before Flop
+Seat 4: Ugo folded before Flop (didn't bet)
+Seat 5: Hal collected (1350)
+Seat 6: Cole folded on the Flop
+
+
+PokerStars Hand #300000000204: Tournament #4100000001, €9.00+€1.00 EUR Hold'em No Limit - Level V (100/200) - 2026/09/11 1:04:00 WET [2026/09/10 20:04:00 ET]
+Table '4100000001 1' 6-max Seat #1 is the button
+Seat 1: Hero (8000 in chips)
+Seat 2: Sam (10000 in chips)
+Seat 3: Bob (7000 in chips)
+Seat 4: Ugo (2400 in chips)
+Seat 5: Hal (6000 in chips)
+Seat 6: Cole (4000 in chips)
+Hero: posts the ante 25
+Sam: posts the ante 25
+Bob: posts the ante 25
+Ugo: posts the ante 25
+Hal: posts the ante 25
+Cole: posts the ante 25
+Sam: posts small blind 100
+Bob: posts big blind 200
+*** HOLE CARDS ***
+Dealt to Hero [Ac Kd]
+Ugo: raises 2175 to 2375 and is all-in
+Hal: folds
+Cole: folds
+Hero: calls 2375
+Sam: folds
+Bob: folds
+*** FLOP *** [As 7c 3d]
+*** TURN *** [As 7c 3d] [2h]
+*** RIVER *** [As 7c 3d 2h] [Jd]
+*** SHOW DOWN ***
+Ugo: shows [9s 9h] (a pair of Nines)
+Hero: shows [Ac Kd] (a pair of Aces)
+Hero collected 5200 from pot
+*** SUMMARY ***
+Total pot 5200 | Rake 0
+Board [As 7c 3d 2h Jd]
+Seat 1: Hero (button) showed [Ac Kd] and won (5200) with a pair of Aces
+Seat 2: Sam (small blind) folded before Flop
+Seat 3: Bob (big blind) folded before Flop
+Seat 4: Ugo showed [9s 9h] and lost with a pair of Nines
+Seat 5: Hal folded before Flop (didn't bet)
+Seat 6: Cole folded before Flop (didn't bet)
