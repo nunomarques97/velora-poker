@@ -15,6 +15,8 @@ Built with **Tauri 2 (Rust)** and **React 19 + TypeScript**. Everything runs on 
 - **Click-through that works.** The overlay lets clicks through to the table everywhere except its own controls, so it never gets in the way of Fold/Call/Raise.
 - **Sample-size gate.** Stats are shown with their sample size, and nothing is labelled until a player reaches a minimum number of hands (25 by default).
 - **Manual player colors and notes**, plus Dashboard, Players, Sessions, HUD Profiles and Settings views.
+- **Side panel for multi-tabling.** A normal, resizable window (HUD Profiles → Open side panel) meant for a second monitor: one row per open table, expandable to its players, with a flag on players seated at several of your tables. Closing it only hides it.
+- **Opponent engine (optional, `strategic-analysis` build).** Deterministic, between-hands reads from completed hand histories only: a scenario catalogue across MTT, 6-max cash, Zoom and Spin & Go (preflop, postflop, stack depth, tournament stage, bounties), head-to-head stats against you, showdown memory and bet-sizing tells, recent form/tilt, and partial pooling so small samples are shrunk toward format baselines with a confidence per stat. Each opponent gets a ranked top read and a 2-4 character chip tag, a hover card with the top two reads, automatic notes kept apart from manual notes, and each table a soft/tough quality score in the side panel. The catalogue and its rule/test mapping are in [`docs/specs/opponent-engine.md`](docs/specs/opponent-engine.md). Verified by unit tests and a mocked-table browser harness; not yet confirmed in a live PokerStars session.
 - **Guided onboarding.** It auto-detects the hand-history folder (including regional clients such as PokerStars.PT) and checks that the client writes English hand histories, since those are the only ones the parser reads.
 - **Visible ingestion errors.** Hands that fail to parse are counted and explained in the app. They are never dropped silently.
 
@@ -39,6 +41,7 @@ PokerStars hand-history folder
 | `db/` | SQLite schema and idempotent migrations |
 | `stats/`, `sessions/` | Per-player statistics with their opportunity counts; session grouping |
 | `classification/`, `description_rules/` | Optional automatic archetypes and player descriptions (off by default, see below) |
+| `engine/` | Opponent engine: amount-aware hand replay, scenario stats, showdown evaluator, context, pooling, rules, ranking, auto-notes, table quality (exposed only in the `strategic-analysis` build) |
 | `table_track/` | Finds PokerStars table windows and follows their position with `SetWinEventHook` |
 | `overlay/` | Overlay window lifecycle and per-point click-through |
 
@@ -94,7 +97,7 @@ PokerStars' HUD rules allow statistics and manual player colors, but do not allo
 | Feature | What it enables |
 |---|---|
 | `auto-classification` | Automatic archetypes (TAG, LAG, Maniac, Loose-Passive, Recreational) shown on the HUD |
-| `strategic-analysis` | Rule-based player descriptions with exploit suggestions |
+| `strategic-analysis` | Opponent-engine reads with exploit suggestions, chip tags, hover card, head-to-head, showdowns, auto-notes and table quality. Without it the HUD is unchanged and the side panel shows tables and players only |
 
 ```sh
 npm run tauri build -- --features auto-classification,strategic-analysis
