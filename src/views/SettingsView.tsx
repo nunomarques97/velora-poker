@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import type { AppSettings, HudProfile, ImportStatus, IngestionHealth } from "../data/types";
+import { useEffect, useRef, useState } from "react";
+import type { AppSettings, HudProfile, ImportStatus, IngestionHealth, PanelShortcut } from "../data/types";
 import type { AppVersion, ClassificationRule } from "../data/api";
 import {
   DesktopAppRequiredError,
@@ -10,11 +10,13 @@ import {
   getDiagnosticsReport,
   getImportStatus,
   getIngestionHealth,
+  getPanelShortcut,
   getTableDetectionStatus,
   resetOnboarding,
   setAutoCenterEnabled,
   setHandHistoryDir,
   setHudProfileMinHands,
+  setPanelShortcut,
 } from "../data/api";
 import styles from "./SettingsView.module.css";
 
@@ -72,6 +74,16 @@ type HudProfileState =
   | { status: "ready"; data: HudProfile }
   | { status: "unavailable"; message: string }
   | { status: "error"; message: string };
+
+/** Drives the "Shortcuts" section. */
+type PanelShortcutState =
+  | { status: "loading" }
+  | { status: "ready"; data: PanelShortcut }
+  | { status: "unavailable"; message: string }
+  | { status: "error"; message: string };
+
+const PANEL_SHORTCUT_INPUT_ID = "panel-shortcut-input";
+const PANEL_SHORTCUT_HINT_ID = "panel-shortcut-hint";
 
 /**
  * The overlay kill switch as a line of text, honest about not knowing. The
@@ -177,6 +189,15 @@ export function SettingsView() {
 
   const [ingestion, setIngestion] = useState<IngestionState>({ status: "loading" });
 
+  const [panelShortcut, setPanelShortcutState] = useState<PanelShortcutState>({ status: "loading" });
+  const [shortcutInput, setShortcutInput] = useState("");
+  const [savingShortcut, setSavingShortcut] = useState(false);
+  const [shortcutNotice, setShortcutNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(
+    null,
+  );
+  // A second Enter before React re-renders must not send a second change.
+  const shortcutPending = useRef(false);
+
   function load() {
     getImportStatus()
       .then((data) => {
@@ -221,6 +242,19 @@ export function SettingsView() {
           setHudProfile({ status: "unavailable", message: err.message });
         } else {
           setHudProfile({ status: "error", message: String(err) });
+        }
+      });
+
+    getPanelShortcut()
+      .then((data) => {
+        setPanelShortcutState({ status: "ready", data });
+        setShortcutInput(data.shortcut);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof DesktopAppRequiredError) {
+          setPanelShortcutState({ status: "unavailable", message: err.message });
+        } else {
+          setPanelShortcutState({ status: "error", message: String(err) });
         }
       });
 
@@ -313,6 +347,29 @@ export function SettingsView() {
       // number as if it had been saved would be the same lie in miniature.
       setMinHandsInput(String(profile.minHands));
       setMinHandsError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  async function savePanelShortcut(value: string) {
+    if (shortcutPending.current) return;
+    shortcutPending.current = true;
+    setSavingShortcut(true);
+    setShortcutNotice(null);
+    try {
+      const data = await setPanelShortcut(value);
+      setPanelShortcutState({ status: "ready", data });
+      setShortcutInput(data.shortcut);
+      setShortcutNotice({
+        kind: "ok",
+        text: `Saved. ${data.shortcut} now shows and hides the side panel.`,
+      });
+    } catch (err) {
+      // The typed text stays in the field so it can be corrected; the line
+      // above it still names the shortcut that works.
+      setShortcutNotice({ kind: "error", text: err instanceof Error ? err.message : String(err) });
+    } finally {
+      shortcutPending.current = false;
+      setSavingShortcut(false);
     }
   }
 
@@ -428,7 +485,7 @@ export function SettingsView() {
             <input
               className={styles.folderInput}
               type="text"
-              placeholder="C:\Users\you\AppData\Local\PokerStars\HandHistory"
+              placeholder="%LOCALAPPDATA%\PokerStars\HandHistory"
               value={pathInput}
               onChange={(e) => setPathInput(e.target.value)}
             />
@@ -604,6 +661,98 @@ export function SettingsView() {
               Switch HUD models, turn HUDs on or off, and manage per-player color overrides from
               the HUD Profiles page. A HUD appears on every PokerStars table you open, by itself.
             </p>
+          </>
+        )}
+      </div>
+
+      <div className={styles.section} data-section="shortcuts">
+        <div className={styles.sectionTitle}>Shortcuts</div>
+        {panelShortcut.status === "loading" && <div className={styles.stateBox}>Loading&hellip;</div>}
+        {panelShortcut.status === "unavailable" && (
+          <div className={styles.stateBox}>{panelShortcut.message}</div>
+        )}
+        {panelShortcut.status === "error" && (
+          <div className={styles.stateBox}>
+            Failed to load the side panel shortcut: {panelShortcut.message}. The shortcut keeps
+            working as it was; reopen Settings to see or change it.
+          </div>
+        )}
+        {panelShortcut.status === "ready" && (
+          <>
+            <div className={`${styles.statusGrid} ${styles.shortcutGrid}`}>
+              <div className={styles.statusCell}>
+                <span className={styles.statusLabel}>Side Panel</span>
+                <span className={styles.statusValue} data-shortcut-current>
+                  {panelShortcut.data.registered
+                    ? `${panelShortcut.data.shortcut} shows and hides it`
+                    : `Not working: ${panelShortcut.data.shortcut} isn't registered`}
+                </span>
+              </div>
+              <div className={styles.statusCell}>
+                <span className={styles.statusLabel}>HUD Of The Table In Front</span>
+                <span className={styles.statusValue}>
+                  {panelShortcut.data.hudShortcut} hides and shows it (fixed)
+                </span>
+              </div>
+            </div>
+            {panelShortcut.data.error && (
+              <div className={styles.errorText} data-shortcut-startup-error>
+                {panelShortcut.data.error}
+              </div>
+            )}
+            <form
+              className={styles.shortcutForm}
+              onSubmit={(e) => {
+                e.preventDefault();
+                savePanelShortcut(shortcutInput);
+              }}
+            >
+              <label className={styles.shortcutLabel} htmlFor={PANEL_SHORTCUT_INPUT_ID}>
+                Side panel shortcut
+              </label>
+              <div className={styles.folderRow}>
+                <input
+                  id={PANEL_SHORTCUT_INPUT_ID}
+                  className={styles.folderInput}
+                  type="text"
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-describedby={PANEL_SHORTCUT_HINT_ID}
+                  aria-invalid={shortcutNotice?.kind === "error"}
+                  value={shortcutInput}
+                  onChange={(e) => setShortcutInput(e.target.value)}
+                />
+                {/* aria-disabled, not disabled: a disabled button drops keyboard
+                    focus, and `shortcutPending` already refuses a second save. */}
+                <button type="submit" className={styles.saveButton} aria-disabled={savingShortcut}>
+                  {savingShortcut ? "Saving\u2026" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  className={styles.resetSetupButton}
+                  aria-disabled={savingShortcut}
+                  onClick={() => {
+                    setShortcutInput(panelShortcut.data.defaultShortcut);
+                    savePanelShortcut(panelShortcut.data.defaultShortcut);
+                  }}
+                >
+                  Use {panelShortcut.data.defaultShortcut}
+                </button>
+              </div>
+              <div id={PANEL_SHORTCUT_HINT_ID} className={styles.hudHint} style={{ marginTop: 6 }}>
+                Type the combination, for example Ctrl+Shift+P: Ctrl or Alt (Shift too if you
+                like) and one letter, digit or F1 to F12. A letter or digit needs two modifiers,
+                so the key keeps working in every other app.
+              </div>
+            </form>
+            {shortcutNotice?.kind === "error" && (
+              <div className={styles.errorText} role="alert" data-shortcut-notice="error">
+                {shortcutNotice.text}
+              </div>
+            )}
+            <div className={styles.okText} role="status" data-shortcut-notice="ok">
+              {shortcutNotice?.kind === "ok" ? shortcutNotice.text : ""}
+            </div>
           </>
         )}
       </div>

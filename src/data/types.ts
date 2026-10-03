@@ -403,6 +403,19 @@ export interface AppSettings {
   autoCenterEnabled: boolean;
 }
 
+/** The side-panel global shortcut (`get_panel_shortcut`/`set_panel_shortcut`). */
+export interface PanelShortcut {
+  /** The chosen shortcut, canonical ("Ctrl+Alt+P"). */
+  shortcut: string;
+  /** Whether that shortcut is registered with Windows right now. */
+  registered: boolean;
+  defaultShortcut: string;
+  /** The fixed HUD toggle, which the panel shortcut may not take. */
+  hudShortcut: string;
+  /** Why the shortcut chosen before this launch is not working, if it isn't. */
+  error: string | null;
+}
+
 export interface DetectedDir {
   path: string;
   handFileCount: number;

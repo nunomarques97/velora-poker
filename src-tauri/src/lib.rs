@@ -19,7 +19,7 @@ pub mod stats;
 pub mod table_track;
 
 use tauri::{Emitter, Manager};
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use state::AppState;
 
@@ -61,19 +61,27 @@ pub fn run() {
         .manage(app_state)
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        // Global HUD toggle hotkey. One shortcut is ever registered, so
-        // the handler doesn't need to discriminate by which one fired — see
-        // `table_track::toggle_hud_for_foreground_table` for what it does
-        // and why resolving "the" table from OS foreground focus, not any
-        // Velora-side concept of an active table, is the whole point.
+        // Global shortcuts: the fixed HUD toggle (Ctrl+Alt+H) and the
+        // user-configurable side-panel toggle (default Ctrl+Alt+P), both
+        // registered in `setup`. The handler dispatches on which one fired.
+        // See `table_track::toggle_hud_for_foreground_table` for why the HUD
+        // toggle resolves "the" table from OS foreground focus, not any
+        // Velora-side concept of an active table.
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|_app, _shortcut, event| {
+                .with_handler(|app, shortcut, event| {
                     // A shortcut delivers both press and release; acting
                     // only on `Pressed` is what makes this "press once,
                     // toggle once" instead of firing twice per press.
-                    if event.state() == ShortcutState::Pressed {
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    if *shortcut == settings::hud_toggle_shortcut() {
                         table_track::toggle_hud_for_foreground_table();
+                    } else if commands::is_panel_shortcut(app, shortcut) {
+                        if let Err(err) = commands::toggle_side_panel(app) {
+                            eprintln!("[settings] side panel shortcut failed: {err}");
+                        }
                     }
                 })
                 .build(),
@@ -84,6 +92,8 @@ pub fn run() {
             commands::get_active_table_players,
             commands::get_side_panel_snapshot,
             commands::show_side_panel,
+            commands::get_panel_shortcut,
+            commands::set_panel_shortcut,
             commands::set_player_color_override,
             commands::clear_player_color_override,
             commands::set_player_note,
@@ -122,6 +132,11 @@ pub fn run() {
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
+
+            // First, before the backlog import below takes the database lock
+            // for what can be most of a minute. Never fatal: a combination
+            // owned by another app is reported in Settings instead.
+            commands::register_panel_shortcut_at_startup(&app_handle);
             let configured_dir = app
                 .state::<AppState>()
                 .import
@@ -247,13 +262,15 @@ pub fn run() {
 
             table_track::install_tracking(app_handle.clone());
 
-            // Default, hardcoded for now — no settings UI to change it
-            // yet. Registration failure (e.g. another app already owns this
-            // combination) is logged, not fatal: every other feature works
-            // fine without the hotkey, so it must not block startup.
-            let hotkey = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyH);
-            if let Err(err) = app_handle.global_shortcut().register(hotkey) {
-                eprintln!("[table_track] failed to register global hotkey Ctrl+Alt+H: {err}");
+            // The HUD toggle is fixed. Registration failure (e.g. another app
+            // already owns this combination) is logged, not fatal: every other
+            // feature works fine without the hotkey, so it must not block
+            // startup.
+            if let Err(err) = app_handle.global_shortcut().register(settings::hud_toggle_shortcut()) {
+                eprintln!(
+                    "[table_track] failed to register global hotkey {}: {err}",
+                    settings::HUD_TOGGLE_SHORTCUT
+                );
             }
 
             Ok(())

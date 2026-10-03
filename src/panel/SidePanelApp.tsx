@@ -20,6 +20,8 @@ import styles from "./SidePanelApp.module.css";
  */
 
 const STRATEGIC_FEATURE = "strategic-analysis";
+const SEARCH_INPUT_ID = "villain-search";
+const SEARCH_RESULT_ID = "villain-search-result";
 
 type PanelState =
   | { status: "loading" }
@@ -52,6 +54,47 @@ function tableName(table: Pick<SidePanelTable, "tableId" | "tableName">): string
   return table.tableName ?? `Unnamed table #${table.tableId}`;
 }
 
+/** The search box's text as matched: trimmed, case-insensitive. */
+function searchNeedle(query: string): string {
+  return query.trim().toLocaleLowerCase();
+}
+
+function nameMatches(name: string, needle: string): boolean {
+  return needle !== "" && name.toLocaleLowerCase().includes(needle);
+}
+
+/** What the search found, across every open table. */
+function searchResult(tables: SidePanelTable[], needle: string) {
+  const players = new Set<string>();
+  const tableIds = new Set<number>();
+  for (const table of tables) {
+    for (const villain of table.villains) {
+      if (nameMatches(villain.name, needle)) {
+        players.add(villain.playerId);
+        tableIds.add(table.tableId);
+      }
+    }
+  }
+  return { players: players.size, tableIds };
+}
+
+/** The name with the matched part wrapped in <mark>. */
+function HighlightedName({ name, needle }: { name: string; needle: string }) {
+  const lower = name.toLocaleLowerCase();
+  const at = needle === "" ? -1 : lower.indexOf(needle);
+  if (at < 0) return <>{name}</>;
+  // Lower-casing can change a string's length (e.g. "İ"); then the whole
+  // name is marked rather than a slice in the wrong place.
+  if (lower.length !== name.length) return <mark className={styles.match}>{name}</mark>;
+  return (
+    <>
+      {name.slice(0, at)}
+      <mark className={styles.match}>{name.slice(at, at + needle.length)}</mark>
+      {name.slice(at + needle.length)}
+    </>
+  );
+}
+
 function updatedAt(iso: string): string {
   const at = new Date(iso);
   return Number.isNaN(at.getTime()) ? "" : at.toLocaleTimeString();
@@ -64,6 +107,13 @@ export function SidePanelApp() {
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set());
   const [retrying, setRetrying] = useState(false);
   const [announcement, setAnnouncement] = useState("");
+  // The villain search. Separate from the snapshot, so refreshes, table
+  // changes and failed refreshes never touch it. While it filters, the
+  // matching tables are open unless collapsed during this search
+  // (`searchCollapsed`); `expanded` is left alone, so clearing the search
+  // brings back exactly the rows the user had open.
+  const [query, setQuery] = useState("");
+  const [searchCollapsed, setSearchCollapsed] = useState<ReadonlySet<number>>(() => new Set());
 
   // Set in the effect (not at render) so StrictMode's setup/cleanup/setup
   // leaves it true, and a response landing after unmount is dropped.
@@ -171,7 +221,51 @@ export function SidePanelApp() {
     if (active === null || active === document.body) headingRef.current?.focus();
   }, [state]);
 
+  const needle = searchNeedle(query);
+  const searching = needle !== "";
+  const result =
+    state.status === "ready" && searching ? searchResult(state.snapshot.tables, needle) : null;
+  // Announced once the typing pauses, and again only when what it finds
+  // changes (a refresh can seat or unseat a match).
+  const searchAnnouncement =
+    state.status !== "ready"
+      ? null
+      : result === null
+        ? ""
+        : result.players === 0
+          ? `No player matches "${query.trim()}".`
+          : `${plural(result.players, "player matches", "players match")} "${query.trim()}" at ${plural(result.tableIds.size, "table", "tables")}.`;
+  const lastSearchAnnouncement = useRef("");
+
+  useEffect(() => {
+    if (searchAnnouncement === null || searchAnnouncement === lastSearchAnnouncement.current) return;
+    const timer = window.setTimeout(() => {
+      const cleared = searchAnnouncement === "" && lastSearchAnnouncement.current !== "";
+      lastSearchAnnouncement.current = searchAnnouncement;
+      if (searchAnnouncement !== "") setAnnouncement(searchAnnouncement);
+      else if (cleared && state.status === "ready") {
+        setAnnouncement(`Search cleared. ${plural(state.snapshot.tables.length, "table", "tables")} open.`);
+      }
+    }, 400);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchAnnouncement]);
+
+  function changeQuery(next: string) {
+    if (searchNeedle(next) !== needle) setSearchCollapsed(new Set());
+    setQuery(next);
+  }
+
   function toggle(tableId: number) {
+    if (searching) {
+      setSearchCollapsed((prev) => {
+        const next = new Set(prev);
+        if (next.has(tableId)) next.delete(tableId);
+        else next.add(tableId);
+        return next;
+      });
+      return;
+    }
     setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(tableId)) next.delete(tableId);
@@ -191,6 +285,37 @@ export function SidePanelApp() {
             {plural(state.snapshot.tables.length, "table", "tables")} open
             {updatedAt(state.snapshot.generatedAt) && ` · updated ${updatedAt(state.snapshot.generatedAt)}`}
           </p>
+        )}
+        {state.status === "ready" && (
+          <div className={styles.search} role="search">
+            <label className={styles.searchLabel} htmlFor={SEARCH_INPUT_ID}>
+              Find a player
+            </label>
+            <input
+              id={SEARCH_INPUT_ID}
+              className={styles.searchInput}
+              type="search"
+              placeholder="Screen name, at any table"
+              autoComplete="off"
+              spellCheck={false}
+              aria-describedby={result !== null ? SEARCH_RESULT_ID : undefined}
+              value={query}
+              onChange={(e) => changeQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape" && query !== "") {
+                  e.preventDefault();
+                  changeQuery("");
+                }
+              }}
+            />
+            {result !== null && (
+              <p id={SEARCH_RESULT_ID} className={styles.searchResult}>
+                {result.players === 0
+                  ? "No match · Esc clears"
+                  : `${plural(result.players, "player", "players")} at ${result.tableIds.size} of ${plural(state.snapshot.tables.length, "table", "tables")} · Esc clears`}
+              </p>
+            )}
+          </div>
         )}
       </header>
 
@@ -238,18 +363,29 @@ export function SidePanelApp() {
                 soon as Velora finds its window.
               </p>
             </div>
+          ) : result !== null && result.players === 0 ? (
+            <div className={styles.stateBox} data-search-empty>
+              <p className={styles.emptyTitle}>No player matches &ldquo;{query.trim()}&rdquo;</p>
+              <p>
+                Nobody at your {plural(state.snapshot.tables.length, "open table", "open tables")} has
+                that in their screen name. Press Esc or clear the box to see every table again.
+              </p>
+            </div>
           ) : (
             <ul className={styles.tables}>
-              {state.snapshot.tables.map((table) => (
-                <TableRow
-                  key={table.tableId}
-                  table={table}
-                  allTables={state.snapshot.tables}
-                  strategic={state.strategic}
-                  open={expanded.has(table.tableId)}
-                  onToggle={() => toggle(table.tableId)}
-                />
-              ))}
+              {state.snapshot.tables
+                .filter((table) => result === null || result.tableIds.has(table.tableId))
+                .map((table) => (
+                  <TableRow
+                    key={table.tableId}
+                    table={table}
+                    allTables={state.snapshot.tables}
+                    strategic={state.strategic}
+                    needle={needle}
+                    open={searching ? !searchCollapsed.has(table.tableId) : expanded.has(table.tableId)}
+                    onToggle={() => toggle(table.tableId)}
+                  />
+                ))}
             </ul>
           )}
         </>
@@ -262,12 +398,15 @@ function TableRow({
   table,
   allTables,
   strategic,
+  needle,
   open,
   onToggle,
 }: {
   table: SidePanelTable;
   allTables: SidePanelTable[];
   strategic: boolean;
+  /** The active search, "" when none. */
+  needle: string;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -321,6 +460,7 @@ function TableRow({
                 key={villain.playerId}
                 villain={villain}
                 strategic={strategic}
+                needle={needle}
                 otherTables={villain.otherTableIds.map(nameOf)}
               />
             ))}
@@ -353,15 +493,22 @@ function Quality({ quality, strategic }: { quality: TableQuality | null; strateg
 function VillainRow({
   villain,
   strategic,
+  needle,
   otherTables,
 }: {
   villain: SidePanelVillain;
   strategic: boolean;
+  needle: string;
   otherTables: string[];
 }) {
   const read = villain.topRead;
+  const match = nameMatches(villain.name, needle);
   return (
-    <li className={styles.villain} data-player-id={villain.playerId}>
+    <li
+      className={`${styles.villain} ${match ? styles.villainMatch : ""}`}
+      data-player-id={villain.playerId}
+      data-match={match ? "" : undefined}
+    >
       <div className={styles.villainHead}>
         {villain.tag !== null && (
           <span className={styles.tag}>
@@ -370,7 +517,7 @@ function VillainRow({
           </span>
         )}
         <span className={styles.villainName} title={villain.name}>
-          {villain.name}
+          <HighlightedName name={villain.name} needle={needle} />
         </span>
         <span className={styles.villainHands}>
           {plural(villain.hands, "hand", "hands")}

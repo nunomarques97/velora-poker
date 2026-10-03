@@ -17,7 +17,9 @@
         build=strategic|default   which build the mock reports (default strategic)
         start=ok|empty|error      the first snapshot: 8 tables, no table, or a failure
         expand=<ids>              comma-separated table ids to expand after load
+        q=<text>                  type this into the villain search after load
         action=expand|refresh|tracked|stale|retry|refreshfail|refreshbanner|emptyrefresh
+              |search|searchnone|searchclear|searchrefresh|searchstale|searchretry
                                   optional scripted interaction
 
       Results, written to <body> data attributes once the page settles
@@ -34,6 +36,9 @@
         data-qa-quality         the first row's quality text
         data-qa-announce        the live region's text
         data-qa-calls           get_side_panel_snapshot calls
+        data-qa-query           the search box's value
+        data-qa-matches         villain rows marked as search matches
+        data-qa-search-result   the visible line under the search box
         data-qa-listeners       JSON: live event listeners per event
         data-qa-action-result   what the scripted action observed
     -->
@@ -208,11 +213,32 @@
           .filter((li) => li.querySelector("button[aria-expanded]").getAttribute("aria-expanded") === "true")
           .map((li) => li.dataset.tableId);
       const text = () => document.getElementById("root").textContent;
+      const searchBox = () => document.getElementById("villain-search");
+      const rowIds = () => rows().map((li) => li.dataset.tableId).join(",");
+      const matches = () => document.querySelectorAll("li[data-player-id][data-match]").length;
+      const marks = () => document.querySelectorAll("li[data-player-id] mark").length;
+      const announce = () => document.querySelector("[role=status]")?.textContent ?? "";
+      const resultLine = () => document.getElementById("villain-search-result")?.textContent ?? "";
+
+      /** Types into the search box the way React sees real typing. */
+      async function typeQuery(value) {
+        const input = searchBox();
+        const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+        setter.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        await sleep(50);
+      }
+
+      async function pressEscape() {
+        searchBox().dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
+        await sleep(50);
+      }
 
       function panelState() {
         if (rows().length) return "ready";
         const t = text();
         if (t.includes("No PokerStars tables open")) return "empty";
+        if (document.querySelector("[data-search-empty]")) return "nomatch";
         if (t.includes("Failed to load tables")) return "error";
         if (t.includes("Loading tables")) return "loading";
         return "unavailable";
@@ -240,6 +266,9 @@
         d.qaQuality = firstQuality ? firstQuality.textContent : "";
         d.qaAnnounce = document.querySelector("[role=status]")?.textContent ?? "";
         d.qaCalls = String(qa.calls);
+        d.qaQuery = searchBox()?.value ?? "";
+        d.qaMatches = String(matches());
+        d.qaSearchResult = resultLine();
         const listeners = {};
         for (const [event, byId] of qa.listeners) listeners[event] = byId.size;
         d.qaListeners = JSON.stringify(listeners);
@@ -354,6 +383,89 @@
           await sleep(300);
           return `before=${before} nextStep=${emptyText} after=${panelState()} rows=${rows().length}`;
         }
+        if (action === "search") {
+          // Table 4 (no Anna) open before searching; "anna" (any case) is at tables 1, 2 and 5.
+          buttonOf(4).click();
+          await sleep(50);
+          const box = searchBox();
+          const labelled = box?.labels?.[0]?.textContent ?? "";
+          await typeQuery("ANNA");
+          const during = `rows=${rowIds()} expanded=${expandedIds().join(",")} matches=${matches()} marks=${marks()}`;
+          // Collapsing a row during the search must not leak into the saved expand state.
+          buttonOf(2).click();
+          await sleep(50);
+          const collapsed = expandedIds().join(",");
+          await sleep(600);
+          const announced = announce();
+          const line = resultLine();
+          await typeQuery("");
+          await sleep(600);
+          return `label=${labelled.replace(/\s+/g, "_")} ${during} collapsed=${collapsed} line=${line.replace(/\s+/g, "_")} announced=${announced.replace(/\s+/g, "_")} clearedRows=${rows().length} restored=${expandedIds().join(",")} clearedAnnounce=${announce().replace(/\s+/g, "_")}`;
+        }
+        if (action === "searchnone") {
+          await typeQuery("zzz_nobody");
+          await sleep(600);
+          const empty = document.querySelector("[data-search-empty]");
+          return `state=${panelState()} rows=${rows().length} empty=${empty ? 1 : 0} hasQuery=${empty?.textContent.includes("zzz_nobody") ? 1 : 0} line=${resultLine().replace(/\s+/g, "_")} announced=${announce().replace(/\s+/g, "_")}`;
+        }
+        if (action === "searchclear") {
+          // Esc in the box clears it, keeps focus there and brings every table back.
+          buttonOf(3).click();
+          await sleep(50);
+          searchBox().focus();
+          await typeQuery("tony");
+          const during = rowIds();
+          await pressEscape();
+          return `during=${during} query=${JSON.stringify(searchBox().value)} rows=${rows().length} restored=${expandedIds().join(",")} focus=${document.activeElement === searchBox() ? "search" : document.activeElement?.tagName}`;
+        }
+        if (action === "searchrefresh") {
+          // "tony" is at tables 2 and 3; a new hand seats him at table 1, then table 2 closes.
+          buttonOf(4).click();
+          await sleep(50);
+          await typeQuery("tony");
+          const before = rowIds();
+          qa.world[0].villains.push("TightTony");
+          qa.emit("hands-imported", 1);
+          await sleep(300);
+          const afterHand = `${rowIds()}/${expandedIds().join(",")}`;
+          qa.world = qa.world.filter((tb) => tb.tableId !== 2);
+          qa.emit("tracked-tables-changed", []);
+          await sleep(300);
+          const afterClose = `${rowIds()}/${expandedIds().join(",")}`;
+          const query = searchBox().value;
+          await typeQuery("");
+          return `before=${before} afterHand=${afterHand} afterClose=${afterClose} query=${query} matches=${matches()} clearedRows=${rows().length} restored=${expandedIds().join(",")}`;
+        }
+        if (action === "searchstale") {
+          // Two refreshes while filtered; the older one's answer arrives last and must be ignored.
+          await typeQuery("anna");
+          qa.delays.push(500, 0);
+          setRead("AggroAnna77", "Stale read from the older refresh.");
+          qa.emit("hands-imported", 1);
+          await sleep(20);
+          setRead("AggroAnna77", "Newest read from the latest refresh.");
+          qa.emit("tracked-tables-changed", []);
+          await sleep(200);
+          const which = () => (text().includes("Newest read") ? "new" : text().includes("Stale read") ? "stale" : "none");
+          const mid = which();
+          await sleep(700);
+          return `mid=${mid} end=${which()} query=${searchBox().value} rows=${rowIds()} expanded=${expandedIds().join(",")}`;
+        }
+        if (action === "searchretry") {
+          // A refresh fails while filtered; Retry recovers and the search stays.
+          await typeQuery("anna");
+          qa.failNext = 1;
+          setRead("AggroAnna77", "Read after the retried refresh.");
+          qa.emit("hands-imported", 1);
+          await sleep(200);
+          const banner = [...document.querySelectorAll("[role=alert]")].some((a) => a.textContent.includes("Couldn't refresh")) ? 1 : 0;
+          const kept = `${searchBox().value}/${rowIds()}`;
+          const retry = [...document.querySelectorAll("button")].find((b) => b.textContent === "Retry");
+          retry.click();
+          await sleep(300);
+          const alerts = document.querySelectorAll("[role=alert]").length;
+          return `banner=${banner} kept=${kept} alertsAfter=${alerts} query=${searchBox().value} rows=${rowIds()} fresh=${text().includes("Read after the retried refresh.") ? 1 : 0}`;
+        }
         return undefined;
       }
 
@@ -361,6 +473,10 @@
         await settle();
         for (const id of (params.get("expand") ?? "").split(",").filter(Boolean)) buttonOf(Number(id))?.click();
         await sleep(50);
+        if (params.get("q")) {
+          await typeQuery(params.get("q"));
+          await sleep(500);
+        }
         let result;
         const action = params.get("action");
         if (action) {

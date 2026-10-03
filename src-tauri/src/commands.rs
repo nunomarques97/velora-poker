@@ -602,6 +602,169 @@ pub fn show_side_panel(app_handle: tauri::AppHandle) -> Result<(), String> {
     window.set_focus().map_err(|e| e.to_string())
 }
 
+/// What the side-panel shortcut does: hides the panel when it is on screen,
+/// otherwise shows and focuses it (`show_side_panel`). Only ever shows or
+/// hides the window declared in `tauri.conf.json`; never builds one.
+pub fn toggle_side_panel(app_handle: &tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+
+    let window = app_handle
+        .get_webview_window(SIDE_PANEL_LABEL)
+        .ok_or_else(|| format!("no '{SIDE_PANEL_LABEL}' window declared in tauri.conf.json"))?;
+    let on_screen = window.is_visible().unwrap_or(false) && !window.is_minimized().unwrap_or(false);
+    if on_screen {
+        window.hide().map_err(|e| e.to_string())
+    } else {
+        show_side_panel(app_handle.clone())
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PanelShortcutPayload {
+    /// The chosen shortcut, canonical ("Ctrl+Alt+P").
+    pub shortcut: String,
+    /// Whether that shortcut is registered right now.
+    pub registered: bool,
+    pub default_shortcut: String,
+    /// The fixed HUD toggle, which the panel shortcut may not take.
+    pub hud_shortcut: String,
+    /// Why the shortcut chosen before this launch is not working, if it isn't.
+    pub error: Option<String>,
+}
+
+fn panel_shortcut_payload(state: &crate::state::PanelShortcutState) -> PanelShortcutPayload {
+    PanelShortcutPayload {
+        shortcut: state.configured.clone(),
+        registered: state.registered.is_some(),
+        default_shortcut: settings::DEFAULT_PANEL_SHORTCUT.to_string(),
+        hud_shortcut: settings::HUD_TOGGLE_SHORTCUT.to_string(),
+        error: state.error.clone(),
+    }
+}
+
+/// Registers the saved side-panel shortcut (or the default) at startup. A
+/// failure — another app owns the combination, or the saved text no longer
+/// validates — is kept for Settings to show and never stops the app.
+pub fn register_panel_shortcut_at_startup(app_handle: &tauri::AppHandle) {
+    use tauri::Manager;
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    let state = app_handle.state::<AppState>();
+    let saved = state
+        .conn
+        .lock()
+        .ok()
+        .and_then(|conn| db::get_setting(&conn, settings::SETTING_PANEL_SHORTCUT).ok().flatten());
+    let (parsed, warning) = settings::startup_panel_shortcut(saved.as_deref());
+    let canonical = parsed.canonical();
+    let (registered, error) = match app_handle.global_shortcut().register(parsed.shortcut) {
+        Ok(()) => (Some(parsed.shortcut), warning),
+        Err(err) => {
+            eprintln!("[settings] failed to register side panel shortcut {canonical}: {err}");
+            (
+                None,
+                Some(format!(
+                    "{}{canonical} couldn't be registered ({err}); another app may already use it. Choose another shortcut below.",
+                    warning.map(|w| format!("{w} ")).unwrap_or_default()
+                )),
+            )
+        }
+    };
+    if let Ok(mut slot) = state.panel_shortcut.lock() {
+        *slot = crate::state::PanelShortcutState {
+            configured: canonical,
+            registered,
+            error,
+        };
+    };
+}
+
+#[tauri::command]
+pub fn get_panel_shortcut(state: State<AppState>) -> Result<PanelShortcutPayload, String> {
+    let slot = state.panel_shortcut.lock().map_err(|e| e.to_string())?;
+    Ok(panel_shortcut_payload(&slot))
+}
+
+/// Changes the side-panel shortcut. Invalid text is rejected before anything
+/// is registered. The new combination is registered before the old one is
+/// released, and saved only once it is registered, so a combination owned by
+/// another app leaves the previous shortcut working and the saved value
+/// unchanged. Synchronous on purpose: the plugin registers on the main
+/// thread, which is where this runs, so no other change can interleave.
+#[tauri::command]
+pub fn set_panel_shortcut(
+    app_handle: tauri::AppHandle,
+    state: State<AppState>,
+    shortcut: String,
+) -> Result<PanelShortcutPayload, String> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+
+    let parsed = settings::parse_shortcut(&shortcut)?;
+    let canonical = parsed.canonical();
+    // Copied out: the lock is never held across the plugin's main-thread calls.
+    let current = state.panel_shortcut.lock().map_err(|e| e.to_string())?.clone();
+
+    let plugin = app_handle.global_shortcut();
+    settings::swap_shortcut(
+        current.registered,
+        parsed.shortcut,
+        |next| plugin.register(next).map_err(|e| e.to_string()),
+        |old| {
+            if let Err(err) = plugin.unregister(old) {
+                eprintln!("[settings] failed to release the previous side panel shortcut: {err}");
+            }
+        },
+    )
+    .map_err(|err| {
+        let kept = if current.registered.is_some() {
+            format!("{} still shows and hides the side panel.", current.configured)
+        } else {
+            "The side panel has no shortcut until one registers.".to_string()
+        };
+        format!("Couldn't register {canonical} ({err}); another app may already use it. {kept}")
+    })?;
+
+    let saved = state
+        .conn
+        .lock()
+        .map_err(|e| e.to_string())
+        .and_then(|conn| {
+            db::set_setting(&conn, settings::SETTING_PANEL_SHORTCUT, &canonical).map_err(|e| e.to_string())
+        });
+    if let Err(err) = saved {
+        // Not saved means not chosen: put the previous registration back.
+        if current.registered != Some(parsed.shortcut) {
+            let _ = plugin.unregister(parsed.shortcut);
+            if let Some(old) = current.registered {
+                let _ = plugin.register(old);
+            }
+        }
+        return Err(format!("Couldn't save the shortcut: {err}"));
+    }
+
+    let mut slot = state.panel_shortcut.lock().map_err(|e| e.to_string())?;
+    *slot = crate::state::PanelShortcutState {
+        configured: canonical,
+        registered: Some(parsed.shortcut),
+        error: None,
+    };
+    Ok(panel_shortcut_payload(&slot))
+}
+
+/// Whether `shortcut` is the one the side panel holds right now. The global
+/// shortcut handler dispatches on this and on `settings::hud_toggle_shortcut`.
+pub fn is_panel_shortcut(app_handle: &tauri::AppHandle, shortcut: &tauri_plugin_global_shortcut::Shortcut) -> bool {
+    use tauri::Manager;
+
+    app_handle
+        .state::<AppState>()
+        .panel_shortcut
+        .lock()
+        .map(|slot| slot.registered.as_ref() == Some(shortcut))
+        .unwrap_or(false)
+}
+
 #[tauri::command]
 pub fn set_player_color_override(
     state: State<AppState>,

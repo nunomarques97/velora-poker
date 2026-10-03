@@ -111,6 +111,53 @@
   color: var(--negative);
 }
 
+.okText {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--positive);
+}
+
+.okText:empty {
+  display: none;
+}
+
+/* The shortcut section opens with its status, so no rule above it. */
+.statusGrid.shortcutGrid {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.shortcutForm {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.shortcutLabel {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+.folderInput:focus-visible,
+.saveButton:focus-visible,
+.resetSetupButton:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+.saveButton[aria-disabled="true"],
+.resetSetupButton[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.folderInput[aria-invalid="true"] {
+  border-color: var(--negative);
+}
+
 .statusGrid {
   margin-top: 18px;
   display: grid;

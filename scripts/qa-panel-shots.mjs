@@ -15,15 +15,23 @@
 //   - a failed first load shows an error with Retry, which recovers and moves
 //     focus to the heading; a failed refresh keeps the list, flagged, and
 //     Retry clears it; an empty panel fills in when tables open;
-//   - StrictMode leaves one listener per event.
-// Exits non-zero on any failure and always stops Vite.
+//   - StrictMode leaves one listener per event;
+//   - the villain search: a labelled box that matches screen names across
+//     tables (any case), shows only the matching tables, opened, with the
+//     matches marked; says so when nothing matches; Esc and clearing bring
+//     back the rows that were open before; the query survives a new hand, a
+//     table closing, an older refresh answering last and a failed refresh
+//     followed by Retry; and, with real key presses over the DevTools
+//     protocol, Tab reaches the box with a visible focus ring and Esc clears it.
+// Screenshots panel-search-*.png at 480x1000 and 1440x900.
+// Exits non-zero on any failure and always stops Vite and Edge.
 //
 // The data is a mocked snapshot, not a live PokerStars session.
 //
 // Usage: node scripts/qa-panel-shots.mjs
 
 import { spawn, execFile } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -88,6 +96,10 @@ function stopVite(vite) {
 // removed at exit: never touches (or waits on) the user's running Edge.
 let profileRoot = null;
 let profileSeq = 0;
+function newProfile() {
+  profileRoot ??= mkdtempSync(join(process.env.TEMP || tmpdir(), "velora-qa-edge-"));
+  return join(profileRoot, String(profileSeq++));
+}
 function removeProfiles() {
   if (!profileRoot) return;
   try {
@@ -98,20 +110,18 @@ function removeProfiles() {
   profileRoot = null;
 }
 
+const BASE_FLAGS = [
+  "--headless=new",
+  "--disable-gpu",
+  "--no-first-run",
+  "--no-default-browser-check",
+  "--disable-extensions",
+  "--hide-scrollbars",
+  "--force-device-scale-factor=1",
+];
+
 function edge(args, { capture = false } = {}) {
-  profileRoot ??= mkdtempSync(join(process.env.TEMP || tmpdir(), "velora-qa-edge-"));
-  const profile = join(profileRoot, String(profileSeq++));
-  const base = [
-    "--headless=new",
-    "--disable-gpu",
-    "--no-first-run",
-    "--no-default-browser-check",
-    "--disable-extensions",
-    "--hide-scrollbars",
-    "--force-device-scale-factor=1",
-    `--user-data-dir=${profile}`,
-    "--virtual-time-budget=6000",
-  ];
+  const base = [...BASE_FLAGS, `--user-data-dir=${newProfile()}`, "--virtual-time-budget=6000"];
   return new Promise((res, rej) => {
     execFile(
       EDGE,
@@ -155,6 +165,8 @@ async function shot(base, size, params, name) {
   await edge([`--window-size=${size.w},${size.h}`, `--screenshot=${file}`, pageUrl(base, params)]);
   check(existsSync(file), `screenshot ${name}`);
 }
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const short = (s, n = 160) => (s && s.length > n ? `${s.slice(0, n)}…` : s);
 
@@ -227,6 +239,208 @@ async function strategicChecks(base) {
   await shot(base, NARROW, { start: "error" }, "panel-error-480x1000.png");
 }
 
+async function searchChecks(base) {
+  const label = "search";
+  let r = fields((await dump(base, { action: "search" }))["action-result"]);
+  check(r.label === "Find_a_player", `${label}: the box has a visible label`, JSON.stringify(r));
+  check(r.rows === "1,2,5" && r.matches === "3" && r.marks === "3",
+    `${label}: "ANNA" matches AggroAnna77 at every table she sits at, any case, marked`, JSON.stringify(r));
+  check(r.expanded === "1,2,5", `${label}: matching tables open, the others hidden`, JSON.stringify(r));
+  check(r.collapsed === "1,5", `${label}: a matching row can still be collapsed during the search`, JSON.stringify(r));
+  check(r.line === "1_player_at_3_of_8_tables_·_Esc_clears", `${label}: the result line counts players and tables`, r.line);
+  check(r.announced === '1_player_matches_"ANNA"_at_3_tables.', `${label}: the result is announced politely`, r.announced);
+  check(r.clearedRows === String(TABLES) && r.restored === "4",
+    `${label}: clearing the box restores every table and the rows open before`, JSON.stringify(r));
+  check(r.clearedAnnounce === "Search_cleared._8_tables_open.", `${label}: clearing is announced`, r.clearedAnnounce);
+
+  r = fields((await dump(base, { action: "searchnone" }))["action-result"]);
+  check(r.state === "nomatch" && r.rows === "0" && r.empty === "1" && r.hasQuery === "1",
+    `${label}: no match shows a clear empty-result message naming the query`, JSON.stringify(r));
+  check(r.line === "No_match_·_Esc_clears" && r.announced === 'No_player_matches_"zzz_nobody".',
+    `${label}: no match is said under the box and announced`, JSON.stringify(r));
+
+  r = fields((await dump(base, { action: "searchclear" }))["action-result"]);
+  check(r.during === "2,3" && r.query === '""' && r.rows === String(TABLES) && r.restored === "3" && r.focus === "search",
+    `${label}: Esc clears the box, keeps focus there and restores the open rows`, JSON.stringify(r));
+
+  r = fields((await dump(base, { action: "searchrefresh" }))["action-result"]);
+  check(r.before === "2,3" && r.afterHand === "1,2,3/1,2,3", `${label}: a new hand refreshes the filtered list (new match shown, opened)`,
+    JSON.stringify(r));
+  check(r.afterClose === "1,3/1,3" && r.query === "tony", `${label}: a table closing keeps the query and drops its row`, JSON.stringify(r));
+  check(r.restored === "4", `${label}: clearing after refreshes restores the rows open before the search`, JSON.stringify(r));
+
+  r = fields((await dump(base, { action: "searchstale" }))["action-result"]);
+  check(r.mid === "new" && r.end === "new" && r.query === "anna" && r.rows === "1,2,5",
+    `${label}: an older refresh answering last never overwrites the newer filtered result`, JSON.stringify(r));
+
+  r = fields((await dump(base, { action: "searchretry" }))["action-result"]);
+  check(r.banner === "1" && r.kept === "anna/1,2,5", `${label}: a failed refresh keeps the query and the filtered list`, JSON.stringify(r));
+  check(r.alertsAfter === "0" && r.query === "anna" && r.rows === "1,2,5" && r.fresh === "1",
+    `${label}: Retry recovers with the query still applied`, JSON.stringify(r));
+
+  for (const [size, tag] of [[NARROW, "480x1000"], [WIDE, "1440x900"]]) {
+    await shot(base, size, { q: "anna" }, `panel-search-match-${tag}.png`);
+    await shot(base, size, { q: "zzz_nobody" }, `panel-search-none-${tag}.png`);
+  }
+  await shot(base, NARROW, { action: "searchretry" }, "panel-search-retry-480x1000.png");
+}
+
+// --- Keyboard pass over the DevTools protocol -------------------------------
+
+class Cdp {
+  constructor(ws) {
+    this.ws = ws;
+    this.nextId = 1;
+    this.pending = new Map();
+    ws.addEventListener("message", (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.id && this.pending.has(msg.id)) {
+        const { res, rej } = this.pending.get(msg.id);
+        this.pending.delete(msg.id);
+        if (msg.error) rej(new Error(msg.error.message));
+        else res(msg.result);
+      }
+    });
+  }
+  static async connect(url) {
+    const ws = new WebSocket(url);
+    await new Promise((res, rej) => {
+      ws.addEventListener("open", res, { once: true });
+      ws.addEventListener("error", () => rej(new Error(`cannot open ${url}`)), { once: true });
+    });
+    return new Cdp(ws);
+  }
+  send(method, params = {}) {
+    const id = this.nextId++;
+    this.ws.send(JSON.stringify({ id, method, params }));
+    return new Promise((res, rej) => this.pending.set(id, { res, rej }));
+  }
+  async eval(expression) {
+    const { result, exceptionDetails } = await this.send("Runtime.evaluate", {
+      expression,
+      returnByValue: true,
+      awaitPromise: true,
+    });
+    if (exceptionDetails) throw new Error(`evaluate failed: ${exceptionDetails.text}`);
+    return result.value;
+  }
+  async key(key) {
+    const keys = {
+      Tab: { code: "Tab", windowsVirtualKeyCode: 9 },
+      Escape: { code: "Escape", windowsVirtualKeyCode: 27 },
+    }[key];
+    await this.send("Input.dispatchKeyEvent", { type: "rawKeyDown", key, ...keys });
+    await this.send("Input.dispatchKeyEvent", { type: "keyUp", key, ...keys });
+  }
+  close() {
+    try {
+      this.ws.close();
+    } catch {
+      // already closed
+    }
+  }
+}
+
+const FOCUS_PROBE = `(() => {
+  const el = document.activeElement;
+  if (!el || el === document.body) return null;
+  const s = getComputedStyle(el);
+  return {
+    id: el.id,
+    tag: el.tagName,
+    text: el.textContent.trim().slice(0, 40),
+    focusVisible: el.matches(":focus-visible"),
+    ring: s.outlineStyle !== "none" && parseFloat(s.outlineWidth) >= 1,
+  };
+})()`;
+
+function killTree(child) {
+  if (!child || child.exitCode !== null) return;
+  try {
+    execFile("taskkill", ["/pid", String(child.pid), "/t", "/f"], () => {});
+  } catch {
+    child.kill();
+  }
+}
+
+async function keyboardPass(base) {
+  const label = "search keyboard";
+  const profile = newProfile();
+  const browser = spawn(
+    EDGE,
+    [...BASE_FLAGS, `--user-data-dir=${profile}`, "--remote-debugging-port=0", `--window-size=${NARROW.w},${NARROW.h}`,
+      pageUrl(base, { expand: "4" })],
+    { stdio: "ignore", windowsHide: true },
+  );
+  let cdp = null;
+  try {
+    const portFile = join(profile, "DevToolsActivePort");
+    const deadline = Date.now() + 20000;
+    while (!existsSync(portFile) && Date.now() < deadline) await sleep(100);
+    if (!existsSync(portFile)) throw new Error("Edge never wrote DevToolsActivePort");
+    const port = readFileSync(portFile, "utf8").split(/\r?\n/)[0].trim();
+
+    let page = null;
+    while (!page && Date.now() < deadline + 10000) {
+      const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then((r) => r.json()).catch(() => []);
+      page = targets.find((t) => t.type === "page" && t.url.includes("qa-panel.html"));
+      if (!page) await sleep(100);
+    }
+    if (!page) throw new Error("no qa-panel.html page target");
+    cdp = await Cdp.connect(page.webSocketDebuggerUrl);
+    await cdp.send("Runtime.enable");
+
+    const readyBy = Date.now() + 20000;
+    const readyFlag = () => cdp.eval(`document.body?.getAttribute("data-qa-ready") ?? null`).catch(() => null);
+    while ((await readyFlag()) !== "1") {
+      if (Date.now() > readyBy) throw new Error("side panel never became ready");
+      await sleep(100);
+    }
+    await cdp.eval(`document.activeElement?.blur(), window.focus(), true`);
+
+    await cdp.key("Tab");
+    const first = await cdp.eval(FOCUS_PROBE);
+    check(first?.id === "villain-search", `${label}: the first Tab reaches the search box`, JSON.stringify(first));
+    check(!!first?.focusVisible && !!first?.ring, `${label}: the box shows a :focus-visible ring`, JSON.stringify(first));
+
+    await cdp.send("Input.insertText", { text: "anna" });
+    await sleep(700);
+    const typed = await cdp.eval(`({
+      rows: [...document.querySelectorAll("li[data-table-id]")].map((li) => li.dataset.tableId).join(","),
+      announce: document.querySelector("[role=status]")?.textContent ?? "",
+    })`);
+    check(typed.rows === "1,2,5" && typed.announce === '1 player matches "anna" at 3 tables.',
+      `${label}: typing filters the tables and announces the result`, JSON.stringify(typed));
+    const { data } = await cdp.send("Page.captureScreenshot", { format: "png" });
+    const focusShot = "panel-search-keyboard-480x1000.png";
+    writeFileSync(join(outDir, focusShot), Buffer.from(data, "base64"));
+    check(existsSync(join(outDir, focusShot)), `screenshot ${focusShot}`);
+
+    await cdp.key("Escape");
+    await sleep(200);
+    const cleared = await cdp.eval(`({
+      value: document.getElementById("villain-search").value,
+      rows: document.querySelectorAll("li[data-table-id]").length,
+      expanded: [...document.querySelectorAll("li[data-table-id] button[aria-expanded=true]")].map((b) => b.closest("li").dataset.tableId).join(","),
+      focus: document.activeElement?.id ?? "",
+    })`);
+    check(cleared.value === "" && cleared.rows === TABLES && cleared.expanded === "4" && cleared.focus === "villain-search",
+      `${label}: Esc clears the query, restores the open rows and keeps focus in the box`, JSON.stringify(cleared));
+
+    await cdp.key("Tab");
+    const next = await cdp.eval(FOCUS_PROBE);
+    check(next?.tag === "BUTTON" && next?.text.startsWith("Halley III") && !!next?.ring,
+      `${label}: the next Tab moves on to the first table row, with a ring`, JSON.stringify(next));
+  } finally {
+    if (cdp) {
+      await cdp.send("Browser.close").catch(() => {});
+      cdp.close();
+    }
+    await sleep(300);
+    killTree(browser);
+  }
+}
+
 async function defaultBuildChecks(base) {
   const label = "default build";
   const qa = await dump(base, { build: "default" });
@@ -265,6 +479,8 @@ async function main() {
     await dump(base, {}).catch(() => {});
 
     await strategicChecks(base);
+    await searchChecks(base);
+    await keyboardPass(base);
     await defaultBuildChecks(base);
   } catch (err) {
     failures.push(err.message);

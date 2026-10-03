@@ -34,6 +34,20 @@ pub struct RefreshLogEntry {
 
 pub const REFRESH_LOG_CAP: usize = 20;
 
+/// The side-panel global shortcut: what the user chose and what is actually
+/// registered with Windows, which differ when registration failed (another
+/// app owns the combination). Lives in memory only; the choice itself is the
+/// `panel_shortcut` settings row.
+#[derive(Debug, Clone, Default)]
+pub struct PanelShortcutState {
+    /// Canonical text of the chosen shortcut ("Ctrl+Alt+P").
+    pub configured: String,
+    /// The shortcut the global-shortcut plugin holds for the panel, if any.
+    pub registered: Option<tauri_plugin_global_shortcut::Shortcut>,
+    /// Why the startup registration did not give the user `configured`.
+    pub error: Option<String>,
+}
+
 pub struct AppState {
     pub conn: Mutex<Connection>,
     pub import: Mutex<ImportState>,
@@ -43,6 +57,10 @@ pub struct AppState {
     /// `strategic-analysis` build fills it. Always locked *after* `conn`,
     /// never before, so the two locks cannot deadlock.
     pub engine: Mutex<EngineCache>,
+    /// Never held while registering or unregistering a shortcut: the plugin
+    /// runs those on the main thread, which also runs the shortcut handler
+    /// that reads this.
+    pub panel_shortcut: Mutex<PanelShortcutState>,
 }
 
 impl AppState {
@@ -80,6 +98,7 @@ impl AppState {
             watcher: Mutex::new(None),
             refresh_log: Mutex::new(VecDeque::new()),
             engine: Mutex::new(EngineCache::new()),
+            panel_shortcut: Mutex::new(PanelShortcutState::default()),
         })
     }
 }

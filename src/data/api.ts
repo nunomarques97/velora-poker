@@ -10,6 +10,7 @@ import type {
   ImportStatus,
   IngestionHealth,
   OnboardingReadinessPayload,
+  PanelShortcut,
   Player,
   SeatFrame,
   SeatPosition,
@@ -499,6 +500,21 @@ export async function getSidePanelSnapshot(): Promise<SidePanelSnapshot> {
 export async function showSidePanel(): Promise<void> {
   assertTauriAvailable();
   return invoke("show_side_panel");
+}
+
+export async function getPanelShortcut(): Promise<PanelShortcut> {
+  assertTauriAvailable();
+  return invoke<PanelShortcut>("get_panel_shortcut");
+}
+
+/**
+ * Changes the side-panel shortcut. Rejects with a message to show as is when
+ * the text is invalid or the combination can't be registered; in both cases
+ * the previous shortcut stays registered and saved.
+ */
+export async function setPanelShortcut(shortcut: string): Promise<PanelShortcut> {
+  assertTauriAvailable();
+  return invoke<PanelShortcut>("set_panel_shortcut", { shortcut });
 }
 
 // ---------------------------------------------------------------------

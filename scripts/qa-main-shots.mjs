@@ -13,7 +13,14 @@
 //     onboarding HUD step starts on Compact with Continue enabled;
 //   - a real keyboard pass over the DevTools protocol: Tab reaches both
 //     profile choices and Reset, Enter picks a profile, Space resets, and each
-//     focused control draws a visible :focus-visible outline.
+//     focused control draws a visible :focus-visible outline;
+//   - Settings, Shortcuts section (?mode=settings): the side-panel shortcut
+//     field is labelled and shows the current shortcut; a valid change is
+//     saved canonical and confirmed in a status region; an invalid one (no
+//     modifier, the HUD toggle) and a combination another app owns are
+//     rejected in an alert while the previous shortcut stays the current one;
+//     a startup registration failure is shown. Screenshots
+//     settings-shortcut-*.png at 1440x900 and 800x600.
 // Exits non-zero on any failure and always stops Vite and Edge.
 //
 // Usage: node scripts/qa-main-shots.mjs
@@ -323,6 +330,52 @@ async function keyboardPass(base) {
   }
 }
 
+async function settingsShortcutChecks(base) {
+  for (const size of SIZES) {
+    const tag = `${size.w}x${size.h}`;
+    const label = `${tag} settings shortcut`;
+
+    let { qa } = await dump(base, size, { mode: "settings" });
+    check(qa["shortcut-label"] === "Side panel shortcut" && qa["shortcut-input"] === "Ctrl+Alt+P",
+      `${label}: labelled field shows the current shortcut (default Ctrl+Alt+P)`,
+      `label=${qa["shortcut-label"]} input=${qa["shortcut-input"]}`);
+    check(qa["shortcut-current"] === "Ctrl+Alt+P shows and hides it" && qa["shortcut-error"] === "" && qa["shortcut-startup-error"] === "",
+      `${label}: current shortcut stated, no error`, qa["shortcut-current"]);
+    await shot(base, size, { mode: "settings" }, `settings-shortcut-${tag}.png`);
+
+    ({ qa } = await dump(base, size, { mode: "settings", action: "shortcut-valid" }));
+    check(qa["shortcut-set-calls"] === '[{"shortcut":"ctrl + shift + p"}]', `${label} valid: set_panel_shortcut sent once with the typed text`,
+      qa["shortcut-set-calls"]);
+    check(qa["shortcut-pending"] === "Saving aria-disabled=true", `${label} valid: a pending state while saving`, qa["shortcut-pending"]);
+    check(qa["shortcut-current"] === "Ctrl+Shift+P shows and hides it" && qa["shortcut-input"] === "Ctrl+Shift+P",
+      `${label} valid: the saved shortcut becomes current, shown canonical`, `${qa["shortcut-current"]} input=${qa["shortcut-input"]}`);
+    check(qa["shortcut-ok"] === "Saved. Ctrl+Shift+P now shows and hides the side panel." && qa["shortcut-ok-role"] === "status"
+      && qa["shortcut-error"] === "", `${label} valid: confirmed in a status region`, qa["shortcut-ok"]);
+    check(qa["shortcut-focus-kept"] === "1", `${label} valid: focus stays on Save`, qa["shortcut-focus-kept"]);
+    await shot(base, size, { mode: "settings", action: "shortcut-valid" }, `settings-shortcut-${tag}-valid.png`);
+
+    for (const [action, expected, what] of [
+      ["shortcut-invalid", /^Add a modifier/, "no modifier"],
+      ["shortcut-hud", /^Ctrl\+Alt\+H already shows and hides the HUD/, "the HUD toggle"],
+      ["shortcut-taken", /^Couldn't register Ctrl\+Alt\+Q .*Ctrl\+Alt\+P still shows and hides the side panel\.$/, "owned by another app"],
+    ]) {
+      ({ qa } = await dump(base, size, { mode: "settings", action }));
+      check(expected.test(qa["shortcut-error"]) && qa["shortcut-error-role"] === "alert" && qa["shortcut-invalid"] === "true",
+        `${label} ${what}: rejected with a visible alert`, qa["shortcut-error"]);
+      check(qa["shortcut-current"] === "Ctrl+Alt+P shows and hides it" && qa["shortcut-ok"] === "",
+        `${label} ${what}: the previous shortcut stays current`, qa["shortcut-current"]);
+      check(qa["shortcut-input"] !== "Ctrl+Alt+P", `${label} ${what}: the typed text stays to be corrected`, qa["shortcut-input"]);
+      await shot(base, size, { mode: "settings", action }, `settings-shortcut-${tag}-${action.replace("shortcut-", "")}.png`);
+    }
+
+    ({ qa } = await dump(base, size, { mode: "settings", shortcut: "taken" }));
+    check(qa["shortcut-current"] === "Not working: Ctrl+Alt+P isn't registered"
+      && /^Ctrl\+Alt\+P couldn't be registered/.test(qa["shortcut-startup-error"]),
+      `${label}: a startup registration failure is reported`, `${qa["shortcut-current"]} | ${qa["shortcut-startup-error"]}`);
+    await shot(base, size, { mode: "settings", shortcut: "taken" }, `settings-shortcut-${tag}-startup-error.png`);
+  }
+}
+
 async function main() {
   if (!existsSync(EDGE)) throw new Error(`Edge not found at ${EDGE}`);
   mkdirSync(outDir, { recursive: true });
@@ -395,6 +448,7 @@ async function main() {
       `pressed=${onboarding.qa.pressed} continue=${onboarding.qa["continue-enabled"]}`);
     await shot(base, size, { mode: "green", step: "3" }, `hud-profiles-${tag}-onboarding-step3.png`);
 
+    await settingsShortcutChecks(base);
     await keyboardPass(base);
   } catch (err) {
     failures.push(err.message);
