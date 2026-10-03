@@ -8,9 +8,11 @@
 //!    that finds the PokerStars table window and keeps the overlay window
 //!    glued to it.
 //!
-//! The table window class name (`POKERSTARS_TABLE_CLASS_CANDIDATES` in
-//! `win.rs`) and the title check (`LOGGED_IN_TITLE_MARKER`) are confirmed
-//! against a read-only `EnumWindows` dump of a live PokerStars client.
+//! The table window class name (`POKERSTARS_TABLE_CLASS_CANDIDATES`) and the
+//! title check (`LOGGED_IN_TITLE_MARKER`) are confirmed against a read-only
+//! `EnumWindows` dump of a live PokerStars client. They live here, outside
+//! `win`, so the simulator's fake tables (`scripts/sim`) can be tested
+//! against the exact same rules on any platform.
 
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -154,6 +156,26 @@ pub struct ResyncLogEntry {
     pub rect: WindowRect,
 }
 
+/// Confirmed against a live PokerStars client via a read-only `EnumWindows`
+/// dump: real table windows report class `GLFW30`. That's a generic
+/// GLFW-library class name shared by any GLFW-based window, so it alone
+/// over-matches — see `LOGGED_IN_TITLE_MARKER` below for the check that
+/// actually scopes this to a real table.
+pub const POKERSTARS_TABLE_CLASS_CANDIDATES: &[&str] = &["GLFW30"];
+
+/// Every confirmed real table title contains this marker, e.g. "Session:
+/// 05:11 - Aegle IV - No Limit Hold'em \u{20ac}0.01/\u{20ac}0.02 EUR - Logged
+/// In as <screen name>". No lobby, tournament-lobby, or dialog title does
+/// (confirmed via the same live-client dump). A positive requirement
+/// beats an exclusion list here: it doesn't need extending every time
+/// PokerStars ships a new non-table window type.
+pub const LOGGED_IN_TITLE_MARKER: &str = " - Logged In as ";
+
+/// True if `title` belongs to a real, logged-in PokerStars table window.
+pub fn is_table_title(title: &str) -> bool {
+    title.contains(LOGGED_IN_TITLE_MARKER)
+}
+
 /// Extracts the PokerStars table name from a table window's title, so
 /// multi-table support can scope "the active table" to whichever
 /// table window the overlay is actually tracking, instead of a global
@@ -164,7 +186,7 @@ pub struct ResyncLogEntry {
 /// No Limit Hold'em \u{20ac}0.01/\u{20ac}0.02 EUR - Logged In as
 /// <screen name>"` — table name `"Aegle IV"` sits between a leading session
 /// timer and a trailing game-description segment, right before the fixed
-/// `" - Logged In as "` suffix (`LOGGED_IN_TITLE_MARKER` in `win.rs`).
+/// `" - Logged In as "` suffix (`LOGGED_IN_TITLE_MARKER`).
 /// Splitting on `" - "` and taking the second-to-last segment (before the
 /// game description) recovers it without hardcoding the "Session: mm:ss -"
 /// prefix, so it degrades gracefully if that prefix is absent.
@@ -194,7 +216,7 @@ pub struct ResyncLogEntry {
 /// doesn't resolve renders no players rather than another table's
 /// (`commands::table_scope`).
 pub fn extract_table_name(title: &str) -> Option<String> {
-    let prefix = title.split(" - Logged In as ").next()?;
+    let prefix = title.split(LOGGED_IN_TITLE_MARKER).next()?;
     if let Some(tournament_table) = tournament_table_name(prefix) {
         return Some(tournament_table);
     }

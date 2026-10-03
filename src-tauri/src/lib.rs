@@ -3,7 +3,9 @@
 // directly, without going through a live Tauri `State`.
 pub mod commands;
 mod overlay;
-mod settings;
+// `pub` for the simulator's e2e database seeder (`examples/sim_seed.rs`),
+// which marks onboarding complete through the same setting keys.
+pub mod settings;
 mod state;
 mod watcher;
 

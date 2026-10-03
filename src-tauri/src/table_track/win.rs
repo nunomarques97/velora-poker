@@ -87,36 +87,16 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 use super::{
-    extract_table_name, table_for_hwnd, DebugSnapshot, ResyncLogEntry, TrackedTable, WindowRect,
-    TRACKED_TABLES_EVENT,
+    extract_table_name, is_table_title, table_for_hwnd, DebugSnapshot, ResyncLogEntry, TrackedTable,
+    WindowRect, POKERSTARS_TABLE_CLASS_CANDIDATES, TRACKED_TABLES_EVENT,
 };
 use crate::db::{now_iso, now_played_at};
 use crate::overlay::manager;
-
-/// Confirmed against a live PokerStars client via a read-only `EnumWindows`
-/// dump: real table windows report class `GLFW30`. That's a generic
-/// GLFW-library class name shared by any GLFW-based window, so it alone
-/// over-matches — see `LOGGED_IN_TITLE_MARKER` below for the check that
-/// actually scopes this to a real table.
-const POKERSTARS_TABLE_CLASS_CANDIDATES: &[&str] = &["GLFW30"];
-
-/// Every confirmed real table title contains this marker, e.g. "Session:
-/// 05:11 - Aegle IV - No Limit Hold'em \u{20ac}0.01/\u{20ac}0.02 EUR - Logged
-/// In as <screen name>". No lobby, tournament-lobby, or dialog title does
-/// (confirmed via the same live-client dump). A positive requirement
-/// beats an exclusion list here: it doesn't need extending every time
-/// PokerStars ships a new non-table window type.
-const LOGGED_IN_TITLE_MARKER: &str = " - Logged In as ";
 
 /// `EnumWindows` reads a callback's return value as "keep going": zero stops
 /// the enumeration. Named because the difference between the two is one
 /// character and, in `enum_windows_proc`, the whole multi-table count.
 const CONTINUE_ENUMERATION: BOOL = BOOL(1);
-
-/// True if `title` belongs to a real, logged-in PokerStars table window.
-fn is_table_title(title: &str) -> bool {
-    title.contains(LOGGED_IN_TITLE_MARKER)
-}
 
 fn log(msg: impl AsRef<str>) {
     eprintln!("[table_track] {}", msg.as_ref());

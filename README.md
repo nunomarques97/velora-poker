@@ -88,7 +88,10 @@ cd src-tauri
 cargo test                     # Rust unit and integration tests (fixtures in src-tauri/tests/fixtures)
 cd ..
 npm run build                  # TypeScript type-check + production frontend build
+npm run test:sim               # hand-history simulator, fake tables and e2e driver (dev-only)
 ```
+
+`scripts/sim/` holds a dev-only simulator: a PokerStars hand-history generator, fake table windows and an end-to-end driver that runs the real app against them in a throwaway data folder. See [scripts/sim/README.md](scripts/sim/README.md). None of it ships in the app.
 
 ## Optional features and PokerStars rules
 

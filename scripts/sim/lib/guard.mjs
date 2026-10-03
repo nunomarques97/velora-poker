@@ -13,14 +13,14 @@ export const VELORA_IDENTIFIER = "com.velora.poker";
 
 const norm = (p) => resolve(p).replace(/[\\/]+$/, "").toLowerCase();
 
-function isInside(child, parent) {
+export function isInside(child, parent) {
   const c = norm(child);
   const p = norm(parent);
   return c === p || c.startsWith(p + sep) || c.startsWith(p + "/");
 }
 
 /** The deepest existing ancestor, resolved through links and junctions. */
-function realAncestor(target) {
+export function realAncestor(target) {
   let current = resolve(target);
   const rest = [];
   while (!existsSync(current)) {
