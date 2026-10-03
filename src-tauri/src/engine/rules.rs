@@ -17,13 +17,13 @@ use std::collections::BTreeMap;
 use rusqlite::Connection;
 use serde::Serialize;
 
-use super::aggregate::{aggregate_player, H2hKey, H2hStat, StatAgg, View};
+use super::aggregate::{aggregate_player, H2hKey, H2hStat, PlayerAggregate, StatAgg, View};
 use super::context::{average_stack_bb, EngineContext, Side, Stage, StackBucket};
 use super::facts::{load_player_hands, HandFacts, StatKey};
 use super::pooling::{confidence, stat_spec, FormatKey, ShrunkStat};
 use super::pot::SizeBucket;
 use super::preflop::extract_preflop;
-use super::recency::{recent_form, FormFlag, RecentForm, TILT_MIN_BASELINE, TILT_MIN_WINDOW};
+use super::recency::{form_counts, FormCounts, FormFlag, RecentForm, TILT_MIN_BASELINE, TILT_MIN_WINDOW};
 use super::showdown::{
     extract_showdowns, load_showdown_boards, sizing_tally, ShowdownRecord, SizingTell, ValueClass,
 };
@@ -556,6 +556,115 @@ fn tournament(hand: &HandFacts) -> bool {
     matches!(FormatKey::of_hand(hand), FormatKey::Mtt | FormatKey::Spin)
 }
 
+/// The prior-free part of one villain's rule input: everything a replay of
+/// his hands yields. Building it is the expensive step (every hand is
+/// replayed); [`PlayerReplay::rule_input`] then only shrinks counts toward
+/// the current priors, so a cached replay is reused until he plays a new
+/// hand.
+#[derive(Debug, Clone)]
+pub struct PlayerReplay {
+    pub player_id: i64,
+    /// Format the recency half-life and the priors were chosen for.
+    pub format: FormatKey,
+    pub agg: PlayerAggregate,
+    /// `call_vs_shove` over knockout hands, and how many knockout hands he
+    /// played (row K01).
+    pub ko: StatAgg,
+    pub ko_hands: u32,
+    /// `fold_to_steal_bb` over late-stage and `limp` over early-stage
+    /// tournament hands (row T01).
+    pub late: StatAgg,
+    pub early: StatAgg,
+    /// Every showdown record, oldest first.
+    pub showdowns: Vec<ShowdownRecord>,
+    pub form: Option<FormCounts>,
+}
+
+impl PlayerReplay {
+    /// Replays the villain's hands (oldest first, as `load_player_hands`
+    /// returns them) with his showdown records.
+    pub fn build(
+        hands: &[HandFacts],
+        player_id: i64,
+        format: FormatKey,
+        showdowns: Vec<ShowdownRecord>,
+    ) -> PlayerReplay {
+        let mut ko = StatAgg::default();
+        let mut late = StatAgg::default();
+        let mut early = StatAgg::default();
+        let mut ko_hands = 0;
+        for hand in hands.iter().filter(|h| h.seat_of(player_id).is_some()) {
+            let knockout = hand.seats.iter().any(|s| s.bounty.is_some());
+            let stage = tournament(hand).then(|| average_stack_bb(hand).map(Stage::of)).flatten();
+            if !knockout && stage.is_none() {
+                continue;
+            }
+            ko_hands += u32::from(knockout);
+            for event in extract_preflop(hand, player_id).iter().filter(|e| e.opportunity) {
+                let target = match (event.key, stage) {
+                    (StatKey::CallVsShove, _) if knockout => &mut ko,
+                    (StatKey::FoldToStealBb, Some(Stage::Late)) => &mut late,
+                    (StatKey::Limp, Some(Stage::Early)) => &mut early,
+                    _ => continue,
+                };
+                target.opportunities += 1;
+                target.hits += u32::from(event.success);
+            }
+        }
+        PlayerReplay {
+            player_id,
+            format,
+            agg: aggregate_player(hands, player_id, format),
+            ko,
+            ko_hands,
+            late,
+            early,
+            showdowns,
+            form: form_counts(hands, player_id),
+        }
+    }
+
+    /// The rule input against the current priors and the between-hands
+    /// context. Cheap: no hand is replayed.
+    pub fn rule_input(&self, prior: &dyn Fn(StatKey) -> f64, context: Option<EngineContext>) -> RuleInput {
+        let agg = &self.agg;
+        let stats = StatKey::PREFLOP
+            .iter()
+            .chain(StatKey::POSTFLOP.iter())
+            .map(|key| (*key, agg.stat(View::Recency, *key, prior(*key))))
+            .collect();
+        let h2h = H2hKey::ALL.iter().map(|key| agg.h2h_stat(*key, prior)).collect();
+
+        let mut river_showdowns = ShowdownTally::default();
+        for aggression in self.showdowns.iter().filter_map(|r| r.last_aggression.as_ref()) {
+            if aggression.street != Street::River {
+                continue;
+            }
+            match aggression.class {
+                ValueClass::Value => river_showdowns.value += 1,
+                ValueClass::Bluff => river_showdowns.bluff += 1,
+                ValueClass::Neither => river_showdowns.neither += 1,
+            }
+            river_showdowns.n += 1;
+        }
+
+        RuleInput {
+            stats,
+            context,
+            h2h,
+            sizing: sizing_tally(&self.showdowns),
+            river_showdowns,
+            recent_form: self.form.map(|f| f.evaluate(prior(StatKey::Vpip))),
+            ko_call_vs_shove: (self.ko_hands > 0)
+                .then(|| shrunk_of(self.ko, StatKey::CallVsShove, prior(StatKey::CallVsShove))),
+            late_fold_to_steal_bb: (self.late.opportunities > 0)
+                .then(|| shrunk_of(self.late, StatKey::FoldToStealBb, prior(StatKey::FoldToStealBb))),
+            early_limp: (self.early.opportunities > 0)
+                .then(|| shrunk_of(self.early, StatKey::Limp, prior(StatKey::Limp))),
+        }
+    }
+}
+
 /// Builds the rule input from the villain's hands (oldest first, as
 /// `load_player_hands` returns them) and his showdown records.
 pub fn rule_input(
@@ -566,64 +675,23 @@ pub fn rule_input(
     context: Option<EngineContext>,
     showdowns: &[ShowdownRecord],
 ) -> RuleInput {
-    let agg = aggregate_player(hands, player_id, format);
-    let stats = StatKey::PREFLOP
-        .iter()
-        .chain(StatKey::POSTFLOP.iter())
-        .map(|key| (*key, agg.stat(View::Recency, *key, prior(*key))))
-        .collect();
-    let h2h = H2hKey::ALL.iter().map(|key| agg.h2h_stat(*key, prior)).collect();
+    PlayerReplay::build(hands, player_id, format, showdowns.to_vec()).rule_input(prior, context)
+}
 
-    let mut ko = StatAgg::default();
-    let mut late = StatAgg::default();
-    let mut early = StatAgg::default();
-    let mut ko_hands = 0;
-    for hand in hands.iter().filter(|h| h.seat_of(player_id).is_some()) {
-        let knockout = hand.seats.iter().any(|s| s.bounty.is_some());
-        let stage = tournament(hand).then(|| average_stack_bb(hand).map(Stage::of)).flatten();
-        if !knockout && stage.is_none() {
-            continue;
-        }
-        ko_hands += u32::from(knockout);
-        for event in extract_preflop(hand, player_id).iter().filter(|e| e.opportunity) {
-            let target = match (event.key, stage) {
-                (StatKey::CallVsShove, _) if knockout => &mut ko,
-                (StatKey::FoldToStealBb, Some(Stage::Late)) => &mut late,
-                (StatKey::Limp, Some(Stage::Early)) => &mut early,
-                _ => continue,
-            };
-            target.opportunities += 1;
-            target.hits += u32::from(event.success);
-        }
-    }
-
-    let mut river_showdowns = ShowdownTally::default();
-    for aggression in showdowns.iter().filter_map(|r| r.last_aggression.as_ref()) {
-        if aggression.street != Street::River {
-            continue;
-        }
-        match aggression.class {
-            ValueClass::Value => river_showdowns.value += 1,
-            ValueClass::Bluff => river_showdowns.bluff += 1,
-            ValueClass::Neither => river_showdowns.neither += 1,
-        }
-        river_showdowns.n += 1;
-    }
-
-    RuleInput {
-        stats,
-        context,
-        h2h,
-        sizing: sizing_tally(showdowns),
-        river_showdowns,
-        recent_form: recent_form(hands, player_id, prior(StatKey::Vpip)),
-        ko_call_vs_shove: (ko_hands > 0)
-            .then(|| shrunk_of(ko, StatKey::CallVsShove, prior(StatKey::CallVsShove))),
-        late_fold_to_steal_bb: (late.opportunities > 0)
-            .then(|| shrunk_of(late, StatKey::FoldToStealBb, prior(StatKey::FoldToStealBb))),
-        early_limp: (early.opportunities > 0)
-            .then(|| shrunk_of(early, StatKey::Limp, prior(StatKey::Limp))),
-    }
+/// Loads one villain's hands and showdowns and replays them. The format is
+/// `format` when given (the table context's), else his latest hand's.
+pub fn player_replay(
+    conn: &Connection,
+    player_id: i64,
+    format: Option<FormatKey>,
+) -> rusqlite::Result<PlayerReplay> {
+    let hands = load_player_hands(conn, player_id)?;
+    let boards = load_showdown_boards(conn, player_id)?;
+    let showdowns = extract_showdowns(&hands, &boards, player_id);
+    let format = format
+        .or_else(|| hands.last().map(FormatKey::of_hand))
+        .unwrap_or(FormatKey::Cash);
+    Ok(PlayerReplay::build(&hands, player_id, format, showdowns))
 }
 
 /// Loads one villain's hands and showdowns and builds his rule input.
@@ -635,16 +703,9 @@ pub fn player_rule_input(
     context: Option<EngineContext>,
     prior: &dyn Fn(FormatKey, StatKey) -> f64,
 ) -> rusqlite::Result<RuleInput> {
-    let hands = load_player_hands(conn, player_id)?;
-    let boards = load_showdown_boards(conn, player_id)?;
-    let showdowns = extract_showdowns(&hands, &boards, player_id);
-    let format = context
-        .as_ref()
-        .map(|c| c.format)
-        .or_else(|| hands.last().map(FormatKey::of_hand))
-        .unwrap_or(FormatKey::Cash);
-    let prior = |key: StatKey| prior(format, key);
-    Ok(rule_input(&hands, player_id, format, &prior, context, &showdowns))
+    let replay = player_replay(conn, player_id, context.as_ref().map(|c| c.format))?;
+    let format = replay.format;
+    Ok(replay.rule_input(&|key| prior(format, key), context))
 }
 
 // --------------------------------------------------------------- evaluation
@@ -906,7 +967,7 @@ impl Out<'_> {
         let multiplier = self.adapt.multiplier(def);
         let (advice, adapted_by) = self.adapt.advice(def);
         let (deviation, score) = match score {
-            Score::Deviation(d) => (d, d * confidence * multiplier),
+            Score::Deviation(d) => (d, super::rank::score(d, confidence, multiplier)),
             Score::Fixed(s) => (s, s * multiplier),
         };
         self.reads.push(EngineRuleResult {

@@ -144,11 +144,25 @@ pub fn big_loss_recently(hands: &[HandFacts], villain_id: i64) -> bool {
     })
 }
 
-/// The recent-form test of section 6 over the villain's hands (all tables,
-/// oldest first). `vpip_prior` is the villain's format VPIP prior. `None`
-/// when the window has fewer than 10 VPIP opportunities within 60 minutes of
-/// the latest hand, or the baseline before it fewer than 40.
-pub fn recent_form(hands: &[HandFacts], villain_id: i64, vpip_prior: f64) -> Option<RecentForm> {
+/// The prior-free counts of the recent-form test: what one replay of the
+/// villain's hands yields. Cached per player; [`FormCounts::evaluate`] adds
+/// the prior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FormCounts {
+    /// VPIP opportunities and hits in the window.
+    pub window: u32,
+    pub window_hits: u32,
+    /// VPIP opportunities and hits before the window.
+    pub baseline: u32,
+    pub baseline_hits: u32,
+    pub after_big_loss: bool,
+}
+
+/// The window and baseline counts of section 6 over the villain's hands
+/// (all tables, oldest first). `None` when the window has fewer than 10
+/// VPIP opportunities within 60 minutes of the latest hand, or the baseline
+/// before it fewer than 40.
+pub fn form_counts(hands: &[HandFacts], villain_id: i64) -> Option<FormCounts> {
     let latest = played_at(hands.last()?)?;
     let start = last_n_start(hands.len(), LAST_N);
     let window_start = (start..hands.len())
@@ -161,29 +175,50 @@ pub fn recent_form(hands: &[HandFacts], villain_id: i64, vpip_prior: f64) -> Opt
     if n < TILT_MIN_WINDOW || base_n < TILT_MIN_BASELINE {
         return None;
     }
-
-    let k = stat_spec(StatKey::Vpip).k;
-    let p0 = shrink(f64::from(base_hits), f64::from(base_n), k, vpip_prior).clamp(0.01, 0.99);
-    let nf = f64::from(n);
-    let rate = f64::from(x) / nf;
-    let z = (f64::from(x) - nf * p0) / (nf * p0 * (1.0 - p0)).sqrt();
-    let after_big_loss = big_loss_recently(hands, villain_id);
-    let looser = rate - p0 >= LOOSER_MIN_GAP && z >= FORM_MIN_Z;
-    let tighter = p0 - rate >= TIGHTER_MIN_GAP && z <= -FORM_MIN_Z;
-    let flag = match (looser, tighter) {
-        (true, _) if after_big_loss => Some(FormFlag::Tilt),
-        (true, _) => Some(FormFlag::Looser),
-        (_, true) => Some(FormFlag::Tighter),
-        _ => None,
-    };
-    Some(RecentForm {
+    Some(FormCounts {
         window: n,
         window_hits: x,
-        baseline_opportunities: base_n,
-        window_vpip_pct: round(100.0 * rate, 1),
-        baseline_vpip_pct: round(100.0 * p0, 1),
-        z: round(z, 2),
-        flag,
-        after_big_loss,
+        baseline: base_n,
+        baseline_hits: base_hits,
+        after_big_loss: big_loss_recently(hands, villain_id),
     })
+}
+
+impl FormCounts {
+    /// The recent-form test against `vpip_prior`, the villain's format VPIP
+    /// prior.
+    pub fn evaluate(&self, vpip_prior: f64) -> RecentForm {
+        let k = stat_spec(StatKey::Vpip).k;
+        let p0 = shrink(f64::from(self.baseline_hits), f64::from(self.baseline), k, vpip_prior)
+            .clamp(0.01, 0.99);
+        let (n, x) = (self.window, self.window_hits);
+        let nf = f64::from(n);
+        let rate = f64::from(x) / nf;
+        let z = (f64::from(x) - nf * p0) / (nf * p0 * (1.0 - p0)).sqrt();
+        let looser = rate - p0 >= LOOSER_MIN_GAP && z >= FORM_MIN_Z;
+        let tighter = p0 - rate >= TIGHTER_MIN_GAP && z <= -FORM_MIN_Z;
+        let flag = match (looser, tighter) {
+            (true, _) if self.after_big_loss => Some(FormFlag::Tilt),
+            (true, _) => Some(FormFlag::Looser),
+            (_, true) => Some(FormFlag::Tighter),
+            _ => None,
+        };
+        RecentForm {
+            window: n,
+            window_hits: x,
+            baseline_opportunities: self.baseline,
+            window_vpip_pct: round(100.0 * rate, 1),
+            baseline_vpip_pct: round(100.0 * p0, 1),
+            z: round(z, 2),
+            flag,
+            after_big_loss: self.after_big_loss,
+        }
+    }
+}
+
+/// The recent-form test of section 6 over the villain's hands (all tables,
+/// oldest first). `vpip_prior` is the villain's format VPIP prior. `None`
+/// when the samples are too small (see [`form_counts`]).
+pub fn recent_form(hands: &[HandFacts], villain_id: i64, vpip_prior: f64) -> Option<RecentForm> {
+    form_counts(hands, villain_id).map(|counts| counts.evaluate(vpip_prior))
 }

@@ -6,6 +6,7 @@ use tauri::{Emitter, State};
 use crate::classification::{self, ClassificationResult};
 use crate::db;
 use crate::description_rules::{self, RuleResult};
+use crate::engine::{EngineCache, EnginePayload, HandFacts};
 use crate::hud::{self, HudProfile};
 use crate::import;
 use crate::overlay::{self, HotZone};
@@ -39,13 +40,18 @@ pub struct PlayerPayload {
     pub hands: i64,
     pub stats: PlayerStats,
     /// Structured rule results for the player profile drawer's
-    /// TENDENCIES/EXPLOITS/CONFIDENCE sections, sorted by
-    /// confidence descending. Empty when the `strategic-analysis` build flag
-    /// is off, or when no rule cleared its opportunity floor — the drawer
-    /// shows each section's own empty state for either case, never a blank
-    /// or fabricated line. Independent of `classification` below, which is
-    /// gated by the separate `auto-classification` flag.
+    /// TENDENCIES/EXPLOITS/CONFIDENCE sections: the opponent engine's reads
+    /// in ranking order (`engine.reads` in the plain `RuleResult` contract).
+    /// Empty when the `strategic-analysis` build flag is off, or when no
+    /// read cleared its sample — the drawer shows each section's own empty
+    /// state for either case, never a blank or fabricated line. Independent
+    /// of `classification` below, which is gated by the separate
+    /// `auto-classification` flag.
     pub descriptions: Vec<RuleResult>,
+    /// The opponent engine's payload (`docs/specs/opponent-engine.md`,
+    /// section 13): chip tag, ranked reads, context, head-to-head,
+    /// showdowns. `None` (JSON `null`) in the default build.
+    pub engine: Option<EnginePayload>,
     pub classification: ClassificationResult,
     pub snapshot: Option<PlayerSnapshotPayload>,
     /// Free-text note the user wrote about this player, or
@@ -65,6 +71,34 @@ pub struct PlayerPayload {
     pub seat_offset: Option<i64>,
 }
 
+/// The opponent engine's payload for one player, adapted to the latest
+/// completed hand at his table when there is one. Only the
+/// `strategic-analysis` build computes it; a cached replay is reused until
+/// the player has a new hand.
+#[cfg(feature = "strategic-analysis")]
+fn player_engine(
+    conn: &rusqlite::Connection,
+    engine: &mut EngineCache,
+    context_hand: Option<&HandFacts>,
+    id: i64,
+) -> Result<Option<EnginePayload>, String> {
+    let context = context_hand.and_then(|hand| crate::engine::villain_context(hand, id));
+    engine.payload(conn, id, context).map(Some).map_err(|e| e.to_string())
+}
+
+/// The default build computes and exposes nothing from the engine (gating
+/// matrix, spec section 2): `engine` is `null`.
+#[cfg(not(feature = "strategic-analysis"))]
+fn player_engine(
+    conn: &rusqlite::Connection,
+    engine: &mut EngineCache,
+    context_hand: Option<&HandFacts>,
+    id: i64,
+) -> Result<Option<EnginePayload>, String> {
+    let _ = (conn, engine, context_hand, id);
+    Ok(None)
+}
+
 /// `include_note` controls whether the player's free-text note is fetched.
 /// It is `false` for exactly one caller,
 /// `get_active_table_players`, and that is deliberate: the overlay never
@@ -72,9 +106,15 @@ pub struct PlayerPayload {
 /// hot overlay-refresh path for a field nothing reads. That path was verified
 /// live, so its query surface is kept deliberately minimal. Every other
 /// caller passes `true`.
-fn build_player_payload(
+///
+/// `context_hand` is the latest completed hand at the player's table (the
+/// active-table roster's hand); `None` outside a table scope.
+#[allow(clippy::too_many_arguments)]
+pub fn build_player_payload(
     conn: &rusqlite::Connection,
     rules: &[classification::ClassificationRule],
+    engine: &mut EngineCache,
+    context_hand: Option<&HandFacts>,
     id: i64,
     name: String,
     hands: i64,
@@ -84,7 +124,13 @@ fn build_player_payload(
 ) -> Result<PlayerPayload, String> {
     let (player_stats, opportunities) =
         stats::compute_player_stats_with_opportunities(conn, id).map_err(|e| e.to_string())?;
-    let descriptions = description_rules::descriptions_for_player(&player_stats, &opportunities);
+    let engine = player_engine(conn, engine, context_hand, id)?;
+    // The engine supersedes `description_rules` for the strategic payload;
+    // without it (default build) `descriptions_for_player` is empty.
+    let descriptions = match &engine {
+        Some(payload) => payload.reads.iter().map(|r| r.to_rule_result()).collect(),
+        None => description_rules::descriptions_for_player(&player_stats, &opportunities),
+    };
     let classification_result =
         classification::resolve_for_player(conn, rules, id, hands, &player_stats)
             .map_err(|e| e.to_string())?;
@@ -114,6 +160,7 @@ fn build_player_payload(
         hands,
         stats: player_stats,
         descriptions,
+        engine,
         classification: classification_result,
         snapshot,
         note,
@@ -135,11 +182,12 @@ pub fn get_players(state: State<AppState>) -> Result<Vec<PlayerPayload>, String>
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let rows = db::list_players(&conn).map_err(|e| e.to_string())?;
     let rules = classification::list_rules(&conn).map_err(|e| e.to_string())?;
+    let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
 
     let mut players = Vec::with_capacity(rows.len());
     for row in rows {
         players.push(build_player_payload(
-            &conn, &rules, row.id, row.name, row.hands, None, None, true,
+            &conn, &rules, &mut engine, None, row.id, row.name, row.hands, None, None, true,
         )?);
     }
 
@@ -175,11 +223,12 @@ pub fn get_players_page(
     let rows =
         db::list_players_page(&conn, offset, limit, search).map_err(|e| e.to_string())?;
     let rules = classification::list_rules(&conn).map_err(|e| e.to_string())?;
+    let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
 
     let mut players = Vec::with_capacity(rows.len());
     for row in rows {
         players.push(build_player_payload(
-            &conn, &rules, row.id, row.name, row.hands, None, None, true,
+            &conn, &rules, &mut engine, None, row.id, row.name, row.hands, None, None, true,
         )?);
     }
 
@@ -255,25 +304,10 @@ pub fn get_active_table_players(
     // overlay for a closed table is being torn down anyway.
     let since = table_track::table_for(table_id).map(|t| t.first_seen_at);
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
-    let rows = db::list_active_table_players_with_seats(&conn, scope.as_deref(), since.as_deref())
-        .map_err(|e| e.to_string())?;
-    let rules = classification::list_rules(&conn).map_err(|e| e.to_string())?;
-
-    let mut players = Vec::with_capacity(rows.len());
-    for row in rows {
-        // `include_note: false` — the overlay never renders notes, so this
-        // path must not gain a per-player note lookup.
-        players.push(build_player_payload(
-            &conn,
-            &rules,
-            row.id,
-            row.name,
-            row.hands,
-            row.seat,
-            row.seat_offset,
-            false,
-        )?);
-    }
+    let players = {
+        let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
+        active_table_payloads(&conn, &mut engine, scope.as_deref(), since.as_deref())?
+    };
 
     let active_hand = db::active_hand_info(&conn, scope.as_deref(), since.as_deref())
         .ok()
@@ -296,6 +330,45 @@ pub fn get_active_table_players(
         });
     }
 
+    Ok(players)
+}
+
+/// The overlay's roster with its payloads: the players of the latest
+/// completed hand at `table_name` (any table when `None`) played no earlier
+/// than `since`. The engine's context comes from that same hand, loaded
+/// once per call and only in the `strategic-analysis` build.
+pub fn active_table_payloads(
+    conn: &rusqlite::Connection,
+    engine: &mut EngineCache,
+    table_name: Option<&str>,
+    since: Option<&str>,
+) -> Result<Vec<PlayerPayload>, String> {
+    let rows = db::list_active_table_players_with_seats(conn, table_name, since)
+        .map_err(|e| e.to_string())?;
+    let rules = classification::list_rules(conn).map_err(|e| e.to_string())?;
+    let context_hand = if cfg!(feature = "strategic-analysis") && !rows.is_empty() {
+        crate::engine::latest_hand_in_scope(conn, table_name, since).map_err(|e| e.to_string())?
+    } else {
+        None
+    };
+
+    let mut players = Vec::with_capacity(rows.len());
+    for row in rows {
+        // `include_note: false` — the overlay never renders notes, so this
+        // path must not gain a per-player note lookup.
+        players.push(build_player_payload(
+            conn,
+            &rules,
+            engine,
+            context_hand.as_ref(),
+            row.id,
+            row.name,
+            row.hands,
+            row.seat,
+            row.seat_offset,
+            false,
+        )?);
+    }
     Ok(players)
 }
 
@@ -342,7 +415,8 @@ pub fn set_player_color_override(
         )
         .map_err(|e| e.to_string())?;
     let rules = classification::list_rules(&conn).map_err(|e| e.to_string())?;
-    build_player_payload(&conn, &rules, id, name, hands, None, None, true)
+    let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
+    build_player_payload(&conn, &rules, &mut engine, None, id, name, hands, None, None, true)
 }
 
 #[tauri::command]
@@ -365,7 +439,8 @@ pub fn clear_player_color_override(
         )
         .map_err(|e| e.to_string())?;
     let rules = classification::list_rules(&conn).map_err(|e| e.to_string())?;
-    build_player_payload(&conn, &rules, id, name, hands, None, None, true)
+    let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
+    build_player_payload(&conn, &rules, &mut engine, None, id, name, hands, None, None, true)
 }
 
 /// Saves the free-text note for one player and returns the
@@ -392,7 +467,8 @@ pub fn set_player_note(
         )
         .map_err(|e| e.to_string())?;
     let rules = classification::list_rules(&conn).map_err(|e| e.to_string())?;
-    build_player_payload(&conn, &rules, id, name, hands, None, None, true)
+    let mut engine = state.engine.lock().map_err(|e| e.to_string())?;
+    build_player_payload(&conn, &rules, &mut engine, None, id, name, hands, None, None, true)
 }
 
 // ---------------------------------------------------------------------

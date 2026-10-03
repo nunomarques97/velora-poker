@@ -53,6 +53,193 @@ export interface RuleResult {
   evidence: Evidence[];
 }
 
+// ---------------------------------------------------------------------
+// Opponent engine (`docs/specs/opponent-engine.md`, section 13). Present
+// only in the `strategic-analysis` build; `Player.engine` is `null` in the
+// default build.
+// ---------------------------------------------------------------------
+
+/** Payload family of an engine read. */
+export type EngineFamily =
+  | "preflop"
+  | "stack"
+  | "context"
+  | "stage"
+  | "bounty"
+  | "postflop"
+  | "h2h"
+  | "showdown"
+  | "recency";
+
+/** An `Evidence` item with the successes and the shrunk value (percentages). */
+export interface EngineEvidence extends Evidence {
+  hits: number;
+  /** Shrunk percentage; `null` for counts that are not shrunk (showdown tallies, context facts). */
+  shrunk: number | null;
+}
+
+/** One engine read: the `RuleResult` contract plus the engine's fields. */
+export interface EngineRead extends RuleResult {
+  evidence: EngineEvidence[];
+  /** Catalogue row of the spec (e.g. `P06`). */
+  scenarioId: string;
+  family: EngineFamily;
+  /** The read's own chip tag (`F3B`, `12bb`), or `null`. */
+  tag: string | null;
+  /** `deviation × confidence × multiplier`; reads are ranked by it. */
+  score: number;
+}
+
+/** Why the chip shows its tag: tilt first, then a short tournament stack, then the top read. */
+export type ChipTagSource = "tilt" | "stack" | "read";
+
+export interface ChipTag {
+  /** 2–4 characters (`F3B`, `ST-`, `TILT`) or a stack (`9bb`, `25bb`). */
+  text: string;
+  ruleId: string;
+  source: ChipTagSource;
+}
+
+export type EngineFormat = "mtt" | "cash" | "zoom" | "spin";
+export type StackBucket = "push_fold" | "reshove" | "mid" | "standard" | "deep";
+export type TournamentStage = "early" | "middle" | "late";
+
+export interface BountyContext {
+  amount: number;
+  /** ISO code (`EUR`, `USD`, `GBP`) when recognised. */
+  currency: string | null;
+  /** Current bounty / initial bounty; `null` when the buy-in has no bounty component. */
+  ratio: number | null;
+  /** `null` when the hero was not seated. */
+  heroCovers: boolean | null;
+}
+
+export interface SeatRelation {
+  /** Occupied seats counted clockwise from the hero (1 = directly on the hero's left). */
+  distance: number;
+  side: "left" | "right";
+  actsAfterHero: boolean;
+  directLeft: boolean;
+  directRight: boolean;
+}
+
+/** Between-hands context, read from the latest completed hand at the table. */
+export interface EngineContext {
+  /** PokerStars' hand number the context was read from. */
+  sourceHandId: string;
+  variant: string | null;
+  format: EngineFormat;
+  effectiveStackBb: number | null;
+  stackBucket: StackBucket | null;
+  /** Tournaments only. */
+  stage: TournamentStage | null;
+  level: number | null;
+  avgStackBb: number | null;
+  bounty: BountyContext | null;
+  /** `null` when the hero was not seated. */
+  seat: SeatRelation | null;
+}
+
+export type HeadToHeadKey =
+  | "three_bet_vs_hero_open"
+  | "fold_to_hero_3bet"
+  | "fold_to_hero_cbet"
+  | "steal_vs_hero"
+  | "defend_vs_hero_steal";
+
+export interface HeadToHeadStat {
+  key: HeadToHeadKey;
+  hits: number;
+  opportunities: number;
+  rawPct: number | null;
+  shrunkPct: number;
+}
+
+export interface HeadToHead {
+  /** Hands the villain and the hero were both dealt into. */
+  hands: number;
+  /** Only stats with at least 8 opportunities. */
+  stats: HeadToHeadStat[];
+}
+
+export type SizeBucket = "small" | "medium" | "large" | "overbet" | "allin";
+
+export interface ShowdownLineStep {
+  street: "preflop" | "flop" | "turn" | "river";
+  action: "fold" | "check" | "call" | "bet" | "raise";
+  isAllIn: boolean;
+  /** Bets and raises only. */
+  sizeBucket: SizeBucket | null;
+  potFraction: number | null;
+}
+
+export interface ShowdownRecord {
+  /** PokerStars' hand number. */
+  handId: string;
+  playedAt: string | null;
+  /** `"Jd 9d"`. */
+  cards: string;
+  /** `"Ts 8h 2c 7d Ks"`. */
+  board: string;
+  category: string;
+  line: ShowdownLineStep[];
+  result: "won" | "lost" | "split";
+  lastAggression: {
+    street: "flop" | "turn" | "river";
+    sizeBucket: SizeBucket;
+    potFraction: number;
+    class: "value" | "bluff" | "neither";
+  } | null;
+}
+
+export interface SizingTell {
+  bucket: SizeBucket;
+  value: number;
+  bluff: number;
+  neither: number;
+  n: number;
+}
+
+export interface RecentForm {
+  window: number;
+  windowHits: number;
+  baselineOpportunities: number;
+  windowVpipPct: number;
+  baselineVpipPct: number;
+  z: number;
+  flag: "looser" | "tighter" | "tilt" | null;
+  afterBigLoss: boolean;
+}
+
+export interface AutoNote {
+  id: number;
+  /** PokerStars' hand number. */
+  handId: string;
+  kind: string;
+  text: string;
+  createdAt: string;
+  /** Always `"auto"`: keeps auto-notes apart from the editable manual note. */
+  source: "auto";
+}
+
+/** `Player.engine` — the opponent engine's payload (contract version 1). */
+export interface EnginePayload {
+  version: number;
+  tag: ChipTag | null;
+  /** The first two of `reads`. */
+  topReads: EngineRead[];
+  /** Every eligible read, ranked by score. */
+  reads: EngineRead[];
+  /** `null` outside a table scope (Players list). */
+  context: EngineContext | null;
+  headToHead: HeadToHead | null;
+  /** Newest first, at most 10. */
+  showdowns: ShowdownRecord[];
+  sizingTells: SizingTell[];
+  recentForm: RecentForm | null;
+  autoNotes: AutoNote[];
+}
+
 export interface ClassificationResult {
   classification: PlayerClassificationKind;
   label: string;
@@ -84,13 +271,20 @@ export interface Player {
   stats: PlayerStats;
   /**
    * Structured rule results for the player profile drawer's TENDENCIES/
-   * EXPLOITS/CONFIDENCE sections, sorted by confidence
-   * descending. Empty when the `strategic-analysis` build flag is off, or
-   * when no rule cleared its opportunity floor — each section renders its
-   * own empty state for either case, never a blank or fabricated line.
-   * Independent of `classification` below (see `ClassificationResult.available`).
+   * EXPLOITS/CONFIDENCE sections: the opponent engine's reads in ranking
+   * order (`engine.reads` as plain `RuleResult`s). Empty when the
+   * `strategic-analysis` build flag is off, or when no read cleared its
+   * sample — each section renders its own empty state for either case, never
+   * a blank or fabricated line. Independent of `classification` below (see
+   * `ClassificationResult.available`).
    */
   descriptions?: RuleResult[];
+  /**
+   * The opponent engine's payload: chip tag, ranked reads, context,
+   * head-to-head, showdowns. `null` in the default build, where the chip
+   * renders exactly as before.
+   */
+  engine?: EnginePayload | null;
   /** Free-text note the user wrote about this player, or `null` when none. Not shown on the HUD overlay. */
   note?: string | null;
   classification?: ClassificationResult;

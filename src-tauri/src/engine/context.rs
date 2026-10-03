@@ -312,3 +312,29 @@ pub fn latest_table_hand(conn: &Connection, table_name: &str) -> rusqlite::Resul
         None => Ok(None),
     }
 }
+
+/// Loads the hand the active-table roster is read from: the latest
+/// completed hand at `table_name` (any table when `None`) played no earlier
+/// than `since`, by play order — the same query as
+/// `db::list_active_table_players_with_seats`, so the context and the
+/// roster always come from one hand.
+pub fn latest_hand_in_scope(
+    conn: &Connection,
+    table_name: Option<&str>,
+    since: Option<&str>,
+) -> rusqlite::Result<Option<HandFacts>> {
+    let id: Option<i64> = conn
+        .query_row(
+            "SELECT id FROM hands
+             WHERE (?1 IS NULL OR table_name = ?1)
+               AND (?2 IS NULL OR played_at >= ?2)
+             ORDER BY played_at DESC, id DESC LIMIT 1",
+            params![table_name, since],
+            |row| row.get(0),
+        )
+        .optional()?;
+    match id {
+        Some(id) => load_hand(conn, id),
+        None => Ok(None),
+    }
+}

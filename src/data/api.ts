@@ -5,6 +5,7 @@ import type {
   DashboardSummary,
   DetectedDir,
   DirValidation,
+  EnginePayload,
   HudProfile,
   ImportStatus,
   IngestionHealth,
@@ -38,6 +39,19 @@ function assertTauriAvailable(): void {
 // Players
 // ---------------------------------------------------------------------
 
+/** Version of the `Player.engine` contract this frontend reads. */
+export const ENGINE_PAYLOAD_VERSION = 1;
+
+/**
+ * The player's opponent-engine payload, or `null` when there is none (the
+ * default build) or it speaks a contract version this frontend does not
+ * know — never a half-understood payload.
+ */
+export function engineOf(player: Pick<Player, "engine">): EnginePayload | null {
+  const engine = player.engine ?? null;
+  return engine !== null && engine.version === ENGINE_PAYLOAD_VERSION ? engine : null;
+}
+
 export async function getPlayers(): Promise<Player[]> {
   assertTauriAvailable();
   return invoke<Player[]>("get_players");
@@ -56,6 +70,10 @@ export interface PlayersPage {
  * a couple hundred players and multi-second at the thousands a bulk import
  * can produce, and it holds the same connection lock the live overlay refresh
  * needs.
+ *
+ * In the `strategic-analysis` build each player carries `engine` without a
+ * table context (`engine.context` is `null`); in the default build `engine`
+ * is `null`.
  */
 export async function getPlayersPage(
   offset: number,
@@ -71,6 +89,10 @@ export async function getPlayersPage(
  * table — what that table's own overlay shows. `tableId` comes from the
  * overlay window's own URL; every overlay asks about its own table and
  * no other.
+ *
+ * In the `strategic-analysis` build each player carries `engine`, adapted to
+ * the latest completed hand at this table (`engine.context`); in the default
+ * build `engine` is `null`. `note` is never loaded here.
  */
 export async function getActiveTablePlayers(tableId: number): Promise<Player[]> {
   assertTauriAvailable();

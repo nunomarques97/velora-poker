@@ -61,6 +61,8 @@ pub enum View {
 #[serde(rename_all = "snake_case")]
 pub enum H2hKey {
     ThreeBetVsHeroOpen,
+    /// `fold_to_hero_3bet`, as the spec names it.
+    #[serde(rename = "fold_to_hero_3bet")]
     FoldToHeroThreeBet,
     FoldToHeroCbet,
     StealVsHero,

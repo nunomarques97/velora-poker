@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use rusqlite::Connection;
 
 use crate::db;
+use crate::engine::EngineCache;
 use crate::settings;
 
 /// Tracks the pieces of import state that cannot be derived by a plain
@@ -38,6 +39,10 @@ pub struct AppState {
     pub import: Mutex<ImportState>,
     pub watcher: Mutex<Option<notify::RecommendedWatcher>>,
     pub refresh_log: Mutex<VecDeque<RefreshLogEntry>>,
+    /// Opponent-engine pool priors and per-player replays. Only the
+    /// `strategic-analysis` build fills it. Always locked *after* `conn`,
+    /// never before, so the two locks cannot deadlock.
+    pub engine: Mutex<EngineCache>,
 }
 
 impl AppState {
@@ -74,6 +79,7 @@ impl AppState {
             import: Mutex::new(import),
             watcher: Mutex::new(None),
             refresh_log: Mutex::new(VecDeque::new()),
+            engine: Mutex::new(EngineCache::new()),
         })
     }
 }

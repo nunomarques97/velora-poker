@@ -7,13 +7,16 @@
 //! function of stored, completed hands — no in-hand state, no network.
 
 pub mod aggregate;
+pub mod cache;
 pub mod context;
 pub mod eval;
 pub mod facts;
+pub mod payload;
 pub mod postflop;
 pub mod pooling;
 pub mod pot;
 pub mod preflop;
+pub mod rank;
 pub mod recency;
 pub mod rules;
 pub mod showdown;
@@ -24,8 +27,9 @@ pub use aggregate::{
     aggregate_player, h2h_events, H2hKey, H2hStat, HeadToHead, PlayerAggregate, StatAgg, View,
     H2H_DISPLAY_MIN, H2H_RULE_MIN,
 };
+pub use cache::{EngineCache, ReplayCounts, PLAYER_CACHE_CAP};
 pub use context::{
-    latest_table_hand, seat_relation, villain_context, BountyContext, EngineContext, SeatRelation,
+    latest_hand_in_scope, latest_table_hand, seat_relation, villain_context, BountyContext, EngineContext, SeatRelation,
     Side, StackBucket, Stage,
 };
 pub use eval::{
@@ -40,12 +44,19 @@ pub use pooling::{
     confidence, confidence_tier, shrink, stat_spec, FormatKey, PoolCache, PoolTally, ShrunkStat,
     StatSpec,
 };
+pub use payload::{
+    engine_payload, AutoNotePayload, EnginePayload, NoteSource, ShowdownPayload, SizingTellPayload,
+    ENGINE_PAYLOAD_VERSION, MAX_SHOWDOWNS,
+};
 pub use pot::{parse_total_pot, replay_pot, PotReplay, SizeBucket, SizedAction, UncalledReturn};
 pub use preflop::{extract_player_preflop, extract_preflop};
-pub use recency::{recent_form, recency_weight, FormFlag, RecentForm};
+pub use rank::{
+    chip_tag, is_valid_tag, rank, rank_reads, ChipTag, RankedReads, TagSource, TOP_READS,
+};
+pub use recency::{form_counts, recent_form, recency_weight, FormCounts, FormFlag, RecentForm};
 pub use rules::{
-    evaluate as evaluate_rules, player_rule_input, rule_def, rule_input, templates, EngineEvidence, EngineRuleResult,
-    Family, RuleDef, RuleInput, ShowdownTally, TemplateKind, RULES,
+    evaluate as evaluate_rules, player_replay, player_rule_input, rule_def, rule_input, templates, EngineEvidence, EngineRuleResult,
+    Family, PlayerReplay, RuleDef, RuleInput, ShowdownTally, TemplateKind, RULES,
 };
 pub use showdown::{
     extract_showdowns, load_showdown_boards, parse_board, showdown_record, sizing_tally,
