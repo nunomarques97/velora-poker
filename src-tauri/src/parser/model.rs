@@ -67,6 +67,16 @@ pub struct ParsedSeat {
     /// oriented (fewer than two players dealt in, or a button seat that is not
     /// one of them), never a guess.
     pub position: Option<String>,
+    /// Bounty on this player's head, from the seat line's
+    /// `(N in chips, €X bounty)` text, as the bare amount in the tournament's
+    /// currency. `None` for a seat line with no bounty or one whose bounty text
+    /// does not parse cleanly — never a guess.
+    pub bounty: Option<f64>,
+    /// Hole cards known for this player once the hand completed, normalised to
+    /// `"Ah Kd"`: the hero's `Dealt to` cards, or any `shows [..]`,
+    /// `showed [..]` or `mucked [..]` set. `None` when the player never showed,
+    /// or every card set seen for them was malformed.
+    pub hole_cards: Option<String>,
 }
 
 /// Why a parsed `Seat` line did **not** become a dealt-in player.
@@ -127,11 +137,51 @@ impl HandFormat {
     }
 }
 
+/// Spec rule ids (`docs/specs/opponent-engine.md`, catalogue rows D01–D03) of
+/// the stored facts this parser extracts. `scripts/check-engine-spec.mjs` looks
+/// for them here to trace each catalogue row to its code.
+pub const RULE_SHOWN_CARDS: &str = "data.shown_cards";
+pub const RULE_BOUNTY: &str = "data.bounty";
+pub const RULE_VARIANT: &str = "data.variant";
+
+/// Finer-grained game variant than [`HandFormat`], stored in `hands.variant`
+/// (spec rule `data.variant`, `docs/specs/opponent-engine.md` section 3). The
+/// engine picks its per-format priors from it; [`HandFormat`] keeps its
+/// cash/tournament meaning for everything that already reads it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GameVariant {
+    /// `PokerStars Hand #` cash game, not Zoom.
+    Cash,
+    /// `PokerStars Zoom Hand #` cash game.
+    ZoomCash,
+    /// `Tournament #`, neither Zoom nor spin-like.
+    Tournament,
+    /// `Zoom Tournament #`.
+    ZoomTournament,
+    /// Spin-like: `Tournament #` (not Zoom) at a 3-max table whose buy-in has
+    /// no bounty component. Hand-history text never names a Spin & Go, so this
+    /// is the spec's detection rule, not a certainty.
+    Spin,
+}
+
+impl GameVariant {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            GameVariant::Cash => "cash",
+            GameVariant::ZoomCash => "zoom_cash",
+            GameVariant::Tournament => "tournament",
+            GameVariant::ZoomTournament => "zoom_tournament",
+            GameVariant::Spin => "spin",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ParsedHand {
     pub hand_id: String,
     pub site: String,
     pub format: HandFormat,
+    pub variant: GameVariant,
     pub table_name: String,
     pub max_seats: i64,
     pub button_seat: i64,

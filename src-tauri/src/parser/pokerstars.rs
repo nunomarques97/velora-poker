@@ -4,18 +4,18 @@ use regex::Regex;
 use std::sync::OnceLock;
 
 use super::model::{
-    ActionType, HandFormat, ParseError, ParsedAction, ParsedHand, ParsedPlayerResult, ParsedSeat,
-    SkippedSeat, Street,
+    ActionType, GameVariant, HandFormat, ParseError, ParsedAction, ParsedHand, ParsedPlayerResult,
+    ParsedSeat, SkippedSeat, Street,
 };
 use super::position;
 
 /// Parses PokerStars hand history text into structured [`ParsedHand`] values.
 ///
-/// Supports cash-game and tournament (including Zoom tournament) No Limit /
-/// Limit / Pot Limit Hold'em style hand histories with a standard
-/// `PokerStars Hand #...:` header. Other poker sites are out of scope for
-/// this parser; additional site/format parsers can be added later behind the
-/// [`HandHistoryParser`] trait.
+/// Supports cash-game (including Zoom cash) and tournament (including Zoom
+/// tournament) No Limit / Limit / Pot Limit Hold'em style hand histories with
+/// a standard `PokerStars Hand #...:` or `PokerStars Zoom Hand #...:` header.
+/// Other poker sites are out of scope for this parser; additional site/format
+/// parsers can be added later behind the [`HandHistoryParser`] trait.
 pub trait HandHistoryParser {
     fn site(&self) -> &'static str;
     fn parse(&self, text: &str) -> Vec<Result<ParsedHand, ParseError>>;
@@ -49,7 +49,7 @@ pub fn split_hands(text: &str) -> Vec<String> {
     let mut current = String::new();
 
     for line in text.lines() {
-        if line.starts_with("PokerStars Hand #") && !current.trim().is_empty() {
+        if is_hand_header(line) && !current.trim().is_empty() {
             push_hand_block(&mut hands, &current);
             current.clear();
         }
@@ -64,16 +64,25 @@ pub fn split_hands(text: &str) -> Vec<String> {
 
 fn push_hand_block(hands: &mut Vec<String>, block: &str) {
     let trimmed = block.trim();
-    if trimmed.starts_with("PokerStars Hand #") {
+    if is_hand_header(trimmed) {
         hands.push(trimmed.to_string());
     }
 }
+
+/// Zoom cash hands open with `PokerStars Zoom Hand #` instead of
+/// `PokerStars Hand #` (Zoom *tournaments* keep the plain prefix and say
+/// `Zoom Tournament #` later in the line).
+fn is_hand_header(line: &str) -> bool {
+    line.starts_with("PokerStars Hand #") || line.starts_with(ZOOM_CASH_PREFIX)
+}
+
+const ZOOM_CASH_PREFIX: &str = "PokerStars Zoom Hand #";
 
 fn header_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(
-            r"^PokerStars Hand #(\d+):\s+(.+?)\s+\(([\$€£]?)([\d.]+)/([\$€£]?)([\d.]+)(?:\s+([A-Z]{3}))?\)\s+-\s+(\d{4}/\d{2}/\d{2})\s+(\d{1,2}:\d{2}:\d{2})",
+            r"^PokerStars (?:Zoom )?Hand #(\d+):\s+(.+?)\s+\(([\$€£]?)([\d.]+)/([\$€£]?)([\d.]+)(?:\s+([A-Z]{3}))?\)\s+-\s+(\d{4}/\d{2}/\d{2})\s+(\d{1,2}:\d{2}:\d{2})",
         )
         .expect("valid header regex")
     })
@@ -128,6 +137,17 @@ fn seat_regex() -> &'static Regex {
 fn dealt_to_regex() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"^Dealt to (.+) \[.+\]").expect("valid dealt-to regex"))
+}
+
+/// The bounty inside a seat line's trailing text: `, €13.50 bounty)`. Strict on
+/// purpose — anything else (a missing amount, stray characters, two decimal
+/// points) yields no bounty rather than a misread one.
+fn seat_bounty_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"^,\s*[\$€£]?(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)? bounty\)")
+            .expect("valid seat bounty regex")
+    })
 }
 
 fn summary_seat_regex() -> &'static Regex {
@@ -190,6 +210,7 @@ fn split_buyin_and_game_type(raw: &str) -> (Option<String>, String) {
 struct HeaderInfo {
     hand_id: String,
     format: HandFormat,
+    is_zoom: bool,
     game_type: String,
     small_blind: f64,
     big_blind: f64,
@@ -228,6 +249,7 @@ fn parse_cash_header(line: &str) -> Result<HeaderInfo, ParseError> {
     Ok(HeaderInfo {
         hand_id,
         format: HandFormat::Cash,
+        is_zoom: line.starts_with(ZOOM_CASH_PREFIX),
         game_type,
         small_blind,
         big_blind,
@@ -256,6 +278,7 @@ fn parse_tournament_header(line: &str) -> Result<HeaderInfo, ParseError> {
     Ok(HeaderInfo {
         hand_id,
         format: HandFormat::Tournament,
+        is_zoom: line.contains("Zoom Tournament #"),
         game_type,
         small_blind,
         big_blind,
@@ -425,6 +448,81 @@ fn compute_contributed(actions: &[ParsedAction]) -> HashMap<String, f64> {
     contributed
 }
 
+/// Bounty amount from a seat line's trailing text (spec rule `data.bounty`).
+/// `None` when there is no bounty or its text is malformed.
+fn parse_seat_bounty(marker: &str) -> Option<f64> {
+    let caps = seat_bounty_regex().captures(marker)?;
+    let whole = caps[1].replace(',', "");
+    let fraction = caps.get(2).map_or("", |m| m.as_str());
+    format!("{whole}{fraction}")
+        .parse::<f64>()
+        .ok()
+        .filter(|amount| amount.is_finite())
+}
+
+/// Normalises the text inside a card bracket (`Ah Kd`) to space-separated
+/// cards, or `None` when it is not a clean set: every token a rank from
+/// `23456789TJQKA` and a suit from `cdhs`, no card twice, and between two
+/// (Hold'em) and five (five-card Omaha) cards. A single card shown on its own
+/// is not a hand, so it is not stored either (spec rule `data.shown_cards`).
+fn parse_card_set(text: &str) -> Option<String> {
+    let cards: Vec<&str> = text.split_whitespace().collect();
+    if !(2..=5).contains(&cards.len()) {
+        return None;
+    }
+    for (i, card) in cards.iter().enumerate() {
+        let mut chars = card.chars();
+        let (Some(rank), Some(suit), None) = (chars.next(), chars.next(), chars.next()) else {
+            return None;
+        };
+        if !"23456789TJQKA".contains(rank) || !"cdhs".contains(suit) {
+            return None;
+        }
+        if cards[..i].contains(card) {
+            return None;
+        }
+    }
+    Some(cards.join(" "))
+}
+
+/// The text of the bracket that opens `rest` (after optional whitespace):
+/// `" [Ah Kd] (a pair)"` gives `Some("Ah Kd")`.
+fn leading_bracket(rest: &str) -> Option<&str> {
+    let inner = rest.trim_start().strip_prefix('[')?;
+    inner.split_once(']').map(|(cards, _)| cards)
+}
+
+/// Matches `"<Name>: shows [..]"`, the hand-body line a player writes when
+/// they show their cards, at showdown or voluntarily. Returns the player and
+/// their normalised cards, `None` for the cards when the bracket is malformed
+/// (the line is still consumed: it is never an action).
+fn parse_shows_line(line: &str, known_names: &[String]) -> Option<(String, Option<String>)> {
+    let (name, rest) = strip_known_name(line, known_names)?;
+    let rest = rest.strip_prefix(':')?.trim_start().strip_prefix("shows ")?;
+    Some((name, leading_bracket(rest).and_then(parse_card_set)))
+}
+
+/// Spin-like detection of spec section 3: a three-component buy-in
+/// (`€13.50+€13.50+€3.00`) carries a bounty, which a Spin & Go never has.
+fn buy_in_has_bounty(buy_in: Option<&str>) -> bool {
+    buy_in.map_or(false, |b| b.split('+').count() >= 3)
+}
+
+/// Spec rule `data.variant` (section 3 of `docs/specs/opponent-engine.md`).
+fn game_variant(header: &HeaderInfo, max_seats: i64) -> GameVariant {
+    match (header.format, header.is_zoom) {
+        (HandFormat::Cash, false) => GameVariant::Cash,
+        (HandFormat::Cash, true) => GameVariant::ZoomCash,
+        (HandFormat::Tournament, true) => GameVariant::ZoomTournament,
+        (HandFormat::Tournament, false)
+            if max_seats == 3 && !buy_in_has_bounty(header.buy_in.as_deref()) =>
+        {
+            GameVariant::Spin
+        }
+        (HandFormat::Tournament, false) => GameVariant::Tournament,
+    }
+}
+
 pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
     let block = block.trim();
     if block.is_empty() {
@@ -455,6 +553,10 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
     // real `*** SUMMARY ***` description. Both feed the dealt-in decision below.
     let mut seat_markers: HashMap<String, String> = HashMap::new();
     let mut summary_described: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // First clean card set seen per player: `Dealt to`, `shows`, `showed` or
+    // `mucked`. They agree on a well-formed hand; keeping the first makes the
+    // result independent of which of them a malformed line spoiled.
+    let mut shown_cards: HashMap<String, String> = HashMap::new();
 
     for line in lines {
         let line = line.trim_end();
@@ -478,6 +580,8 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
                     player_name: name,
                     starting_stack: parse_money(&caps[3]).unwrap_or(0.0),
                     position: None,
+                    bounty: parse_seat_bounty(&caps[4]),
+                    hole_cards: None,
                 });
                 continue;
             }
@@ -518,6 +622,14 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
                     if !desc.is_empty() {
                         summary_described.insert(name.clone());
                     }
+                    let shown = desc
+                        .strip_prefix("showed ")
+                        .or_else(|| desc.strip_prefix("mucked "))
+                        .and_then(leading_bracket)
+                        .and_then(parse_card_set);
+                    if let Some(cards) = shown {
+                        shown_cards.entry(name.clone()).or_insert(cards);
+                    }
                     let folded = desc.starts_with("folded");
                     let won = desc.contains("collected") || desc.contains("won (");
                     let went_to_showdown = has_showdown && !folded;
@@ -540,12 +652,22 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
             .and_then(|c| c.get(1))
             .map(|m| m.as_str().to_string())
         {
+            let cards = &line["Dealt to ".len() + name.len()..];
+            if let Some(cards) = leading_bracket(cards).and_then(parse_card_set) {
+                shown_cards.entry(name.clone()).or_insert(cards);
+            }
             hero_name = Some(name);
             continue;
         }
 
         {
             let known_names: Vec<String> = seats.iter().map(|s| s.player_name.clone()).collect();
+            if let Some((name, cards)) = parse_shows_line(line, &known_names) {
+                if let Some(cards) = cards {
+                    shown_cards.entry(name).or_insert(cards);
+                }
+                continue;
+            }
             if let Some((name, amount)) = parse_uncalled_bet_line(line) {
                 *uncalled_returned.entry(name).or_insert(0.0) += amount;
                 continue;
@@ -619,6 +741,9 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
     {
         seat.position = label;
     }
+    for seat in seats.iter_mut() {
+        seat.hole_cards = shown_cards.get(&seat.player_name).cloned();
+    }
 
     // Net money result is only meaningful for cash games: tournament chips
     // aren't money, and PokerStars hand-history text carries no buy-in/payout
@@ -643,10 +768,13 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
         }
     }
 
+    let variant = game_variant(&header, max_seats);
+
     Ok(ParsedHand {
         hand_id: header.hand_id,
         site: "pokerstars".to_string(),
         format: header.format,
+        variant,
         table_name,
         max_seats,
         button_seat,

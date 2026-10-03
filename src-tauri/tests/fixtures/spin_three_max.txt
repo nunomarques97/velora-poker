@@ -1,0 +1,53 @@
+PokerStars Hand #262000000101: Tournament #3900000001, $4.80+$0.20 USD Hold'em No Limit - Level I (10/20) - 2026/09/14 22:10:03 WET [2026/09/14 17:10:03 ET]
+Table '3900000001 1' 3-max Seat #1 is the button
+Seat 1: Hero (500 in chips)
+Seat 2: SpinCycle_9 (500 in chips)
+Seat 3: GrindHouse (500 in chips)
+SpinCycle_9: posts small blind 10
+GrindHouse: posts big blind 20
+*** HOLE CARDS ***
+Dealt to Hero [Kc 9c]
+Hero: raises 20 to 40
+SpinCycle_9: folds
+GrindHouse: raises 460 to 500 and is all-in
+Hero: folds
+Uncalled bet (460) returned to GrindHouse
+GrindHouse collected 90 from pot
+GrindHouse: doesn't show hand
+*** SUMMARY ***
+Total pot 90 | Rake 0
+Seat 1: Hero (button) folded before Flop
+Seat 2: SpinCycle_9 (small blind) folded before Flop
+Seat 3: GrindHouse (big blind) collected (90)
+
+
+
+PokerStars Hand #262000000102: Tournament #3900000001, $4.80+$0.20 USD Hold'em No Limit - Level I (10/20) - 2026/09/14 22:10:41 WET [2026/09/14 17:10:41 ET]
+Table '3900000001 1' 3-max Seat #2 is the button
+Seat 1: Hero (460 in chips)
+Seat 2: SpinCycle_9 (490 in chips)
+Seat 3: GrindHouse (550 in chips)
+GrindHouse: posts small blind 10
+Hero: posts big blind 20
+*** HOLE CARDS ***
+Dealt to Hero [6h 6d]
+SpinCycle_9: raises 470 to 490 and is all-in
+GrindHouse: folds
+Hero: calls 440 and is all-in
+Uncalled bet (30) returned to SpinCycle_9
+*** FLOP *** [Qd 8c 3s]
+*** TURN *** [Qd 8c 3s] [2h]
+*** RIVER *** [Qd 8c 3s 2h] [Js]
+*** SHOW DOWN ***
+Hero: shows [6h 6d] (a pair of Sixes)
+SpinCycle_9: shows [Ah Kc] (high card Ace)
+Hero collected 930 from pot
+*** SUMMARY ***
+Total pot 930 | Rake 0
+Board [Qd 8c 3s 2h Js]
+Seat 1: Hero (big blind) showed [6h 6d] and won (930) with a pair of Sixes
+Seat 2: SpinCycle_9 (button) showed [Ah Kc] and lost with high card Ace
+Seat 3: GrindHouse (small blind) folded before Flop
+
+
+

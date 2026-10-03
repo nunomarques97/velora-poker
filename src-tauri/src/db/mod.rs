@@ -209,12 +209,113 @@ fn migrate_schema(conn: &Connection) -> rusqlite::Result<()> {
     add_column_if_missing(conn, "hands", "tournament_id", "TEXT")?;
     add_column_if_missing(conn, "hands", "buy_in", "TEXT")?;
     add_column_if_missing(conn, "hands", "level", "TEXT")?;
+    add_column_if_missing(conn, "hands", "variant", "TEXT")?;
+    add_column_if_missing(conn, "player_hands", "bounty", "REAL")?;
     migrate_hud_positions_to_relative(conn)?;
     migrate_seat_templates_to_hero_relative(conn)?;
     clamp_stored_positions(conn)?;
     migrate_seat_templates_to_seat_positions(conn)?;
     repair_ingestion_integrity(conn)?;
+    backfill_hand_facts(conn)?;
     Ok(())
+}
+
+/// Spec rule id of the backfill below (catalogue row D04).
+pub const RULE_REPARSE_BACKFILL: &str = "data.reparse_backfill";
+/// Settings key set once the backfill below has run on a database.
+pub const HAND_FACTS_BACKFILL_FLAG: &str = "hand_facts_backfilled_v1";
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct FactBackfillReport {
+    pub hands_examined: i64,
+    pub hands_reparse_failed: i64,
+    pub hands_variant_written: i64,
+    pub player_rows_written: i64,
+}
+
+/// Fills the facts the parser learned to extract after hands were already
+/// stored: `player_hands.hole_cards` (never written before), the new
+/// `player_hands.bounty` and the new `hands.variant`. Spec row D04,
+/// `docs/specs/opponent-engine.md`.
+///
+/// A reparse of `hands.raw_text`, like the ingestion repair above, but far
+/// narrower: it writes **only** those three columns of rows that already exist.
+/// It never inserts or deletes a hand, a player-hand row or a player, and never
+/// touches notes, colours, positions, profiles or settings (the flag is the one
+/// settings row it adds, through the guard, not the body).
+///
+/// # Idempotence
+///
+/// Guarded by a settings flag so it runs once per database, and the body is
+/// also re-runnable on its own: every `UPDATE` is conditioned on the stored
+/// value differing from the parsed one, so a second pass writes nothing.
+fn backfill_hand_facts(conn: &Connection) -> rusqlite::Result<()> {
+    if get_setting(conn, HAND_FACTS_BACKFILL_FLAG)?.is_some() {
+        return Ok(());
+    }
+    run_hand_facts_backfill(conn)?;
+    set_setting(conn, HAND_FACTS_BACKFILL_FLAG, "true")?;
+    Ok(())
+}
+
+/// The backfill body, callable directly so tests can run it without clearing
+/// the flag. All-or-nothing: one transaction, so an error leaves the database
+/// as it was and the flag unset, to be retried on the next start.
+pub fn run_hand_facts_backfill(conn: &Connection) -> rusqlite::Result<FactBackfillReport> {
+    let mut report = FactBackfillReport::default();
+    let tx = conn.unchecked_transaction()?;
+
+    let rows: Vec<(i64, String, String)> = {
+        let mut stmt =
+            tx.prepare("SELECT id, site, COALESCE(raw_text, '') FROM hands ORDER BY id")?;
+        let mapped = stmt.query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+        })?;
+        mapped.collect::<Result<Vec<_>, _>>()?
+    };
+
+    {
+        let mut find_player = tx.prepare("SELECT id FROM players WHERE site = ?1 AND name = ?2")?;
+        let mut write_variant =
+            tx.prepare("UPDATE hands SET variant = ?2 WHERE id = ?1 AND variant IS NOT ?2")?;
+        let mut write_player = tx.prepare(
+            "UPDATE player_hands SET hole_cards = ?3, bounty = ?4
+              WHERE hand_id = ?1 AND player_id = ?2
+                AND (hole_cards IS NOT ?3 OR bounty IS NOT ?4)",
+        )?;
+
+        for (hand_row_id, site, raw_text) in rows {
+            report.hands_examined += 1;
+            let hand = match crate::parser::parse_hand_block(&raw_text) {
+                Ok(hand) => hand,
+                Err(_) => {
+                    report.hands_reparse_failed += 1;
+                    continue;
+                }
+            };
+
+            report.hands_variant_written +=
+                write_variant.execute(params![hand_row_id, hand.variant.as_str()])? as i64;
+
+            for seat in &hand.seats {
+                // Looked up, never created: a backfill must not add players.
+                let player_id: Option<i64> = find_player
+                    .query_row(params![site, seat.player_name], |row| row.get(0))
+                    .optional()?;
+                if let Some(player_id) = player_id {
+                    report.player_rows_written += write_player.execute(params![
+                        hand_row_id,
+                        player_id,
+                        seat.hole_cards,
+                        seat.bounty
+                    ])? as i64;
+                }
+            }
+        }
+    }
+
+    tx.commit()?;
+    Ok(report)
 }
 
 /// Reparses every stored hand and repairs the rows the old parser wrote

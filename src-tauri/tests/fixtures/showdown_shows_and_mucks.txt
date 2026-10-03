@@ -1,0 +1,88 @@
+PokerStars Hand #262100000201:  Hold'em No Limit (€0.05/€0.10 EUR) - 2026/09/20 22:41:17 WET [2026/09/20 17:41:17 ET]
+Table 'Sirona II' 6-max Seat #3 is the button
+Seat 1: Hero (€10 in chips)
+Seat 2: Barrel_Bjorn (€11.20 in chips)
+Seat 3: CallStation62 (€8.45 in chips)
+Seat 4: quietnit (€10.60 in chips)
+Seat 5: Mr.Overbet (€14.05 in chips)
+Seat 6: punter_x (€6.30 in chips)
+quietnit: posts small blind €0.05
+Mr.Overbet: posts big blind €0.10
+*** HOLE CARDS ***
+Dealt to Hero [9c 4h]
+punter_x: folds
+Hero: folds
+Barrel_Bjorn: raises €0.20 to €0.30
+CallStation62: calls €0.30
+quietnit: folds
+Mr.Overbet: calls €0.20
+*** FLOP *** [Ks 8d 5c]
+Mr.Overbet: checks
+Barrel_Bjorn: bets €0.55
+CallStation62: calls €0.55
+Mr.Overbet: folds
+*** TURN *** [Ks 8d 5c] [2h]
+Barrel_Bjorn: bets €1.40
+CallStation62: calls €1.40
+*** RIVER *** [Ks 8d 5c 2h] [Qd]
+Barrel_Bjorn: bets €4.10
+CallStation62: calls €4.10
+*** SHOW DOWN ***
+Barrel_Bjorn: shows [Ah Kh] (a pair of Kings)
+CallStation62: mucks hand
+Barrel_Bjorn collected €12.70 from pot
+*** SUMMARY ***
+Total pot €13.05 | Rake €0.35
+Board [Ks 8d 5c 2h Qd]
+Seat 1: Hero folded before Flop (didn't bet)
+Seat 2: Barrel_Bjorn showed [Ah Kh] and won (€12.70) with a pair of Kings
+Seat 3: CallStation62 (button) mucked [Kd Jc]
+Seat 4: quietnit (small blind) folded before Flop
+Seat 5: Mr.Overbet (big blind) folded on the Flop
+Seat 6: punter_x folded before Flop (didn't bet)
+
+
+
+PokerStars Hand #262100000202:  Hold'em No Limit (€0.05/€0.10 EUR) - 2026/09/20 22:42:05 WET [2026/09/20 17:42:05 ET]
+Table 'Sirona II' 6-max Seat #4 is the button
+Seat 1: Hero (€10 in chips)
+Seat 2: Barrel_Bjorn (€17.55 in chips)
+Seat 3: CallStation62 (€2.10 in chips)
+Seat 4: quietnit (€10.55 in chips)
+Seat 5: Mr.Overbet (€13.75 in chips)
+Seat 6: punter_x (€6.30 in chips)
+Mr.Overbet: posts small blind €0.05
+punter_x: posts big blind €0.10
+*** HOLE CARDS ***
+Dealt to Hero [Qc 3d]
+Hero: folds
+Barrel_Bjorn: raises €0.20 to €0.30
+CallStation62: folds
+quietnit: folds
+Mr.Overbet: calls €0.25
+punter_x: folds
+*** FLOP *** [Jh 6s 6d]
+Mr.Overbet: checks
+Barrel_Bjorn: bets €0.35
+Mr.Overbet: calls €0.35
+*** TURN *** [Jh 6s 6d] [4c]
+Mr.Overbet: checks
+Barrel_Bjorn: checks
+*** RIVER *** [Jh 6s 6d 4c] [9h]
+Mr.Overbet: bets €2.20
+Barrel_Bjorn: folds
+Uncalled bet (€2.20) returned to Mr.Overbet
+Mr.Overbet collected €1.36 from pot
+Mr.Overbet: shows [8c 7c] (a pair of Sixes)
+*** SUMMARY ***
+Total pot €1.40 | Rake €0.04
+Board [Jh 6s 6d 4c 9h]
+Seat 1: Hero folded before Flop (didn't bet)
+Seat 2: Barrel_Bjorn folded on the River
+Seat 3: CallStation62 folded before Flop (didn't bet)
+Seat 4: quietnit (button) folded before Flop (didn't bet)
+Seat 5: Mr.Overbet (small blind) collected (€1.36)
+Seat 6: punter_x (big blind) folded before Flop
+
+
+

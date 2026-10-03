@@ -1,0 +1,81 @@
+PokerStars Zoom Hand #254100000001:  Hold'em No Limit ($0.05/$0.10) - 2026/09/12 21:04:11 WET [2026/09/12 16:04:11 ET]
+Table 'Halley' 6-max Seat #1 is the button
+Seat 1: Hero ($10 in chips)
+Seat 2: KnightRider77 ($9.85 in chips)
+Seat 3: lucky_pierre ($12.40 in chips)
+Seat 4: Fjord_Mist ($10 in chips)
+Seat 5: zz_tilt ($4.12 in chips)
+Seat 6: OldManRiver ($21.06 in chips)
+KnightRider77: posts small blind $0.05
+lucky_pierre: posts big blind $0.10
+*** HOLE CARDS ***
+Dealt to Hero [Ah Jd]
+Fjord_Mist: folds
+zz_tilt: folds
+OldManRiver: folds
+Hero: raises $0.15 to $0.25
+KnightRider77: folds
+lucky_pierre: calls $0.15
+*** FLOP *** [Jc 7h 2s]
+lucky_pierre: checks
+Hero: bets $0.17
+lucky_pierre: folds
+Uncalled bet ($0.17) returned to Hero
+Hero collected $0.53 from pot
+Hero: doesn't show hand
+*** SUMMARY ***
+Total pot $0.55 | Rake $0.02
+Board [Jc 7h 2s]
+Seat 1: Hero (button) collected ($0.53)
+Seat 2: KnightRider77 (small blind) folded before Flop
+Seat 3: lucky_pierre (big blind) folded on the Flop
+Seat 4: Fjord_Mist folded before Flop (didn't bet)
+Seat 5: zz_tilt folded before Flop (didn't bet)
+Seat 6: OldManRiver folded before Flop (didn't bet)
+
+
+
+PokerStars Zoom Hand #254100000002:  Hold'em No Limit ($0.05/$0.10) - 2026/09/12 21:05:02 WET [2026/09/12 16:05:02 ET]
+Table 'Halley' 6-max Seat #4 is the button
+Seat 1: Hero ($10.28 in chips)
+Seat 2: Sandbagger_88 ($10 in chips)
+Seat 3: lucky_pierre ($12.15 in chips)
+Seat 4: Fjord_Mist ($10 in chips)
+Seat 5: Kaleido ($7.60 in chips)
+Seat 6: OldManRiver ($21.06 in chips)
+Kaleido: posts small blind $0.05
+OldManRiver: posts big blind $0.10
+*** HOLE CARDS ***
+Dealt to Hero [Td Tc]
+Hero: raises $0.20 to $0.30
+Sandbagger_88: folds
+lucky_pierre: calls $0.30
+Fjord_Mist: folds
+Kaleido: folds
+OldManRiver: folds
+*** FLOP *** [9s 4d 2c]
+Hero: bets $0.40
+lucky_pierre: calls $0.40
+*** TURN *** [9s 4d 2c] [Kh]
+Hero: checks
+lucky_pierre: bets $0.85
+Hero: calls $0.85
+*** RIVER *** [9s 4d 2c Kh] [3d]
+Hero: checks
+lucky_pierre: checks
+*** SHOW DOWN ***
+Hero: shows [Td Tc] (a pair of Tens)
+lucky_pierre: mucks hand
+Hero collected $3.09 from pot
+*** SUMMARY ***
+Total pot $3.25 | Rake $0.16
+Board [9s 4d 2c Kh 3d]
+Seat 1: Hero showed [Td Tc] and won ($3.09) with a pair of Tens
+Seat 2: Sandbagger_88 folded before Flop (didn't bet)
+Seat 3: lucky_pierre mucked [8h 8s]
+Seat 4: Fjord_Mist (button) folded before Flop (didn't bet)
+Seat 5: Kaleido (small blind) folded before Flop
+Seat 6: OldManRiver (big blind) folded before Flop
+
+
+

@@ -152,8 +152,8 @@ fn import_hand(conn: &mut Connection, hand: &ParsedHand) -> Result<bool, rusqlit
     }
 
     tx.execute(
-        "INSERT INTO hands (site, hand_id, format, table_name, game_type, tournament_id, buy_in, level, small_blind, big_blind, currency, max_seats, button_seat, played_at, raw_text, imported_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+        "INSERT INTO hands (site, hand_id, format, table_name, game_type, tournament_id, buy_in, level, small_blind, big_blind, currency, max_seats, button_seat, played_at, raw_text, imported_at, variant)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
         params![
             hand.site,
             hand.hand_id,
@@ -171,6 +171,7 @@ fn import_hand(conn: &mut Connection, hand: &ParsedHand) -> Result<bool, rusqlit
             hand.played_at,
             hand.raw_text,
             db::now_iso(),
+            hand.variant.as_str(),
         ],
     )?;
     let hand_row_id = tx.last_insert_rowid();
@@ -185,8 +186,8 @@ fn import_hand(conn: &mut Connection, hand: &ParsedHand) -> Result<bool, rusqlit
             .unwrap_or_default();
 
         tx.execute(
-            "INSERT INTO player_hands (hand_id, player_id, seat, starting_stack, position, is_hero, went_to_showdown, won_at_showdown, net_result)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO player_hands (hand_id, player_id, seat, starting_stack, position, is_hero, went_to_showdown, won_at_showdown, net_result, hole_cards, bounty)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 hand_row_id,
                 player_id,
@@ -197,6 +198,8 @@ fn import_hand(conn: &mut Connection, hand: &ParsedHand) -> Result<bool, rusqlit
                 result.went_to_showdown as i64,
                 result.won_at_showdown as i64,
                 result.net_result,
+                seat.hole_cards,
+                seat.bounty,
             ],
         )?;
     }
