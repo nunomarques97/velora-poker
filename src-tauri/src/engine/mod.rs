@@ -15,6 +15,7 @@ pub mod pooling;
 pub mod pot;
 pub mod preflop;
 pub mod recency;
+pub mod rules;
 pub mod showdown;
 
 use rusqlite::Connection;
@@ -42,6 +43,10 @@ pub use pooling::{
 pub use pot::{parse_total_pot, replay_pot, PotReplay, SizeBucket, SizedAction, UncalledReturn};
 pub use preflop::{extract_player_preflop, extract_preflop};
 pub use recency::{recent_form, recency_weight, FormFlag, RecentForm};
+pub use rules::{
+    evaluate as evaluate_rules, player_rule_input, rule_def, rule_input, templates, EngineEvidence, EngineRuleResult,
+    Family, RuleDef, RuleInput, ShowdownTally, TemplateKind, RULES,
+};
 pub use showdown::{
     extract_showdowns, load_showdown_boards, parse_board, showdown_record, sizing_tally,
     sizing_tells, LastAggression, LineStep, ShowdownRecord, ShowdownResult, SizingTell, ValueClass,
