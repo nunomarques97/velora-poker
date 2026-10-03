@@ -537,6 +537,16 @@ export async function onOverlayDismissedChanged(
 }
 
 /**
+ * Fires when the cursor leaves every hot zone of one table's overlay, the
+ * moment the native hit test makes that window click-through again. From
+ * then on the overlay's webview gets no mouse input, so a `pointerleave` it
+ * has not seen yet may never come; the hover read card closes on this.
+ */
+export async function onOverlayPointerLeft(callback: (tableId: number) => void): Promise<UnlistenFn> {
+  return listen<{ tableId: number }>("overlay-pointer-left", (event) => callback(event.payload.tableId));
+}
+
+/**
  * Fires whenever the set of tracked PokerStars table windows changes — a
  * table opened, closed, was renamed or was minimized — so the HUD page's table
  * list stays live without polling. Replaced an earlier bare count broadcast, which

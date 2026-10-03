@@ -71,6 +71,21 @@ pub const OVERLAY_VISIBILITY_EVENT: &str = "overlay-visibility-changed";
 /// and on-screen the whole time rather than being hidden and rebuilt.
 pub const OVERLAY_DISMISSED_EVENT: &str = "overlay-dismissed-changed";
 
+/// Broadcast (payload: `OverlayPointerLeft`) when the cursor leaves every hot
+/// zone of one table's overlay, i.e. the moment `hittest` makes that window
+/// click-through again. From then on the webview receives no mouse input at
+/// all, so a `pointerleave` it has not yet seen may never arrive; the
+/// overlay closes its hover read card on this event instead of waiting for
+/// one.
+pub const OVERLAY_POINTER_LEFT_EVENT: &str = "overlay-pointer-left";
+
+/// Which table's overlay the cursor just left — see `OVERLAY_POINTER_LEFT_EVENT`.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverlayPointerLeft {
+    pub table_id: u32,
+}
+
 // There is deliberately no overlay "mode". A whole-window Reposition mode
 // once cleared click-through for an entire overlay so a card could be
 // dragged, and while it lasted the table's Fold/Call/Raise were unreachable.
@@ -82,6 +97,26 @@ pub const OVERLAY_DISMISSED_EVENT: &str = "overlay-dismissed-changed";
 /// `setup()`, before the overlay thread starts.
 pub fn install(app_handle: &AppHandle) {
     let _ = APP_HANDLE.set(app_handle.clone());
+    #[cfg(windows)]
+    hittest::set_pointer_left_sink(emit_pointer_left);
+}
+
+/// Tells every overlay which table the cursor just left (see
+/// `OVERLAY_POINTER_LEFT_EVENT`). Fire and forget: `emit` only queues the
+/// event for each webview, so the 60Hz tracker never waits on a window.
+/// Called with no registry lock held: resolving a label takes the manager's
+/// pool lock.
+#[cfg(windows)]
+fn emit_pointer_left(labels: &[String]) {
+    use tauri::Emitter;
+    let Some(app_handle) = app_handle() else {
+        return;
+    };
+    for label in labels {
+        if let Some(table_id) = manager::table_for_label(label) {
+            let _ = app_handle.emit(OVERLAY_POINTER_LEFT_EVENT, OverlayPointerLeft { table_id });
+        }
+    }
 }
 
 /// One always-clickable rectangle, in CSS pixels relative to the overlay

@@ -3,6 +3,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  CHIP_TAG_BASE_PX,
+  HOVER_CARD_LINE_HEIGHT,
   MEDIUM_TABLE_SIZE,
   MIN_FONT_PX,
   MIN_TABLE_SIZE,
@@ -12,13 +14,17 @@ import {
   chipScale,
   defaultSeatAnchors,
   holeCardsRect,
+  hoverCardMetrics,
   layoutSeats,
+  placeHoverCard,
   protectedZones,
   rectsOverlap,
   seatKeys,
   seatPlateRect,
   type ChipMetrics,
   type ChipPlacement,
+  type HoverCardInput,
+  type HoverCardPlacement,
   type Rect,
   type SeatFrame,
 } from "./seatLayout.js";
@@ -336,5 +342,209 @@ describe("spare slots", () => {
         }
       }
     }
+  });
+});
+
+// ---------------------------------------------------------------------
+// Tagged chips and the hover read card (strategic-analysis build).
+// ---------------------------------------------------------------------
+
+/** The two sizes the acceptance criteria name: PokerStars' minimum and default table. */
+const CARD_SIZES: ReadonlyArray<readonly [number, number]> = [
+  [MIN_TABLE_SIZE.width, MIN_TABLE_SIZE.height],
+  [MEDIUM_TABLE_SIZE.width, MEDIUM_TABLE_SIZE.height],
+];
+const FRAMES = ["hero", "absolute"] as const;
+const heroKeyFor = (frame: SeatFrame) => (frame === "absolute" ? 1 : undefined);
+
+/**
+ * Asserts the card's whole contract for one placement: inside the window,
+ * over no protected zone (board/pot, bet chips, the hero's hole cards,
+ * action buttons), not over its own chip, and at the size it was given.
+ */
+function assertCardSafe(input: HoverCardInput, placement: HoverCardPlacement, where: string) {
+  const r = placement.rect;
+  assert.ok(inWindow(r), `${where}: card leaves the window`);
+  assert.ok(!rectsOverlap(r, input.chip), `${where}: card covers its own chip`);
+  for (const zone of protectedZones(input.maxPlayers, input.frame, input.heroSeatKey)) {
+    assert.ok(!rectsOverlap(r, zone.rect), `${where}: card covers ${zone.kind}${zone.seatKey ?? ""}`);
+  }
+  assert.ok(Math.abs(r.w * input.windowW - input.card.widthPx) < 1e-6, `${where}: card width changed`);
+  assert.ok(Math.abs(r.h * input.windowH - input.card.heightPx) < 1e-6, `${where}: card height changed`);
+}
+
+/**
+ * Card heights the tests place: two typical reads, two reads at the clamp,
+ * and one read at the clamp (four lines, border and padding, no rule).
+ */
+function cardHeights(w: number, h: number) {
+  const m = hoverCardMetrics(w, h);
+  const line = m.fontPx * HOVER_CARD_LINE_HEIGHT;
+  return { m, typical: m.typicalHeightPx, max: m.maxHeightPx, oneRead: Math.ceil(4 * line + 10) };
+}
+
+describe("tagged chip", () => {
+  it("adds the tag segment's width, scaled like the rest of the chip", () => {
+    for (const [w, h] of CARD_SIZES) {
+      const plain = chipMetrics(w, h, "compact");
+      const tagged = chipMetrics(w, h, "compact", true);
+      assert.ok(Math.abs(tagged.widthPx - plain.widthPx - CHIP_TAG_BASE_PX * plain.scale) < 1e-9);
+      assert.equal(tagged.fontPx, plain.fontPx);
+      assert.equal(tagged.heightPx, plain.heightPx);
+    }
+    const min = chipMetrics(MIN_TABLE_SIZE.width, MIN_TABLE_SIZE.height, "compact", true);
+    const medium = chipMetrics(MEDIUM_TABLE_SIZE.width, MEDIUM_TABLE_SIZE.height, "compact", true);
+    assert.ok(min.fontPx >= MIN_FONT_PX, `tag text ${min.fontPx}px at 483x359`);
+    assert.ok(medium.widthPx > min.widthPx && medium.fontPx > min.fontPx, "the tag scales up with the table");
+  });
+
+  for (const n of TABLES) {
+    for (const frame of FRAMES) {
+      for (const [w, h] of CARD_SIZES) {
+        for (const model of ["compact", "badge"] as const) {
+          it(`${label(n, frame, w, h)} ${model}: tag-width chips overlap no chip, no protected zone, stay in the window`, () => {
+            const heroSeatKey = heroKeyFor(frame);
+            const layout = layoutSeats({ maxPlayers: n, frame, windowW: w, windowH: h, model, tagged: true, heroSeatKey });
+            assert.equal(layout.chip.widthPx, chipMetrics(w, h, model, true).widthPx);
+            const rects = layout.positions.map((p) => rectOf(p, layout.chip, w, h));
+            rects.forEach((r, i) => {
+              const seat = layout.positions[i].seatKey;
+              assert.ok(inWindow(r), `seat ${seat} out of the window`);
+              rects.slice(i + 1).forEach((o, j) =>
+                assert.ok(!rectsOverlap(r, o), `seats ${seat} and ${layout.positions[i + 1 + j].seatKey} overlap`),
+              );
+              for (const zone of protectedZones(n, frame, heroSeatKey)) {
+                assert.ok(!rectsOverlap(r, zone.rect), `seat ${seat} covers ${zone.kind}${zone.seatKey ?? ""}`);
+              }
+            });
+          });
+        }
+      }
+    }
+  }
+});
+
+describe("hover read card", () => {
+  it("keeps card text at 10px or more and scales it with the table", () => {
+    const min = hoverCardMetrics(MIN_TABLE_SIZE.width, MIN_TABLE_SIZE.height);
+    const medium = hoverCardMetrics(MEDIUM_TABLE_SIZE.width, MEDIUM_TABLE_SIZE.height);
+    assert.ok(min.fontPx >= MIN_FONT_PX);
+    assert.ok(medium.fontPx > min.fontPx && medium.widthPx > min.widthPx);
+    assert.ok(min.widthPx < MIN_TABLE_SIZE.width / 2, "the card takes under half a minimum table's width");
+    assert.ok(min.typicalHeightPx <= min.maxHeightPx);
+  });
+
+  for (const n of TABLES) {
+    for (const frame of FRAMES) {
+      for (const [w, h] of CARD_SIZES) {
+        it(`${label(n, frame, w, h)}: every default chip gets a safe card`, () => {
+          const heroSeatKey = heroKeyFor(frame);
+          const layout = layoutSeats({ maxPlayers: n, frame, windowW: w, windowH: h, tagged: true, heroSeatKey });
+          const rects = layout.positions.map((p) => rectOf(p, layout.chip, w, h));
+          const { m, typical, max, oneRead } = cardHeights(w, h);
+          rects.forEach((chip, i) => {
+            const seat = layout.positions[i].seatKey;
+            const otherChips = rects.filter((_, j) => j !== i);
+            const cases: ReadonlyArray<readonly [string, number, boolean]> = [
+              ["two typical reads", typical, true],
+              ["one clamped read", oneRead, true],
+              ["two clamped reads", max, false],
+            ];
+            for (const [what, height, required] of cases) {
+              const input: HoverCardInput = {
+                maxPlayers: n, frame, windowW: w, windowH: h, heroSeatKey, chip, otherChips,
+                card: { widthPx: m.widthPx, heightPx: height },
+              };
+              const placement = placeHoverCard(input);
+              if (required) assert.ok(placement, `seat ${seat}: no place for ${what}`);
+              if (!placement) continue;
+              assertCardSafe(input, placement, `seat ${seat} ${what}`);
+              if (placement.fit === "clear") {
+                otherChips.forEach((o) => assert.ok(!rectsOverlap(placement.rect, o), `seat ${seat}: 'clear' card over a chip`));
+              }
+              if (placement.fit !== "overOpponentCards") {
+                for (const a of defaultSeatAnchors(n, frame)) {
+                  assert.ok(!rectsOverlap(placement.rect, holeCardsRect(a)), `seat ${seat}: card over seat ${a.seatKey}'s cards`);
+                }
+              }
+            }
+          });
+        });
+
+        it(`${label(n, frame, w, h)}: chips dragged against every edge and corner still get a safe card`, () => {
+          const heroSeatKey = heroKeyFor(frame);
+          const chip = chipMetrics(w, h, "compact", true);
+          const cw = chip.widthPx / w;
+          const chh = chip.heightPx / h;
+          const { m, typical, max } = cardHeights(w, h);
+          const steps = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1];
+          const spots: Array<[number, number]> = [];
+          for (const t of steps) spots.push([t, 0], [t, 1], [0, t], [1, t]);
+          for (const [fx, fy] of spots) {
+            const rect: Rect = { x: fx * (1 - cw), y: fy * (1 - chh), w: cw, h: chh };
+            const cases: ReadonlyArray<readonly [number, boolean]> = [[typical, true], [max, false]];
+            for (const [height, required] of cases) {
+              const input: HoverCardInput = {
+                maxPlayers: n, frame, windowW: w, windowH: h, heroSeatKey, chip: rect,
+                card: { widthPx: m.widthPx, heightPx: height },
+              };
+              const placement = placeHoverCard(input);
+              const where = `chip at edge ${fx},${fy}, card ${height}px tall`;
+              if (required) assert.ok(placement, `${where}: no place`);
+              if (placement) assertCardSafe(input, placement, where);
+            }
+          }
+        });
+      }
+    }
+  }
+
+  it("is safe for a chip anywhere, even one dragged over a protected zone, or returns null", () => {
+    for (const n of TABLES) {
+      for (const [w, h] of CARD_SIZES) {
+        const chip = chipMetrics(w, h, "compact", true);
+        const { m, max } = cardHeights(w, h);
+        for (let fx = 0.05; fx < 1; fx += 0.15) {
+          for (let fy = 0.05; fy < 1; fy += 0.15) {
+            const input: HoverCardInput = {
+              maxPlayers: n, frame: "hero", windowW: w, windowH: h,
+              chip: chipRect({ x: fx, y: fy }, chip, w, h),
+              card: { widthPx: m.widthPx, heightPx: max },
+            };
+            const placement = placeHoverCard(input);
+            if (placement) assertCardSafe(input, placement, `${n}-max ${w}x${h} chip at ${fx.toFixed(2)},${fy.toFixed(2)}`);
+          }
+        }
+      }
+    }
+  });
+
+  it("returns null for a card that cannot fit, and is deterministic", () => {
+    const base: HoverCardInput = {
+      maxPlayers: 6, frame: "hero", windowW: 483, windowH: 359,
+      chip: { x: 0.1, y: 0.1, w: 0.2, h: 0.05 },
+      card: { widthPx: 600, heightPx: 80 },
+    };
+    assert.equal(placeHoverCard(base), null);
+    assert.equal(placeHoverCard({ ...base, card: { widthPx: 0, heightPx: 80 } }), null);
+    const ok: HoverCardInput = { ...base, card: { widthPx: 200, heightPx: 80 } };
+    assert.deepEqual(placeHoverCard(ok), placeHoverCard({ ...ok, chip: { ...ok.chip } }));
+  });
+
+  it("puts the card right next to its chip when the felt around it is free", () => {
+    const [w, h] = [MEDIUM_TABLE_SIZE.width, MEDIUM_TABLE_SIZE.height];
+    const layout = layoutSeats({ maxPlayers: 6, frame: "hero", windowW: w, windowH: h, tagged: true });
+    const top = layout.positions.find((p) => p.seatKey === 3)!;
+    const chip = rectOf(top, layout.chip, w, h);
+    const { m, typical } = cardHeights(w, h);
+    const placement = placeHoverCard({
+      maxPlayers: 6, frame: "hero", windowW: w, windowH: h, chip,
+      card: { widthPx: m.widthPx, heightPx: typical },
+    });
+    assert.ok(placement);
+    const r = placement.rect;
+    const gapX = Math.max(0, Math.max(r.x, chip.x) - Math.min(r.x + r.w, chip.x + chip.w)) * w;
+    const gapY = Math.max(0, Math.max(r.y, chip.y) - Math.min(r.y + r.h, chip.y + chip.h)) * h;
+    assert.ok(Math.hypot(gapX, gapY) <= 8, `card ${Math.hypot(gapX, gapY).toFixed(1)}px from its chip`);
   });
 });

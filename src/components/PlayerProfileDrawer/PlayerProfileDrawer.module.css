@@ -381,3 +381,158 @@
   margin-bottom: 12px;
 }
 
+
+/* ---------------------------------------------------------------------
+ * Opponent engine sections (`strategic-analysis` build only): the read's
+ * own tag, head-to-head, recent form, showdowns, sizing tells, auto-notes.
+ * Main-window tokens only; every number is printed with its sample.
+ * ------------------------------------------------------------------- */
+
+.readTag {
+  margin-left: auto;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  letter-spacing: 0.04em;
+}
+
+.engineMeta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.factList {
+  margin: 0;
+}
+
+.factRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+}
+
+.factRow:last-child {
+  border-bottom: none;
+}
+
+.factRow dt {
+  color: var(--text-secondary);
+}
+
+.factRow dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.factAside {
+  color: var(--text-secondary);
+}
+
+.formFlag {
+  display: inline-block;
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.formTilt {
+  background: var(--negative-soft);
+  color: var(--negative);
+}
+
+.showdownList,
+.autoNoteList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.showdownItem {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+}
+
+.showdownItem:last-child,
+.autoNoteItem:last-child {
+  border-bottom: none;
+}
+
+.showdownHead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.showdownCards {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.showdownCategory {
+  flex: 1;
+  color: var(--text-secondary);
+}
+
+.showdownResult {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.showdownBoard,
+.showdownLine {
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.showdownClass {
+  margin-top: 2px;
+  color: var(--accent-strong);
+}
+
+.autoNoteItem {
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* "Auto" marks a note the engine wrote, so it is never mistaken for the
+   user's own (editable) note below. */
+.autoTag {
+  flex: none;
+  align-self: flex-start;
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.autoNoteBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.autoNoteText {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}

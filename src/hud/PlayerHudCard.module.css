@@ -82,6 +82,37 @@
   font-weight: 500;
 }
 
+/*
+ * The engine's tag (`strategic-analysis` build), first on the chip: 2-4
+ * characters in its own tinted segment, sized with the chip (1em of
+ * --chip-font, so never under 10px). Its colour says where it came from;
+ * the accessible name says it in words.
+ * Contrast on the segment as painted over the chip's ~#0f131a:
+ *   read   #a9bcff on rgba(111,143,255,0.18)  7.8:1
+ *   stack  #e6c97a on rgba(217,180,74,0.16)   8.6:1
+ *   tilt   #ff9b8f on rgba(224,82,79,0.22)    7.2:1
+ */
+.tag {
+  flex: none;
+  margin-left: -0.15em;
+  padding: 0.18em 0.3em;
+  border-radius: 3px;
+  background: rgba(111, 143, 255, 0.18);
+  color: #a9bcff;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.tag-stack {
+  background: rgba(217, 180, 74, 0.16);
+  color: #e6c97a;
+}
+
+.tag-tilt {
+  background: rgba(224, 82, 79, 0.22);
+  color: #ff9b8f;
+}
+
 /* Badge model: initials instead of stats. */
 .initials {
   max-width: 3em;

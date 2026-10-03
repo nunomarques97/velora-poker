@@ -1,0 +1,113 @@
+/*
+ * The hover read card: a chip's top reads, next to the chip. Placed and sized
+ * by the overlay (`placeHoverCard`, `hoverCardMetrics` in seatLayout.ts):
+ *   --card-font   text size (10-11px, scales with the table like the chip)
+ *   width/left/top  set inline from the placement
+ * The vertical chrome here (1px border and 4px padding top and bottom, 1px
+ * rule with 3px either side) and the 1.2 line height are `HOVER_CARD_CHROME_PX` and
+ * `HOVER_CARD_LINE_HEIGHT`: change them together. Every text block is
+ * clamped to two lines, so the card is never taller than the layout's
+ * `maxHeightPx`.
+ *
+ * Never a control: `pointer-events: none` and no hot zone, so every point
+ * under it still clicks the table.
+ *
+ * Contrast, on the card's ~#0f151b surface (96% over green felt):
+ *   observation #e8ebf2  15.4:1
+ *   advice      #a9bcff  9.9:1
+ *   confidence  #9aa4b8  7.3:1 (high #57b88b 7.6:1, medium #d9b44a 9.3:1)
+ */
+.card {
+  position: absolute;
+  z-index: 6;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 4px 7px;
+  background: rgba(14, 18, 26, 0.96);
+  border: 1px solid rgba(137, 164, 255, 0.45);
+  border-radius: 4px;
+  color: #e8ebf2;
+  font-family: inherit;
+  font-size: var(--card-font, 11px);
+  font-weight: 500;
+  line-height: 1.2;
+  pointer-events: none;
+  user-select: none;
+  animation: cardIn 90ms ease-out;
+}
+
+@keyframes cardIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.reads {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.read + .read {
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.observationRow {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5em;
+}
+
+.observation,
+.advice,
+.empty {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.observation {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.confidence {
+  flex: none;
+  color: #9aa4b8;
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tier-high {
+  color: #57b88b;
+}
+
+.tier-medium {
+  color: #d9b44a;
+}
+
+.advice {
+  margin: 0;
+  color: #a9bcff;
+}
+
+.empty {
+  margin: 0;
+  color: #9aa4b8;
+}
+
+/* The fade is the only motion; with reduced motion the card just appears. */
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    animation: none;
+  }
+}

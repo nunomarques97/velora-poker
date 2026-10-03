@@ -57,6 +57,11 @@
 //! the answer changes, so the steady state is one `GetCursorPos` per frame and
 //! nothing else.
 //!
+//! The moment an overlay turns click-through again, its webview stops
+//! receiving mouse input, so a `pointerleave` the cursor outran is never
+//! delivered. Each such transition is therefore announced to the frontend
+//! (`OVERLAY_POINTER_LEFT_EVENT`), which closes the hover read card on it.
+//!
 //! Same class of native work as `table_track::win`'s `SetWinEventHook`: one
 //! polling thread started once at startup, driven by process-wide statics.
 //!
@@ -73,6 +78,8 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
+
+use std::sync::OnceLock;
 
 use windows::Win32::Foundation::{HWND, POINT};
 use windows::Win32::Graphics::Gdi::ScreenToClient;
@@ -237,27 +244,63 @@ fn apply_for_current_cursor() {
     let mut cursor = POINT::default();
     let cursor_ok = unsafe { GetCursorPos(&mut cursor) }.is_ok();
 
-    let Ok(mut overlays) = OVERLAYS.lock() else {
-        return;
-    };
+    let mut left = Vec::new();
+    {
+        let Ok(mut overlays) = OVERLAYS.lock() else {
+            return;
+        };
+        apply_to_overlays(&mut overlays, cursor_ok.then_some(cursor), &mut left);
+    }
+    // Outside the registry lock: the sink resolves labels through the
+    // manager's pool lock, and the two locks are never nested.
+    notify_pointer_left(&left);
+}
+
+fn apply_to_overlays(overlays: &mut [OverlayHitState], cursor: Option<POINT>, left: &mut Vec<String>) {
     for overlay in overlays.iter_mut() {
         let hwnd = HWND(overlay.hwnd as *mut _);
         if !unsafe { IsWindowVisible(hwnd) }.as_bool() {
             continue;
         }
 
-        let point = if cursor_ok {
-            let mut pt = cursor;
+        let point = cursor.and_then(|mut pt| {
             unsafe { ScreenToClient(hwnd, &mut pt) }
                 .as_bool()
                 .then_some((pt.x, pt.y))
-        } else {
-            None
-        };
+        });
         let want_click_through = wants_click_through(&overlay.zones, point);
 
+        if pointer_left(overlay.click_through, want_click_through) {
+            left.push(overlay.label.clone());
+        }
         overlay.click_through = want_click_through;
         apply_style(hwnd, want_click_through);
+    }
+}
+
+/// Whether one tick took an overlay from capturing the mouse to letting it
+/// through: the cursor has just left its last hot zone.
+pub fn pointer_left(was_click_through: bool, now_click_through: bool) -> bool {
+    !was_click_through && now_click_through
+}
+
+/// Receives the labels of the overlays the cursor just left. Installed once by
+/// `overlay::install` at startup rather than called directly, so this module
+/// never references Tauri's event code: the unit tests below drive the
+/// tracker, and a test binary that links the emit path no longer loads on
+/// Windows (measured: `STATUS_ENTRYPOINT_NOT_FOUND`).
+static POINTER_LEFT_SINK: OnceLock<fn(&[String])> = OnceLock::new();
+
+pub fn set_pointer_left_sink(sink: fn(&[String])) {
+    let _ = POINTER_LEFT_SINK.set(sink);
+}
+
+fn notify_pointer_left(labels: &[String]) {
+    if labels.is_empty() {
+        return;
+    }
+    if let Some(sink) = POINTER_LEFT_SINK.get() {
+        sink(labels);
     }
 }
 
@@ -331,6 +374,33 @@ mod tests {
                 .unwrap_or(false),
             Err(_) => false,
         }
+    }
+
+    /// Only the capture-to-click-through edge announces a leave: staying
+    /// over a chip, staying over the table, or arriving on a chip never does.
+    #[test]
+    fn only_leaving_the_last_hot_zone_counts_as_pointer_left() {
+        assert!(pointer_left(false, true), "chip -> table");
+        assert!(!pointer_left(true, true), "table -> table");
+        assert!(!pointer_left(false, false), "chip -> chip");
+        assert!(!pointer_left(true, false), "table -> chip");
+    }
+
+    /// A cursor moving off a chip's zone flips the decision exactly once.
+    #[test]
+    fn moving_off_a_chip_flips_click_through_once() {
+        let chip = [ClientRect { x: 100, y: 100, width: 60, height: 20 }];
+        let path = [(110, 110), (150, 115), (159, 119), (170, 119), (300, 200)];
+        let mut click_through = false;
+        let mut leaves = 0;
+        for point in path {
+            let next = wants_click_through(&chip, Some(point));
+            if pointer_left(click_through, next) {
+                leaves += 1;
+            }
+            click_through = next;
+        }
+        assert_eq!(leaves, 1);
     }
 
     #[test]

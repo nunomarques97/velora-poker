@@ -9,7 +9,15 @@
 //   - a scripted drag: exactly one save_seat_position call, for the dragged
 //     seat key; a cancelled drag saves nothing; a plain click opens the
 //     detail panel; a save made by another overlay of the same size moves
-//     this one's chip.
+//     this one's chip;
+//   - the strategic-analysis overlay (engine=1): tagged chips still overlap
+//     nothing, tag text >= 10px and in the accessible name; every hover card
+//     stays clear of protected zones, its chip and the window edge, takes no
+//     pointer input and closes on leave; it also closes on the native
+//     pointer-left event, Esc, blur, drag start, the drawer opening and a
+//     refresh that drops the player; a new hand refreshes it; an older
+//     refresh answering last is ignored; StrictMode leaves one listener per
+//     event. Screenshots: hud-tagged-*, hud-hover-*, hud-engine-drawer-*.
 // Exits non-zero on any failure and always stops Vite.
 //
 // The table behind the HUD is drawn from seatLayout.ts's ASSUMED geometry,
@@ -150,6 +158,94 @@ async function shot(base, size, params, name) {
   check(existsSync(file), `screenshot ${name}`);
 }
 
+/** `a=1 b=x` → { a: "1", b: "x" } */
+const fields = (s) => Object.fromEntries((s ?? "").split(" ").filter(Boolean).map((kv) => kv.split("=")));
+
+// qa-overlay.html's engine roster: opponents with a tag and with any card at all.
+const ENGINE = { 6: { tags: 4, cards: 5 }, 9: { tags: 7, cards: 8 } };
+
+/** The `strategic-analysis` overlay: tagged chips, the hover card and its lifecycle. */
+async function engineChecks(base) {
+  for (const max of TABLES) {
+    const expected = ENGINE[max];
+    for (const size of SIZES) {
+      const tag = `${max}max-${size.w}x${size.h}`;
+      for (const frame of ["hero", "absolute"]) {
+        const label = `${tag} ${frame} engine`;
+        const qa = await dump(base, size, { max: String(max), frame, engine: "1" });
+        check(qa.chips === String(max), `${label}: ${max} chips`, `chips=${qa.chips}`);
+        check(qa.tags === String(expected.tags), `${label}: ${expected.tags} tagged chips`, `tags=${qa.tags}`);
+        check(qa.overlap === "0" && qa.intersections === "0", `${label}: tag-width chips overlap no chip and no protected zone`,
+          `overlap=${qa.overlap} intersections=${qa.intersections}`);
+        // Opponents' card backs are a soft zone for chips (seatLayout.ts). The
+        // wider tagged chip still avoids them at the medium size; at the
+        // minimum size it may touch some, which is reported, not failed.
+        if (size.w === SIZES[0].w) {
+          console.log(`INFO  ${label}: tagged chips over an opponent's card backs: ${qa["opp-hole-intersections"]}`);
+        } else {
+          check(qa["opp-hole-intersections"] === "0", `${label}: no tagged chip over an opponent's card backs`,
+            `opp-hole=${qa["opp-hole-intersections"]}`);
+        }
+        check(Number(qa["min-tag-font-px"]) >= 10, `${label}: tag text >= 10px`, `tag font=${qa["min-tag-font-px"]}`);
+        check(qa["tag-labels"] === qa.tags, `${label}: every tagged chip's accessible name carries its tag`,
+          `${qa["tag-labels"]}/${qa.tags}`);
+        const listeners = JSON.parse(qa.listeners || "{}");
+        check(listeners["hands-imported"] === 1 && listeners["overlay-pointer-left"] === 1,
+          `${label}: one listener per event after StrictMode setup/cleanup/setup`, qa.listeners);
+
+        const all = await dump(base, size, { max: String(max), frame, engine: "1", action: "hoverall" });
+        const r = fields(all["action-result"]);
+        check(r.opened === String(expected.cards), `${label}: a card opens on every chip with an engine payload`, all["action-result"]);
+        check(r.violations === "0", `${label}: no card covers a protected zone, its chip or the window edge`, all["action-result"]);
+        check(r.hot === "0", `${label}: no card takes pointer input or becomes a hot zone`, all["action-result"]);
+        check(r.stuck === "0", `${label}: every card closes on pointer leave`, all["action-result"]);
+        // Opponents' card backs are a last resort, given up only when nothing else fits near the chip.
+        console.log(`INFO  ${label}: cards over an opponent's card backs: ${r.oppHole}; cards with two reads: ${r.twoReads}/${r.opened}`);
+      }
+      const hover = { max: String(max), engine: "1", action: "hover", seat: String(DRAG.seat) };
+      const qa = await dump(base, size, hover);
+      check(qa.card === "1" && qa["card-reads"] !== "0" && qa["card-violations"] === "0" && qa["card-hot"] === "0",
+        `${tag} hover: card open next to the chip, clear of protected zones, not a hot zone`,
+        `card=${qa.card} reads=${qa["card-reads"]} violations=${qa["card-violations"]} hot=${qa["card-hot"]}`);
+      check(/Folds to 72% of 3-bets/.test(qa["card-text"] ?? "") && /3-bet his opens wider/.test(qa["card-text"] ?? "")
+        && /High 81%/.test(qa["card-text"] ?? ""), `${tag} hover: card shows observation, advice and confidence`, qa["card-text"]);
+      await shot(base, size, { max: String(max), engine: "1" }, `hud-tagged-${tag}.png`);
+      await shot(base, size, hover, `hud-hover-${tag}.png`);
+    }
+
+    const size = SIZES[0];
+    const tag = `${max}max-${size.w}x${size.h}`;
+    const act = async (action) =>
+      fields((await dump(base, size, { max: String(max), engine: "1", action, seat: String(DRAG.seat) }))["action-result"]);
+    let r = await act("leave");
+    check(r.before === "1" && r.after === "0", `${tag} card closes on pointer leave`, JSON.stringify(r));
+    r = await act("nativeleave");
+    check(r.before === "1" && r.otherTable === "1" && r.after === "0",
+      `${tag} card closes on the native pointer-left event for its own table only (click-through window)`, JSON.stringify(r));
+    r = await act("esc");
+    check(r.before === "1" && r.after === "0", `${tag} card closes on Esc`, JSON.stringify(r));
+    r = await act("focus");
+    check(r.before === "1" && r.described === "1" && r.after === "0",
+      `${tag} keyboard focus opens the card (aria-describedby), blur closes it`, JSON.stringify(r));
+    r = await act("hoverdrag");
+    check(r.before === "1" && r.during === "0" && r.passOver === "0" && r.after === "0" && r.panel === "0",
+      `${tag} drag start closes the card; none opens during the drag`, JSON.stringify(r));
+    r = await act("hoverclick");
+    check(r.before === "1" && r.panel === "1" && r.after === "0" && r.enterWithDrawer === "0" && r.autoLabel === "1",
+      `${tag} click opens the drawer (auto-notes labelled Auto) and closes the card; no card while it is open`, JSON.stringify(r));
+    r = await act("refresh");
+    check(r.before === "1" && r.after === "1" && r.updated === "1", `${tag} a new hand refreshes the open card`, JSON.stringify(r));
+    r = await act("drop");
+    check(r.before === "1" && r.after === "0", `${tag} a refresh that drops the player closes his card`, JSON.stringify(r));
+    r = await act("outoforder");
+    check(r.before === "1" && r.mid === "new" && r.end === "new" && r.open === "1",
+      `${tag} an older refresh answering last is ignored`, JSON.stringify(r));
+  }
+  await shot(base, SIZES[1], { max: "6", engine: "1", action: "click", seat: String(DRAG.seat) }, "hud-engine-drawer-6max-800x570.png");
+  await shot(base, SIZES[1], { max: "6", engine: "1", action: "click", seat: String(DRAG.seat), scroll: "end" },
+    "hud-engine-drawer-6max-800x570-end.png");
+}
+
 async function main() {
   if (!existsSync(EDGE)) throw new Error(`Edge not found at ${EDGE}`);
   mkdirSync(outDir, { recursive: true });
@@ -173,7 +269,8 @@ async function main() {
     // First hit compiles the module graph; warm it so virtual time is spent on the page.
     await dump(base, SIZES[0], { max: "6" }).catch(() => {});
 
-    for (const max of TABLES) {
+    // QA_ONLY=engine skips the default-build checks while iterating on the engine ones.
+    for (const max of process.env.QA_ONLY === "engine" ? [] : TABLES) {
       for (const size of SIZES) {
         const tag = `${max}max-${size.w}x${size.h}`;
         for (const frame of ["hero", "absolute"]) {
@@ -186,6 +283,7 @@ async function main() {
             `opp-hole=${qa["opp-hole-intersections"]}`);
           check(qa["save-count"] === "0", `${label}: nothing saved`, `saves=${qa["save-count"]}`);
           check(Number(qa["min-font-px"]) >= 10, `${label}: chip font >= 10px`, `font=${qa["min-font-px"]}`);
+          check(qa.tags === "0" && qa.card === "0", `${label}: no engine (default build), no tag, no card`, `tags=${qa.tags}`);
         }
         const badge = await dump(base, size, { max: String(max), model: "badge" });
         check(badge.overlap === "0" && badge.intersections === "0", `${tag} badge defaults: overlap=0, intersections=0`,
@@ -229,6 +327,8 @@ async function main() {
       const external = await dump(base, size, { max: String(max), action: "external", seat: String(DRAG.seat) });
       check(external["action-result"] === "followed", `${tag} another overlay's save moves this chip`, external["action-result"]);
     }
+
+    await engineChecks(base);
   } catch (err) {
     failures.push(err.message);
     console.error(err.message);

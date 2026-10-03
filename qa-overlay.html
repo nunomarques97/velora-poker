@@ -17,9 +17,14 @@
         max=6|9            table size (default 6)
         frame=hero|absolute  Auto-Center on (hero, default) or off
         model=compact|badge  HUD profile model (default compact)
+        engine=1           opponents carry an engine payload (strategic-analysis
+                           build): chip tags, hover card, drawer reads
         action=drag|cancel|click|external   optional scripted interaction
+               hover|hoverall|leave|nativeleave|esc|focus|hoverdrag|hoverclick|
+               refresh|drop|outoforder          hover-card actions (engine=1)
         seat=<key>         seat key the action targets (default 2)
         dx=<px>&dy=<px>    drag distance (default 40, 14)
+        scroll=end         with action=click: scroll the drawer to its end
 
       Results, written to <body> data attributes once the page settles
       (data-qa-ready="1"):
@@ -34,6 +39,16 @@
         data-qa-panel              1 when the detail panel is open
         data-qa-action-result      what the scripted action observed
         data-qa-min-font-px        smallest chip font size, in CSS px
+        data-qa-tags               chips showing a tag
+        data-qa-min-tag-font-px    smallest tag font size, in CSS px
+        data-qa-tag-labels         chips whose accessible name carries their tag
+        data-qa-card               1 when a hover card is open (placed and visible)
+        data-qa-card-reads         reads on the open card
+        data-qa-card-text          the open card's text
+        data-qa-card-violations    open card x (protected zones, own chip, window edge)
+        data-qa-card-opp-hole      open card x opponents' hole cards (a last resort)
+        data-qa-card-hot           1 when the card is clickable or a hot zone
+        data-qa-listeners          JSON: live event listeners per event
     -->
     <style>
       html,
@@ -219,6 +234,7 @@
           const offset = (seat - heroSeat + max) % max;
           const [name, hands, vpip, pfr, threeBet, arche] = roster[offset];
           const override = name === "calldown_carl";
+          const engine = params.get("engine") === "1" && offset !== 0 ? engineFor(name, hands) : null;
           players.push({
             id: `p${seat}`,
             name,
@@ -227,14 +243,82 @@
               vpip, pfr, threeBet,
               foldToThreeBet: 55, cBet: 62, foldToCBet: 41, aggressionFactor: 2.4, wtsd: 27, wsd: 51,
             },
-            descriptions: [],
+            // As commands.rs: with an engine, the descriptions are its reads.
+            descriptions: engine ? engine.reads : [],
             note: null,
             classification: arche
               ? { classification: arche[0], label: arche[1], color: arche[2], isOverride: override, available: true }
               : { classification: "unknown", label: "Unknown", color: "#6b7280", isOverride: false, available: true },
             seat,
             seatOffset: offset,
+            engine,
           });
+        }
+
+        // The `strategic-analysis` payload (src/data/types.ts EnginePayload),
+        // with tags from the spec vocabulary and wording of realistic length.
+        function read(ruleId, family, tag, observation, advice, pct, n) {
+          const tier = pct >= 75 ? "high" : pct >= 50 ? "medium" : "low";
+          return {
+            ruleId, category: "exploit", observation, advice,
+            confidencePct: pct, confidenceTier: tier, scenarioId: "P06", family, tag, score: pct / 100,
+            evidence: [{ statName: ruleId, value: 61, opportunities: n, hits: Math.round(n * 0.61), shrunk: 58 }],
+          };
+        }
+        function engineFor(name, hands) {
+          if (hands < 10) {
+            // Too few hands for any read: no tag, an honest empty card.
+            return { version: 1, tag: null, topReads: [], reads: [], context: null, headToHead: null,
+              showdowns: [], sizingTells: [], recentForm: null, autoNotes: [] };
+          }
+          const byName = {
+            fishy_mcfold: [read("pf.limp.high", "preflop", "LMP", "Limps 41% of the hands he enters.", "Isolate his limps wider, in position.", 52, 12)],
+            TightTony: [
+              read("pf.fold_to_3bet.high", "preflop", "F3B", "Folds to 72% of 3-bets (36/50).", "3-bet his opens wider as a bluff.", 81, 50),
+              read("post.fold_to_cbet.high", "postflop", "FCB", "Folds to 64% of flop c-bets.", "C-bet small and often when he defends.", 68, 44),
+            ],
+            AggroAnna77: [
+              read("pf.three_bet.high", "preflop", "3B+", "3-bets 14% of the time when you open.", "4-bet her lighter; call her 3-bets wider in position.", 77, 120),
+              read("post.barrel.high", "postflop", "BRL", "Barrels the turn after 71% of her flop c-bets.", "Float flops wider and fold more turns to her second bet.", 63, 58),
+            ],
+            calldown_carl: [
+              read("post.wtsd.high", "postflop", "STN", "Goes to showdown 38% of the hands he sees a flop.", "Value bet thinner and stop bluffing the river.", 71, 64),
+              read("pf.cold_call.high", "preflop", "CC+", "Cold-calls 22% of opens.", "Raise bigger for value against his calls.", 55, 40),
+            ],
+            GrinderGus: [
+              read("stack.push_fold", "stack", "12bb", "12bb effective: shoves or folds preflop.", "Call his shoves with a push/fold range, not a cash range.", 66, 30),
+              read("pf.steal.high", "preflop", "STL", "Steals 48% from the cutoff and button.", "3-bet or reshove his late opens wider.", 60, 38),
+            ],
+            M4ster_Bluff: [
+              read("recency.tilt", "recency", "TILT", "VPIP 58% in the last 30 hands, against 36% before.", "Value bet wider while he stays loose.", 58, 30),
+              read("showdown.river_overbet_bluff", "showdown", "OVB", "Showed a bluff after a river overbet, 2 of 3 times.", "Call his river overbets more often.", 45, 3),
+            ],
+            RockSolid_R: [read("pf.vpip.low", "preflop", "NIT", "Plays 11% of hands; opens only the top of the range.", "Steal his blinds; fold to his 3-bets.", 62, 44)],
+          };
+          const reads = byName[name] ?? [];
+          const top = reads.slice(0, 2);
+          const lead = reads[0];
+          const tag = lead
+            ? { text: lead.tag, ruleId: lead.ruleId, source: lead.family === "recency" ? "tilt" : lead.family === "stack" ? "stack" : "read" }
+            : null;
+          return {
+            version: 1, tag, topReads: top, reads, context: null,
+            headToHead: { hands: 64, stats: [{ key: "three_bet_vs_hero_open", hits: 4, opportunities: 22, rawPct: 18.2, shrunkPct: 13.1 }] },
+            showdowns: [{
+              handId: "254119872004", playedAt: "2026-10-02T21:14:00Z", cards: "Jd 9d", board: "Ts 8h 2c 7d Ks",
+              category: "Straight", result: "won",
+              line: [
+                { street: "preflop", action: "call", isAllIn: false, sizeBucket: null, potFraction: null },
+                { street: "flop", action: "call", isAllIn: false, sizeBucket: null, potFraction: null },
+                { street: "turn", action: "bet", isAllIn: false, sizeBucket: "medium", potFraction: 0.6 },
+                { street: "river", action: "bet", isAllIn: false, sizeBucket: "overbet", potFraction: 1.4 },
+              ],
+              lastAggression: { street: "river", sizeBucket: "overbet", potFraction: 1.4, class: "value" },
+            }],
+            sizingTells: [{ bucket: "overbet", value: 3, bluff: 1, neither: 0, n: 4 }],
+            recentForm: { window: 30, windowHits: 17, baselineOpportunities: hands, windowVpipPct: 56.7, baselineVpipPct: 36, z: 2.4, flag: name === "M4ster_Bluff" ? "tilt" : null, afterBigLoss: name === "M4ster_Bluff" },
+            autoNotes: [{ id: 1, handId: "254119871233", kind: "limp_reraise_premium", text: "Limp-reraised preflop and showed AA.", createdAt: "2026-10-02T20:51:00Z", source: "auto" }],
+          };
         }
         const profile = {
           id: model,
@@ -250,6 +334,7 @@
           max, frame, model, heroSeat, players, store,
           saves: [],
           hotZones: [],
+          playerDelays: [], // ms, one per coming get_active_table_players call
           listeners: new Map(), // event -> Map(eventId -> callbackId)
           callbacks: new Map(),
           emit(event, payload) {
@@ -285,8 +370,14 @@
               case "plugin:event|unlisten":
                 qa.listeners.get(args.event)?.delete(args.eventId);
                 return null;
-              case "get_active_table_players":
-                return structuredClone(players);
+              case "get_active_table_players": {
+                // The answer is what the table held when asked; `playerDelays`
+                // holds it back, so an older answer can arrive after a newer one.
+                const snapshot = structuredClone(players);
+                const delay = qa.playerDelays.shift() ?? 0;
+                if (delay) await new Promise((r) => setTimeout(r, delay));
+                return snapshot;
+              }
               case "get_active_hud_profile":
                 return structuredClone(profile);
               case "get_active_table_max_players":
@@ -419,7 +510,63 @@
         d.qaMaxZoneFraction = maxZone.toFixed(3);
         d.qaPanel = document.querySelector("aside") ? "1" : "0";
         d.qaMinFontPx = fonts.length ? String(Math.min(...fonts)) : "";
+        const tagged = [...document.querySelectorAll("[data-hud-chip] > button[data-tag]")];
+        const tagFonts = tagged.map((b) => parseFloat(getComputedStyle(b.firstElementChild).fontSize));
+        d.qaTags = String(tagged.length);
+        d.qaMinTagFontPx = tagFonts.length ? String(Math.min(...tagFonts)) : "";
+        d.qaTagLabels = String(tagged.filter((b) => b.getAttribute("aria-label").includes(`tag ${b.dataset.tag}`)).length);
+        const listeners = {};
+        for (const [event, byId] of qa.listeners) listeners[event] = byId.size;
+        d.qaListeners = JSON.stringify(listeners);
+        Object.assign(d, cardReport());
       }
+
+      /** The open hover card, or null while none is open or it is not placed yet. */
+      function openCard() {
+        const el = document.querySelector("[data-hover-card]");
+        return el && getComputedStyle(el).visibility !== "hidden" ? el : null;
+      }
+
+      /** What the open card covers; `owner` is its chip's button. */
+      function cardReport(owner = document.querySelector("[data-hud-chip] > button[aria-describedby]")) {
+        const card = openCard();
+        if (!card) return { qaCard: "0", qaCardReads: "0", qaCardText: "", qaCardViolations: "0", qaCardOppHole: "0", qaCardHot: "0" };
+        const c = domRect(card);
+        let violations = 0;
+        for (const z of zones) if (overlaps(c, pxRect(z.rect))) violations++;
+        if (owner && overlaps(c, domRect(owner))) violations++;
+        if (c.x0 < -0.5 || c.y0 < -0.5 || c.x1 > W() + 0.5 || c.y1 > H() + 0.5) violations++;
+        let oppHole = 0;
+        for (const a of anchors) if (a.seatKey !== heroKey && overlaps(c, pxRect(holeRect(a)))) oppHole++;
+        // Never a control: no pointer input, and the hot zones are the chips alone.
+        const hot = getComputedStyle(card).pointerEvents !== "none" || qa.hotZones.length !== chipButtons().length;
+        return {
+          qaCard: "1",
+          qaCardReads: String(card.querySelectorAll("li").length),
+          qaCardText: card.textContent.replace(/"/g, "'"),
+          qaCardViolations: String(violations),
+          qaCardOppHole: String(oppHole),
+          qaCardHot: hot ? "1" : "0",
+        };
+      }
+
+      // React derives pointerenter/leave from pointerover/out and their relatedTarget.
+      function enter(btn) {
+        const r = btn.getBoundingClientRect();
+        for (const type of ["pointerover", "mouseover"])
+          btn.dispatchEvent(new (type.startsWith("pointer") ? PointerEvent : MouseEvent)(type, {
+            bubbles: true, composed: true, pointerId: 1, pointerType: "mouse", isPrimary: true,
+            relatedTarget: table, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2,
+          }));
+      }
+      function leave(btn) {
+        for (const type of ["pointerout", "mouseout"])
+          btn.dispatchEvent(new (type.startsWith("pointer") ? PointerEvent : MouseEvent)(type, {
+            bubbles: true, composed: true, pointerId: 1, pointerType: "mouse", isPrimary: true, relatedTarget: table,
+          }));
+      }
+      const cardOpen = () => (openCard() ? 1 : 0);
+      const cardText = () => openCard()?.textContent ?? "";
 
       function pointer(target, type, x, y) {
         target.dispatchEvent(
@@ -447,11 +594,151 @@
         const r = btn.getBoundingClientRect();
         const cx = r.left + r.width / 2;
         const cy = r.top + r.height / 2;
+        const settle = () => sleep(150);
+        if (action === "hover") {
+          enter(btn);
+          await settle();
+          return `card=${cardOpen()}`;
+        }
+        if (action === "hoverall") {
+          // Every chip with reads in turn: its card opens next to it, covers
+          // nothing protected, and closes when the pointer leaves.
+          let opened = 0, violations = 0, oppHole = 0, hot = 0, stuck = 0, twoReads = 0;
+          for (const b of chipButtons()) {
+            const key = Number(b.parentElement.dataset.seatKey);
+            if (!playerAt(key)?.engine) continue;
+            enter(b);
+            await settle();
+            const rep = cardReport(b);
+            if (rep.qaCard === "1") {
+              opened++;
+              violations += Number(rep.qaCardViolations);
+              oppHole += Number(rep.qaCardOppHole);
+              hot += Number(rep.qaCardHot);
+              if (rep.qaCardReads === "2") twoReads++;
+            }
+            leave(b);
+            await sleep(60);
+            stuck += cardOpen();
+          }
+          return `opened=${opened} violations=${violations} oppHole=${oppHole} hot=${hot} stuck=${stuck} twoReads=${twoReads}`;
+        }
+        if (action === "leave") {
+          enter(btn);
+          await settle();
+          const before = cardOpen();
+          leave(btn);
+          await settle();
+          return `before=${before} after=${cardOpen()}`;
+        }
+        if (action === "nativeleave") {
+          // The window turned click-through: the webview never sees the
+          // pointer leave, only the native hit test's event.
+          enter(btn);
+          await settle();
+          const before = cardOpen();
+          qa.emit("overlay-pointer-left", { tableId: 2 });
+          await settle();
+          const otherTable = cardOpen();
+          qa.emit("overlay-pointer-left", { tableId: 1 });
+          await settle();
+          return `before=${before} otherTable=${otherTable} after=${cardOpen()}`;
+        }
+        if (action === "esc") {
+          enter(btn);
+          await settle();
+          const before = cardOpen();
+          window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          await settle();
+          return `before=${before} after=${cardOpen()}`;
+        }
+        if (action === "focus") {
+          btn.focus();
+          await settle();
+          const before = cardOpen();
+          const described = btn.getAttribute("aria-describedby") === openCard()?.id ? 1 : 0;
+          btn.blur();
+          await settle();
+          return `before=${before} described=${described} after=${cardOpen()}`;
+        }
+        if (action === "hoverdrag") {
+          enter(btn);
+          await settle();
+          const before = cardOpen();
+          pointer(btn, "pointerdown", cx, cy);
+          for (let i = 1; i <= 6; i++) {
+            pointer(btn, "pointermove", cx + (dx * i) / 6, cy + (dy * i) / 6);
+            await sleep(16);
+          }
+          const during = cardOpen();
+          // Passing over another chip mid-drag must not open its card.
+          const other = chipButtons().find((b) => b !== btn && playerAt(Number(b.parentElement.dataset.seatKey))?.engine);
+          if (other) enter(other);
+          await settle();
+          const passOver = cardOpen();
+          pointer(btn, "pointerup", cx + dx, cy + dy);
+          btn.click();
+          await settle();
+          return `before=${before} during=${during} passOver=${passOver} after=${cardOpen()} panel=${document.querySelector("aside") ? 1 : 0}`;
+        }
+        if (action === "hoverclick") {
+          enter(btn);
+          await settle();
+          const before = cardOpen();
+          pointer(btn, "pointerdown", cx, cy);
+          pointer(btn, "pointerup", cx, cy);
+          btn.click();
+          await settle();
+          const panel = document.querySelector("aside") ? 1 : 0;
+          const after = cardOpen();
+          const other = chipButtons().find((b) => b !== btn && playerAt(Number(b.parentElement.dataset.seatKey))?.engine);
+          if (other) enter(other);
+          await settle();
+          const auto = document.querySelector("aside")?.textContent.includes("Auto") ? 1 : 0;
+          return `before=${before} panel=${panel} after=${after} enterWithDrawer=${cardOpen()} autoLabel=${auto}`;
+        }
+        if (action === "refresh" || action === "drop" || action === "outoforder") {
+          enter(btn);
+          await settle();
+          const before = cardOpen();
+          const p = playerAt(seat);
+          if (action === "refresh") {
+            // A new hand changed his top read: the open card follows.
+            p.engine.topReads[0] = { ...p.engine.topReads[0], observation: "Fresh read after the new hand." };
+            qa.emit("hands-imported", 1);
+            await sleep(300);
+            return `before=${before} after=${cardOpen()} updated=${cardText().includes("Fresh read after the new hand.") ? 1 : 0}`;
+          }
+          if (action === "drop") {
+            // He left the table: his card goes with him.
+            qa.players.splice(qa.players.indexOf(p), 1);
+            qa.emit("hands-imported", 1);
+            await sleep(300);
+            return `before=${before} after=${cardOpen()}`;
+          }
+          // Two refreshes; the older one's answer arrives last and must be ignored.
+          qa.playerDelays.push(500, 0);
+          p.engine.topReads[0] = { ...p.engine.topReads[0], observation: "Stale read from the older refresh." };
+          qa.emit("hands-imported", 1);
+          await sleep(20);
+          p.engine.topReads[0] = { ...p.engine.topReads[0], observation: "Newest read from the latest refresh." };
+          qa.emit("hands-imported", 1);
+          await sleep(200);
+          const mid = cardText().includes("Newest read") ? "new" : cardText().includes("Stale read") ? "stale" : "none";
+          await sleep(600);
+          const end = cardText().includes("Newest read") ? "new" : cardText().includes("Stale read") ? "stale" : "none";
+          return `before=${before} mid=${mid} end=${end} open=${cardOpen()}`;
+        }
         if (action === "click") {
           pointer(btn, "pointerdown", cx, cy);
           pointer(btn, "pointerup", cx, cy);
           btn.click();
           await sleep(200);
+          if (params.get("scroll") === "end") {
+            // The drawer's lower sections, for the screenshot.
+            for (const el of document.querySelectorAll("aside, aside *")) el.scrollTop = el.scrollHeight;
+            await sleep(50);
+          }
           return `panel=${document.querySelector("aside") ? 1 : 0}`;
         }
         if (action === "external") {

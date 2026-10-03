@@ -9,6 +9,7 @@ import {
   isOverlayDismissed,
   onHandsImported,
   onOverlayDismissedChanged,
+  onOverlayPointerLeft,
   onOverlayVisibilityChanged,
   onSeatTemplatesChanged,
   saveSeatPosition,
@@ -17,8 +18,20 @@ import {
   type OverlayHotZone,
 } from "../data/api";
 import { PlayerHudCard } from "../hud/PlayerHudCard";
+import { HoverReadCard } from "../hud/HoverReadCard";
 import { PlayerProfileDrawer } from "../components/PlayerProfileDrawer/PlayerProfileDrawer";
-import { chipMetrics, clampOverride, layoutSeats, seatSlot, type ChipModel, type Point } from "./seatLayout";
+import {
+  chipMetrics,
+  clampOverride,
+  hoverCardMetrics,
+  layoutSeats,
+  placeHoverCard,
+  seatSlot,
+  type ChipModel,
+  type HoverCardPlacement,
+  type Point,
+  type Rect,
+} from "./seatLayout";
 import styles from "./OverlayApp.module.css";
 
 /**
@@ -83,8 +96,31 @@ interface DragState {
   captured: boolean;
 }
 
+/**
+ * The hover read card (`strategic-analysis` build): which chip it belongs to
+ * and what opened it. A card opened by the cursor closes when the cursor
+ * leaves; one opened by keyboard focus closes when focus leaves.
+ */
+interface HoverState {
+  playerId: string;
+  source: "pointer" | "focus";
+}
+
 function windowSize() {
   return { w: window.innerWidth, h: window.innerHeight };
+}
+
+function samePlacement(a: HoverCardPlacement | null, b: HoverCardPlacement | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  const close = (p: number, q: number) => Math.abs(p - q) < 1e-6;
+  return (
+    a.fit === b.fit &&
+    close(a.rect.x, b.rect.x) &&
+    close(a.rect.y, b.rect.y) &&
+    close(a.rect.w, b.rect.w) &&
+    close(a.rect.h, b.rect.h)
+  );
 }
 
 /** One tracked table's HUD. Every backend call it makes names its own table. */
@@ -108,6 +144,15 @@ function TableOverlay({ tableId }: { tableId: number }) {
   const [measuredChip, setMeasuredChip] = useState<{ widthPx: number; heightPx: number } | null>(null);
   /** The chip being dragged and its live centre. Only the release saves it. */
   const [drag, setDrag] = useState<{ playerId: string; centre: Point } | null>(null);
+  const [hover, setHover] = useState<HoverState | null>(null);
+  /** Two reads on the card, or only the top one when two fit nowhere on this table. */
+  const [cardReadCount, setCardReadCount] = useState<1 | 2>(2);
+  /** Where the card is drawn; `null` until it has been measured and placed. */
+  const [cardPlacement, setCardPlacement] = useState<HoverCardPlacement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  // Set while the overlay itself puts focus back on a chip (closing the
+  // drawer), so that focus does not pop the hover card open.
+  const suppressFocusOpen = useRef(false);
 
   const dragState = useRef<DragState | null>(null);
   // Mirrors `drag` so the window-level pointerup handler reads the final
@@ -152,6 +197,8 @@ function TableOverlay({ tableId }: { tableId: number }) {
         setFrame(nextFrame);
         if (saved) setOverrides(saved);
         setDetailPlayer((open) => (open ? allPlayers.find((p) => p.id === open.id) ?? open : open));
+        // A player who left the table (or lost his reads) takes his card with him.
+        setHover((open) => (open && allPlayers.some((p) => p.id === open.playerId && p.engine) ? open : null));
       })
       .catch(() => undefined);
   }, [tableId]);
@@ -183,7 +230,9 @@ function TableOverlay({ tableId }: { tableId: number }) {
       .then(setHidden)
       .catch(() => undefined);
     const unlisten = onOverlayDismissedChanged((change) => {
-      if (change.tableId === tableId) setHidden(change.dismissed);
+      if (change.tableId !== tableId) return;
+      setHidden(change.dismissed);
+      if (change.dismissed) setHover(null);
     }).catch(() => undefined);
     return () => {
       unlisten.then((fn) => fn?.());
@@ -202,10 +251,12 @@ function TableOverlay({ tableId }: { tableId: number }) {
   // Every chip's centre. A player sits on a seat key when this table's size
   // is known and the key is a seat of it; the first player on a key keeps
   // it, anyone else (no seat, a duplicate) gets a collision-free spare slot.
+  // Size unknown (no hand read yet): every chip takes a spare slot, laid
+  // out around the more likely table picture.
+  const effectiveMax = maxPlayers ?? (players.length > 6 ? 9 : 6);
+  const heroSeat = players.find((p) => p.seatOffset === 0)?.seat ?? null;
+  const tagged = players.some((p) => p.engine?.tag);
   const slots = useMemo<ChipSlot[]>(() => {
-    // Size unknown (no hand read yet): every chip takes a spare slot, laid
-    // out around the more likely table picture.
-    const effectiveMax = maxPlayers ?? (players.length > 6 ? 9 : 6);
     const seated = new Map<number, Player>();
     const spare: Player[] = [];
     for (const player of players) {
@@ -214,7 +265,6 @@ function TableOverlay({ tableId }: { tableId: number }) {
       if (valid && !seated.has(key)) seated.set(key, player);
       else spare.push(player);
     }
-    const heroSeat = players.find((p) => p.seatOffset === 0)?.seat ?? null;
     const layout = layoutSeats({
       maxPlayers: effectiveMax,
       frame,
@@ -223,6 +273,7 @@ function TableOverlay({ tableId }: { tableId: number }) {
       seats: [...seated.keys()],
       overrides,
       model,
+      tagged,
       chip: measuredChip ?? undefined,
       heroSeatKey: frame === "absolute" ? heroSeat : null,
       spareCount: spare.length,
@@ -237,7 +288,7 @@ function TableOverlay({ tableId }: { tableId: number }) {
       if (placement) result.push({ player, seatKey: null, centre: placement });
     });
     return result;
-  }, [players, maxPlayers, frame, overrides, size, model, measuredChip]);
+  }, [players, maxPlayers, effectiveMax, heroSeat, tagged, frame, overrides, size, model, measuredChip]);
 
   // Measure the chips as painted (their text decides their width) and lay
   // out again with that size. Converges in one pass: moving a chip never
@@ -318,6 +369,9 @@ function TableOverlay({ tableId }: { tableId: number }) {
         // gesture on this chip even when the cursor outruns it or leaves
         // the hot zone, so no window-wide "unlocked" state is ever needed.
         state.captured = true;
+        // A drag is never read through: the card closes and stays closed
+        // until the cursor enters a chip again.
+        setHover(null);
         try {
           state.target.setPointerCapture(state.pointerId);
         } catch {
@@ -388,7 +442,12 @@ function TableOverlay({ tableId }: { tableId: number }) {
     const open = detailRef.current;
     setDetailPlayer(null);
     // Back to the chip that opened it, so the keyboard stays on the table's HUD.
-    if (open) chipRefs.current.get(open.id)?.focus({ preventScroll: true });
+    const chip = open ? chipRefs.current.get(open.id) : undefined;
+    if (chip) {
+      suppressFocusOpen.current = true;
+      chip.focus({ preventScroll: true });
+      suppressFocusOpen.current = false;
+    }
   }, []);
 
   useEffect(() => {
@@ -405,6 +464,7 @@ function TableOverlay({ tableId }: { tableId: number }) {
       suppressClick.current = false;
       return;
     }
+    setHover(null);
     setDetailPlayer((open) => (open?.id === player.id ? null : player));
   }
 
@@ -413,12 +473,99 @@ function TableOverlay({ tableId }: { tableId: number }) {
     setPlayers((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
   }
 
+  // ----- Hover read card -----------------------------------------------
+
+  // The open drawer has every read; while it is open no card opens, and a
+  // collapsed HUD shows none.
+  const hoveredPlayer =
+    hover && !detailPlayer && !hidden
+      ? players.find((p) => p.id === hover.playerId && p.engine) ?? null
+      : null;
+  const hoveredReads = hoveredPlayer?.engine?.topReads ?? [];
+  const cardReads = hoveredReads.slice(0, cardReadCount);
+  const readsKey = hoveredReads
+    .map((r) => `${r.ruleId}|${r.observation}|${r.advice}|${r.confidencePct}`)
+    .join("\n");
+  const cardMetrics = hoverCardMetrics(size.w, size.h);
+
+  // A new chip or new reads start again from two reads, measured afresh.
+  useLayoutEffect(() => {
+    setCardReadCount(2);
+    setCardPlacement(null);
+  }, [hover?.playerId, readsKey]);
+
+  // Measure the card as rendered and place it by `placeHoverCard`, the
+  // tested rule that keeps it off the board, bets, hole cards and buttons.
+  // Runs before paint, so an unplaced card is never seen.
+  useLayoutEffect(() => {
+    const card = cardRef.current;
+    const chip = hoveredPlayer ? chipRefs.current.get(hoveredPlayer.id) : undefined;
+    if (!hoveredPlayer || !card || !chip) {
+      setCardPlacement(null);
+      return;
+    }
+    const { w, h } = windowSize();
+    const toRect = (r: DOMRect): Rect => ({ x: r.left / w, y: r.top / h, w: r.width / w, h: r.height / h });
+    const otherChips = [...chipRefs.current.entries()]
+      .filter(([id]) => id !== hoveredPlayer.id)
+      .map(([, el]) => toRect(el.getBoundingClientRect()));
+    const next = placeHoverCard({
+      maxPlayers: effectiveMax,
+      frame,
+      windowW: w,
+      windowH: h,
+      heroSeatKey: frame === "absolute" ? heroSeat : null,
+      chip: toRect(chip.getBoundingClientRect()),
+      card: { widthPx: card.offsetWidth, heightPx: card.offsetHeight },
+      otherChips,
+    });
+    if (!next && cardReadCount === 2 && hoveredReads.length > 1) {
+      setCardReadCount(1);
+      return;
+    }
+    setCardPlacement((prev) => (samePlacement(prev, next) ? prev : next));
+  }, [hoveredPlayer, hoveredReads.length, cardReadCount, effectiveMax, frame, heroSeat, size, slots, measuredChip, drag]);
+
+  useEffect(() => {
+    if (!hover) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setHover(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [hover]);
+
+  // The native hit test tells this overlay when the cursor has left every
+  // chip: the window is click-through again from that moment, so the chip's
+  // own pointerleave may never be delivered.
+  useEffect(() => {
+    const unlisten = onOverlayPointerLeft((leftTable) => {
+      if (leftTable === tableId) setHover((open) => (open?.source === "pointer" ? null : open));
+    }).catch(() => undefined);
+    return () => {
+      unlisten.then((fn) => fn?.());
+    };
+  }, [tableId]);
+
+  function openHover(player: Player, source: HoverState["source"]) {
+    if (!player.engine) return;
+    if (dragState.current?.captured || detailRef.current) return;
+    setHover((open) =>
+      open?.playerId === player.id && open.source === "pointer" ? open : { playerId: player.id, source },
+    );
+  }
+
+  function closeHover(player: Player, source?: HoverState["source"]) {
+    setHover((open) => (open?.playerId === player.id && (!source || open.source === source) ? null : open));
+  }
+
   function handleShow() {
     setHidden(false);
     showOverlay(tableId).catch(() => undefined);
   }
 
   const detailSlot = detailPlayer ? slots.find((s) => s.player.id === detailPlayer.id) : undefined;
+  const cardId = `hover-read-${tableId}`;
   const chipVars = {
     ["--chip-font" as string]: `${nominalChip.fontPx}px`,
     ["--chip-w" as string]: `${nominalChip.widthPx}px`,
@@ -472,6 +619,20 @@ function TableOverlay({ tableId }: { tableId: number }) {
                 onOpenDetail={toggleDetail}
                 expanded={detailPlayer?.id === player.id}
                 dragging={dragging}
+                describedBy={hoveredPlayer?.id === player.id && cardPlacement ? cardId : undefined}
+                hoverHandlers={
+                  player.engine
+                    ? {
+                        onPointerEnter: () => openHover(player, "pointer"),
+                        onPointerLeave: () => closeHover(player),
+                        onFocus: (e) => {
+                          if (suppressFocusOpen.current || !e.currentTarget.matches(":focus-visible")) return;
+                          openHover(player, "focus");
+                        },
+                        onBlur: () => closeHover(player, "focus"),
+                      }
+                    : undefined
+                }
                 contentRef={(el) => {
                   if (el) chipRefs.current.set(player.id, el);
                   else chipRefs.current.delete(player.id);
@@ -505,6 +666,22 @@ function TableOverlay({ tableId }: { tableId: number }) {
             </div>
           );
         })}
+
+      {hoveredPlayer && (
+        <HoverReadCard
+          id={cardId}
+          cardRef={cardRef}
+          playerName={hoveredPlayer.name}
+          reads={cardReads}
+          style={{
+            ["--card-font" as string]: `${cardMetrics.fontPx}px`,
+            width: `${cardMetrics.widthPx}px`,
+            ...(cardPlacement
+              ? { left: `${cardPlacement.rect.x * 100}%`, top: `${cardPlacement.rect.y * 100}%` }
+              : { left: 0, top: 0, visibility: "hidden" }),
+          }}
+        />
+      )}
 
       {detailPlayer && (
         <PlayerProfileDrawer

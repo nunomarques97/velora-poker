@@ -1,4 +1,4 @@
-import type { ClassificationResult, HudProfile, Player, PlayerStats } from "../data/types";
+import type { ChipTag, ClassificationResult, HudProfile, Player, PlayerStats } from "../data/types";
 import { NO_OPPORTUNITY, STAT_LABELS } from "./statFormat";
 import styles from "./PlayerHudCard.module.css";
 
@@ -37,6 +37,24 @@ function chipValue(key: keyof PlayerStats, stats: PlayerStats): string {
   return key === "aggressionFactor" ? value.toFixed(1) : String(Math.round(value));
 }
 
+/**
+ * The tag in words, for the chip's accessible name: what kind of tag it is
+ * and, for a read's tag, the read itself. The tag letters alone ("F3B")
+ * mean nothing to a screen reader.
+ */
+function tagDescription(tag: ChipTag, player: Player): string {
+  if (tag.source === "tilt") return `tag ${tag.text}, playing far looser than usual lately`;
+  if (tag.source === "stack") return `tag ${tag.text}, effective stack`;
+  const read = player.engine?.reads.find((r) => r.ruleId === tag.ruleId);
+  return read ? `tag ${tag.text}, ${read.observation}` : `tag ${tag.text}`;
+}
+
+/** Pointer and focus handlers the overlay uses to open and close the hover read card. */
+export type HoverHandlers = Pick<
+  React.HTMLAttributes<HTMLButtonElement>,
+  "onPointerEnter" | "onPointerLeave" | "onFocus" | "onBlur"
+>;
+
 interface PlayerHudCardProps {
   player: Player;
   profile: HudProfile;
@@ -55,6 +73,10 @@ interface PlayerHudCardProps {
   expanded?: boolean;
   /** Overlay only: the chip is being dragged. */
   dragging?: boolean;
+  /** Overlay only (`strategic-analysis` build): opens and closes the hover read card. */
+  hoverHandlers?: HoverHandlers;
+  /** Overlay only: the id of this chip's open hover read card. */
+  describedBy?: string;
 }
 
 /**
@@ -65,6 +87,10 @@ interface PlayerHudCardProps {
  * Either way the chip is one button: click opens the detail panel, drag
  * moves it. Its size comes from the overlay (`--chip-font`, `--chip-w`,
  * `--chip-h`), which scales it with the table.
+ *
+ * `strategic-analysis` build only: when the opponent engine gave the player
+ * a tag (`engine.tag`), it leads the chip in its own segment. With no
+ * engine (the default build) or no tag the chip is exactly the one above.
  */
 export function PlayerHudCard({
   player,
@@ -75,6 +101,8 @@ export function PlayerHudCard({
   fixedWidth,
   expanded,
   dragging,
+  hoverHandlers,
+  describedBy,
 }: PlayerHudCardProps) {
   const model = profile.visualModel === "badge" ? "badge" : "compact";
   const archetype = shownArchetype(player.classification, player.hands, profile.minHands);
@@ -84,6 +112,7 @@ export function PlayerHudCard({
   const keys = (profile.statPages[0]?.statKeys ?? []).slice(0, COMPACT_STAT_COUNT);
   const values = keys.map((key) => chipValue(key, player.stats));
   const statsText = keys.map((key, i) => `${STAT_LABELS[key]} ${values[i]}`).join(", ");
+  const tag = player.engine?.tag ?? null;
 
   // The colour is never the only signal: the archetype's name is in the
   // chip's accessible name and tooltip, and the detail panel spells it out.
@@ -93,6 +122,7 @@ export function PlayerHudCard({
     model === "compact" && statsText ? statsText : null,
     archetype ? archetype.label : null,
     smallSample ? `under ${profile.minHands} hands, small sample` : null,
+    tag ? tagDescription(tag, player) : null,
   ]
     .filter(Boolean)
     .join(", ");
@@ -124,9 +154,19 @@ export function PlayerHudCard({
       onClick={() => onOpenDetail?.(player)}
       aria-label={`${description}. Open details`}
       aria-expanded={expanded === undefined ? undefined : expanded}
-      title={description}
+      aria-describedby={describedBy}
+      // The hover read card replaces the native tooltip, which would
+      // otherwise open on top of it.
+      title={hoverHandlers && player.engine ? undefined : description}
+      data-tag={tag?.text}
+      {...hoverHandlers}
       {...dragHandleProps}
     >
+      {tag && (
+        <span className={`${styles.tag} ${styles[`tag-${tag.source}`] ?? ""}`} aria-hidden="true">
+          {tag.text}
+        </span>
+      )}
       {model === "badge" ? (
         <span className={styles.initials}>{player.name.slice(0, 2).toUpperCase()}</span>
       ) : (

@@ -240,6 +240,14 @@ pub fn label_for_table(table_id: u32) -> Option<String> {
     })
 }
 
+/// The table one overlay window is currently showing, or `None` when the
+/// label is idle or unknown — the reverse of `label_for_table`.
+pub fn table_for_label(label: &str) -> Option<u32> {
+    POOL.lock()
+        .ok()
+        .and_then(|pool| pool.iter().find(|slot| slot.label == label).and_then(|slot| slot.table_id))
+}
+
 /// `(windows built, pooled windows re-pointed at a new table, failed builds)`.
 pub fn window_lifecycle_counts() -> (u64, u64, u64) {
     (
