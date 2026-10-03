@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window and every per-table HUD overlay window",
+  "description": "Capability for the main window, every per-table HUD overlay window and the side panel",
   "comment": [
     "'overlay*' is a glob, and it has to be. Overlay windows are created",
     "at runtime, one per tracked PokerStars table, with labels overlay1,",
@@ -14,9 +14,13 @@
     "a .catch(). Every overlay looked correct on open and then never updated",
     "again: no refresh on a new hand, no visibility or mode broadcast, no",
     "shared seat template. Found by dealing a hand to a simulated table and",
-    "watching the HUD not change."
+    "watching the HUD not change.",
+    "'panel' is the side panel window, declared statically in tauri.conf.json.",
+    "It refreshes on hands-imported and tracked-tables-changed, so it needs",
+    "listen too. tests/window_contract_tests.rs fails when any declared or",
+    "runtime window label is not covered by this list."
   ],
-  "windows": ["main", "overlay*"],
+  "windows": ["main", "overlay*", "panel"],
   "permissions": [
     "core:default",
     "opener:default",

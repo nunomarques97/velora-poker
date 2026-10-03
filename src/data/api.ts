@@ -492,6 +492,15 @@ export async function getSidePanelSnapshot(): Promise<SidePanelSnapshot> {
   return invoke<SidePanelSnapshot>("get_side_panel_snapshot");
 }
 
+/**
+ * Shows and focuses the side panel window. The window is declared in
+ * `tauri.conf.json` and only ever shown or hidden; closing it hides it.
+ */
+export async function showSidePanel(): Promise<void> {
+  assertTauriAvailable();
+  return invoke("show_side_panel");
+}
+
 // ---------------------------------------------------------------------
 // Live events
 // ---------------------------------------------------------------------

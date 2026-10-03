@@ -30,13 +30,15 @@ export default defineConfig(async () => ({
     },
   },
 
-  // Two HTML entry points: the main app window and the transparent HUD
-  // overlay window (a separate Tauri WebviewWindow pointed at overlay.html).
+  // Three HTML entry points: the main app window, the transparent HUD
+  // overlay window (a separate Tauri WebviewWindow pointed at overlay.html)
+  // and the side panel window (panel.html), meant for a second monitor.
   build: {
     rollupOptions: {
       input: {
         main: "index.html",
         overlay: "overlay.html",
+        panel: "panel.html",
       },
     },
   },

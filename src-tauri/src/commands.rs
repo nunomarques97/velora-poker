@@ -580,6 +580,28 @@ pub fn get_side_panel_snapshot(state: State<AppState>) -> Result<SidePanelSnapsh
     side_panel_snapshot(&conn, &mut engine, &tables)
 }
 
+/// Label of the side-panel window, declared statically in `tauri.conf.json`.
+pub const SIDE_PANEL_LABEL: &str = "panel";
+
+/// Brings up the side panel window. It is declared statically in
+/// `tauri.conf.json` and created hidden at startup, so this only shows and
+/// focuses that existing window: nothing here builds a window, which a
+/// synchronous command must never do on Windows (see `overlay::manager`).
+/// Closing the panel hides it (`lib.rs`), so this always finds it again.
+#[tauri::command]
+pub fn show_side_panel(app_handle: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+
+    let window = app_handle
+        .get_webview_window(SIDE_PANEL_LABEL)
+        .ok_or_else(|| format!("no '{SIDE_PANEL_LABEL}' window declared in tauri.conf.json"))?;
+    if window.is_minimized().unwrap_or(false) {
+        window.unminimize().map_err(|e| e.to_string())?;
+    }
+    window.show().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub fn set_player_color_override(
     state: State<AppState>,

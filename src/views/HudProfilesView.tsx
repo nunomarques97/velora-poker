@@ -14,6 +14,7 @@ import {
   setHudProfileMinHands,
   setOverlaysEnabled,
   showOverlay,
+  showSidePanel,
   type TrackedTableStatus,
 } from "../data/api";
 import { players as SAMPLE_PLAYERS } from "../data/mockData";
@@ -213,6 +214,20 @@ export function HudProfilesView({ onSelectPlayer }: HudProfilesViewProps) {
     window.setTimeout(refreshOverlayStatus, 300);
   }
 
+  /**
+   * Shows the side panel window (every open table and its players, for a
+   * second monitor). The window always exists, hidden; this only brings it up.
+   */
+  async function handleOpenSidePanel() {
+    try {
+      await showSidePanel();
+    } catch (err) {
+      if (mounted.current) {
+        setNotice({ kind: "error", text: `Couldn't open the side panel: ${describeError(err)}` });
+      }
+    }
+  }
+
   /** Per-table quick re-show for a table dismissed via the overlay's own "Hide". */
   async function handleShowTable(tableId: number) {
     await showOverlay(tableId);
@@ -322,6 +337,10 @@ export function HudProfilesView({ onSelectPlayer }: HudProfilesViewProps) {
 
         <button type="button" className={styles.overlayButton} onClick={toggleOverlaysEnabled}>
           {overlaysEnabled ? "Turn HUDs Off" : "Turn HUDs On"}
+        </button>
+
+        <button type="button" className={styles.resetButton} onClick={handleOpenSidePanel}>
+          Open side panel
         </button>
       </div>
 

@@ -83,6 +83,7 @@ pub fn run() {
             commands::get_players_page,
             commands::get_active_table_players,
             commands::get_side_panel_snapshot,
+            commands::show_side_panel,
             commands::set_player_color_override,
             commands::clear_player_color_override,
             commands::set_player_note,
@@ -199,6 +200,21 @@ pub fn run() {
             // a *synchronous command handler* — which is what the old
             // `open_overlay` did — is the one it documents as deadlocking. See
             // `overlay::manager`'s header for the citation.
+
+            // The side panel is the same kind of static window: declared in
+            // `tauri.conf.json`, created hidden here by Tauri, and from then on
+            // only shown (`commands::show_side_panel`) or hidden. Its close
+            // button hides it instead of destroying it, so the window is never
+            // rebuilt at runtime and "Open side panel" always finds it.
+            if let Some(panel) = app.get_webview_window(commands::SIDE_PANEL_LABEL) {
+                let handle = panel.clone();
+                panel.on_window_event(move |event| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = handle.hide();
+                    }
+                });
+            }
 
             // Table window-following. Installs a
             // `SetWinEventHook` on the main thread — the same thread that

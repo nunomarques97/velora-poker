@@ -33,6 +33,20 @@
         "x": 80,
         "y": 80,
         "visible": false
+      },
+      {
+        "label": "panel",
+        "url": "panel.html",
+        "title": "Velora Tables",
+        "width": 480,
+        "height": 900,
+        "minWidth": 380,
+        "minHeight": 480,
+        "resizable": true,
+        "decorations": true,
+        "transparent": false,
+        "alwaysOnTop": false,
+        "visible": false
       }
     ],
     "security": {

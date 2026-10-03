@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Velora side panel QA harness</title>
+    <!--
+      QA-only page (dev server only, never bundled: vite.config.ts builds
+      index.html, overlay.html and panel.html). It renders the real side panel
+      (src/panel) with the Tauri invoke/event boundary mocked in memory: a
+      world of 8 tracked tables whose snapshot is built here the way
+      commands::side_panel_snapshot builds it (multi-table flags only between
+      tables with a parsed name; quality, tags and reads null in the default
+      build).
+
+      Query parameters:
+        build=strategic|default   which build the mock reports (default strategic)
+        start=ok|empty|error      the first snapshot: 8 tables, no table, or a failure
+        expand=<ids>              comma-separated table ids to expand after load
+        action=expand|refresh|tracked|stale|retry|refreshfail|refreshbanner|emptyrefresh
+                                  optional scripted interaction
+
+      Results, written to <body> data attributes once the page settles
+      (data-qa-ready="1"):
+        data-qa-state           loading | empty | error | ready | unavailable
+        data-qa-rows            table rows rendered
+        data-qa-expanded        rows with aria-expanded="true"
+        data-qa-flags           villain rows flagged as seated at other tables
+        data-qa-expected-flags  the same count, computed from the mock world
+        data-qa-flag-text       every flag's text, joined with " | "
+        data-qa-tags            villain tags rendered
+        data-qa-reads           villain reads rendered
+        data-qa-unavailable     D102 "unavailable in this build" texts rendered
+        data-qa-quality         the first row's quality text
+        data-qa-announce        the live region's text
+        data-qa-calls           get_side_panel_snapshot calls
+        data-qa-listeners       JSON: live event listeners per event
+        data-qa-action-result   what the scripted action observed
+    -->
+    <script>
+      (() => {
+        const params = new URLSearchParams(location.search);
+        const build = params.get("build") === "default" ? "default" : "strategic";
+        const start = params.get("start") ?? "ok";
+
+        // Reads with realistic wording and the spec's tag vocabulary.
+        const READS = {
+          AggroAnna77: ["3B+", "3-bets 14% of the time when you open (17/120).", "4-bet her lighter; call her 3-bets wider in position.", 77],
+          calldown_carl: ["STN", "Goes to showdown 38% of the flops he sees (24/64).", "Value bet thinner and stop bluffing the river.", 71],
+          GrinderGus: ["12bb", "12bb effective: shoves or folds preflop.", "Call his shoves with a push/fold range, not a cash range.", 66],
+          TightTony: ["F3B", "Folds to 72% of 3-bets (36/50).", "3-bet his opens wider as a bluff.", 81],
+          fishy_mcfold: ["LMP", "Limps 41% of the hands he enters (19/46).", "Isolate his limps wider, in position.", 52],
+          M4ster_Bluff: ["TILT", "VPIP 58% in the last 30 hands, against 36% before.", "Value bet wider while he stays loose.", 58],
+          RockSolid_R: ["NIT", "Plays 11% of hands; opens only the top of the range.", "Steal his blinds; fold to his 3-bets.", 62],
+          SpinKing_88: ["SHV", "Shoves 64% of his button hands at 10-15bb.", "Call his shoves wider with any ace and broadway.", 57],
+          ValueVic: ["FCB", "Folds to 64% of flop c-bets (28/44).", "C-bet small and often when he defends.", 68],
+          LooseLars: ["CC+", "Cold-calls 22% of opens (9/41).", "Raise bigger for value against his calls.", 55],
+          "Zé_Pokerista": ["BRL", "Barrels the turn after 71% of his flop c-bets.", "Float flops wider and fold more turns to his second bet.", 63],
+          TurboTina: ["3B+", "3-bets 12% against late-position opens.", "Open tighter from the cutoff when she is on the button.", 49],
+        };
+        const HANDS = {
+          AggroAnna77: 412, calldown_carl: 286, GrinderGus: 133, TightTony: 520, fishy_mcfold: 61,
+          M4ster_Bluff: 95, RockSolid_R: 230, SpinKing_88: 74, ValueVic: 188, LooseLars: 52,
+          "Zé_Pokerista": 143, TurboTina: 47, newbie_ned: 6, Unknown_9: 3, quiet_quinn: 18,
+          averylongscreennamethatneverends_2026: 33, pp_rookie: 9, Unknown_41: 2, donk_dan: 14,
+          sat_ladder_k: 21, mtt_mike: 27, Unknown_77: 4,
+        };
+        const t = (tableId, tableName, maxPlayers, quality, villains) => ({ tableId, tableName, maxPlayers, quality, villains });
+        const q = (score, label, basisHands) => ({ score, label, basisHands });
+        const fullWorld = () => [
+          t(1, "Halley III", 6, q(68, "soft", 412), ["AggroAnna77", "calldown_carl", "fishy_mcfold", "newbie_ned"]),
+          t(2, "Ross II", 6, q(52, "average", 640), ["AggroAnna77", "TightTony", "ValueVic", "quiet_quinn"]),
+          t(3, "Tournament 3812345678 Table 4", 9, q(31, "tough", 880),
+            ["GrinderGus", "RockSolid_R", "TightTony", "M4ster_Bluff", "Unknown_9", "Zé_Pokerista", "quiet_quinn", "averylongscreennamethatneverends_2026"]),
+          t(4, "Aludra", 6, null, ["calldown_carl", "pp_rookie", "Unknown_41"]),
+          t(5, "Medusa II", 6, q(74, "soft", 355), ["AggroAnna77", "LooseLars", "TurboTina", "donk_dan"]),
+          t(6, "Spin & Go 4812001", 3, q(47, "average", 96), ["SpinKing_88", "TurboTina"]),
+          t(7, "Tournament 3812345999 Table 12", 9, q(28, "tough", 702),
+            ["GrinderGus", "ValueVic", "Zé_Pokerista", "sat_ladder_k", "mtt_mike", "Unknown_77"]),
+          // A title that did not parse: with several tables open it gets no roster (commands.rs table_scope).
+          t(8, null, null, null, []),
+        ];
+
+        const qa = (window.__QA__ = {
+          build,
+          world: start === "ok" || start === "error" ? fullWorld() : [],
+          fullWorld,
+          reads: structuredClone(READS),
+          // StrictMode mounts twice and the first load's answer is discarded,
+          // so a failed first load needs both mount-time requests to fail.
+          failNext: start === "error" ? 2 : 0,
+          delays: [], // ms, one per coming get_side_panel_snapshot call
+          calls: 0,
+          listeners: new Map(), // event -> Map(eventId -> callbackId)
+          callbacks: new Map(),
+          emit(event, payload) {
+            const byId = qa.listeners.get(event);
+            if (!byId) return;
+            for (const [eventId, cbId] of byId) {
+              const cb = qa.callbacks.get(cbId);
+              if (cb) cb({ event, id: eventId, payload });
+            }
+          },
+          /** Villain rows seated at more than one named table, as the backend flags them. */
+          expectedFlags() {
+            const seen = new Map();
+            for (const table of qa.world) {
+              if (table.tableName === null) continue;
+              for (const name of table.villains) seen.set(name, (seen.get(name) ?? 0) + 1);
+            }
+            let flags = 0;
+            for (const table of qa.world) {
+              if (table.tableName === null) continue;
+              flags += table.villains.filter((name) => seen.get(name) > 1).length;
+            }
+            return flags;
+          },
+          snapshot() {
+            const strategic = build === "strategic";
+            const ids = (name) => Object.keys(HANDS).indexOf(name) + 100;
+            const tablesOf = (name) =>
+              qa.world.filter((tb) => tb.tableName !== null && tb.villains.includes(name)).map((tb) => tb.tableId);
+            return {
+              generatedAt: "2026-10-03T21:14:05Z",
+              tables: qa.world.map((table) => ({
+                tableId: table.tableId,
+                tableName: table.tableName,
+                maxPlayers: table.maxPlayers,
+                playerCount: table.villains.length === 0 ? 0 : table.villains.length + 1,
+                quality: strategic ? table.quality : null,
+                villains: table.villains.map((name, i) => {
+                  const read = HANDS[name] >= 30 ? qa.reads[name] : undefined;
+                  return {
+                    playerId: String(ids(name)),
+                    name,
+                    seat: i + 2,
+                    hands: HANDS[name] ?? 1,
+                    tag: strategic && read ? read[0] : null,
+                    topRead:
+                      strategic && read
+                        ? { ruleId: "qa.rule", observation: read[1], advice: read[2], confidencePct: read[3] }
+                        : null,
+                    otherTableIds: table.tableName === null ? [] : tablesOf(name).filter((id) => id !== table.tableId),
+                  };
+                }),
+              })),
+            };
+          },
+        });
+        let nextId = 1;
+
+        window.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
+          unregisterListener(event, eventId) {
+            qa.listeners.get(event)?.delete(eventId);
+          },
+        };
+        window.__TAURI_INTERNALS__ = {
+          transformCallback(callback) {
+            const id = nextId++;
+            qa.callbacks.set(id, callback);
+            return id;
+          },
+          invoke: async (cmd, args = {}) => {
+            switch (cmd) {
+              case "plugin:event|listen": {
+                const eventId = nextId++;
+                if (!qa.listeners.has(args.event)) qa.listeners.set(args.event, new Map());
+                qa.listeners.get(args.event).set(eventId, args.handler);
+                return eventId;
+              }
+              case "plugin:event|unlisten":
+                qa.listeners.get(args.event)?.delete(args.eventId);
+                return null;
+              case "get_app_version":
+                return { version: "0.1.0", features: build === "strategic" ? ["strategic-analysis"] : [] };
+              case "get_side_panel_snapshot": {
+                qa.calls++;
+                // The answer is what the world held when asked; `delays` holds
+                // it back, so an older answer can arrive after a newer one.
+                const fail = qa.failNext > 0;
+                if (fail) qa.failNext--;
+                const snapshot = structuredClone(qa.snapshot());
+                const delay = qa.delays.shift() ?? 0;
+                if (delay) await new Promise((r) => setTimeout(r, delay));
+                if (fail) throw "database is locked";
+                return snapshot;
+              }
+              default:
+                console.warn("[qa-panel] unmocked command", cmd, args);
+                return null;
+            }
+          },
+        };
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module">
+      const qa = window.__QA__;
+      const params = new URLSearchParams(location.search);
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+      const rows = () => [...document.querySelectorAll("li[data-table-id]")];
+      const buttonOf = (tableId) => document.querySelector(`li[data-table-id="${tableId}"] button[aria-expanded]`);
+      const expandedIds = () =>
+        rows()
+          .filter((li) => li.querySelector("button[aria-expanded]").getAttribute("aria-expanded") === "true")
+          .map((li) => li.dataset.tableId);
+      const text = () => document.getElementById("root").textContent;
+
+      function panelState() {
+        if (rows().length) return "ready";
+        const t = text();
+        if (t.includes("No PokerStars tables open")) return "empty";
+        if (t.includes("Failed to load tables")) return "error";
+        if (t.includes("Loading tables")) return "loading";
+        return "unavailable";
+      }
+
+      async function settle() {
+        // Before React's first render the root is empty, which is not a state yet.
+        for (let i = 0; i < 100 && (!text() || panelState() === "loading"); i++) await sleep(20);
+        await sleep(50);
+      }
+
+      function report(result) {
+        const d = document.body.dataset;
+        const flags = [...document.querySelectorAll("[data-multi-table]")];
+        d.qaState = panelState();
+        d.qaRows = String(rows().length);
+        d.qaExpanded = String(expandedIds().length);
+        d.qaFlags = String(flags.length);
+        d.qaExpectedFlags = String(qa.expectedFlags());
+        d.qaFlagText = flags.map((f) => f.textContent.replace(/\s+/g, " ").trim()).join(" | ");
+        d.qaTags = String(document.querySelectorAll("li[data-player-id] [class*='tag']").length);
+        d.qaReads = String([...document.querySelectorAll("li[data-player-id] p")].filter((p) => /observation/.test(p.className)).length);
+        d.qaUnavailable = String((text().match(/unavailable in this build/g) ?? []).length);
+        const firstQuality = rows()[0]?.querySelector("button [class*='quality']");
+        d.qaQuality = firstQuality ? firstQuality.textContent : "";
+        d.qaAnnounce = document.querySelector("[role=status]")?.textContent ?? "";
+        d.qaCalls = String(qa.calls);
+        const listeners = {};
+        for (const [event, byId] of qa.listeners) listeners[event] = byId.size;
+        d.qaListeners = JSON.stringify(listeners);
+        if (result !== undefined) d.qaActionResult = result;
+      }
+
+      function setRead(name, observation) {
+        qa.reads[name] = [qa.reads[name][0], observation, qa.reads[name][2], qa.reads[name][3]];
+      }
+
+      async function act(action) {
+        if (action === "expand") {
+          const btn = buttonOf(1);
+          const region = document.getElementById(btn.getAttribute("aria-controls"));
+          const before = btn.getAttribute("aria-expanded");
+          const hiddenBefore = region.hidden ? 1 : 0;
+          btn.focus();
+          const focusable = document.activeElement === btn ? 1 : 0;
+          btn.click();
+          await sleep(50);
+          const after = btn.getAttribute("aria-expanded");
+          const shown = region.hidden ? 0 : 1;
+          btn.click();
+          await sleep(50);
+          const collapsed = btn.getAttribute("aria-expanded");
+          const hiddenAgain = region.hidden ? 1 : 0;
+          const native = btn.tagName === "BUTTON" && btn.type === "button" && btn.tabIndex >= 0 ? 1 : 0;
+          return `before=${before} hiddenBefore=${hiddenBefore} after=${after} shown=${shown} collapsed=${collapsed} hiddenAgain=${hiddenAgain} native=${native} focusable=${focusable} focusKept=${document.activeElement === btn ? 1 : 0}`;
+        }
+        if (action === "refresh") {
+          // Two rows open; a new hand changes a read and seats a new villain.
+          buttonOf(1).click();
+          buttonOf(3).click();
+          await sleep(50);
+          const callsBefore = qa.calls;
+          setRead("AggroAnna77", "Fresh read after the new hand.");
+          qa.world[0].villains.push("TightTony");
+          qa.emit("hands-imported", 1);
+          await sleep(300);
+          const villains = document.querySelectorAll('li[data-table-id="1"] li[data-player-id]').length;
+          return `expanded=${expandedIds().join(",")} updated=${text().includes("Fresh read after the new hand.") ? 1 : 0} villains=${villains} refreshed=${qa.calls > callsBefore ? 1 : 0}`;
+        }
+        if (action === "tracked") {
+          // Table 2 closes while open; a ninth table opens; table 1 stays open.
+          buttonOf(1).click();
+          buttonOf(2).click();
+          await sleep(50);
+          qa.world = qa.world.filter((tb) => tb.tableId !== 2);
+          qa.world.push({ tableId: 9, tableName: "Halley IV", maxPlayers: 6, quality: null, villains: ["TightTony", "LooseLars"] });
+          qa.emit("tracked-tables-changed", []);
+          await sleep(300);
+          const row9 = rows().find((li) => li.dataset.tableId === "9");
+          return `rows=${rows().length} expanded=${expandedIds().join(",")} row9=${row9 ? 1 : 0} row2=${rows().some((li) => li.dataset.tableId === "2") ? 1 : 0}`;
+        }
+        if (action === "stale") {
+          // Two refreshes; the older one's answer arrives last and must be ignored.
+          buttonOf(1).click();
+          await sleep(50);
+          qa.delays.push(500, 0);
+          setRead("AggroAnna77", "Stale read from the older refresh.");
+          qa.emit("hands-imported", 1);
+          await sleep(20);
+          setRead("AggroAnna77", "Newest read from the latest refresh.");
+          qa.emit("tracked-tables-changed", []);
+          await sleep(200);
+          const which = () => (text().includes("Newest read") ? "new" : text().includes("Stale read") ? "stale" : "none");
+          const mid = which();
+          await sleep(700);
+          return `mid=${mid} end=${which()} expanded=${expandedIds().join(",")}`;
+        }
+        if (action === "retry") {
+          // The first load failed (start=error): error state, then Retry.
+          const before = panelState();
+          const retry = [...document.querySelectorAll("button")].find((b) => b.textContent === "Retry");
+          const alert = document.querySelector("[role=alert]") ? 1 : 0;
+          retry.focus();
+          retry.click();
+          await sleep(300);
+          const focus = document.activeElement?.tagName === "H1" ? "heading" : document.activeElement?.tagName ?? "none";
+          return `before=${before} alert=${alert} hadRetry=${retry ? 1 : 0} after=${panelState()} rows=${rows().length} focus=${focus}`;
+        }
+        if (action === "refreshfail") {
+          // A refresh fails while the list is on screen: the list stays, flagged; Retry clears it.
+          buttonOf(1).click();
+          await sleep(50);
+          qa.failNext = 1;
+          qa.emit("hands-imported", 1);
+          await sleep(200);
+          const banner = [...document.querySelectorAll("[role=alert]")].some((a) => a.textContent.includes("Couldn't refresh")) ? 1 : 0;
+          const kept = rows().length;
+          const keptExpanded = expandedIds().join(",");
+          const retry = [...document.querySelectorAll("button")].find((b) => b.textContent === "Retry");
+          retry.click();
+          await sleep(300);
+          const after = [...document.querySelectorAll("[role=alert]")].length;
+          return `banner=${banner} kept=${kept} keptExpanded=${keptExpanded} alertsAfter=${after} rows=${rows().length}`;
+        }
+        if (action === "refreshbanner") {
+          // For the screenshot: a failed refresh left on screen, one row open.
+          buttonOf(1).click();
+          qa.failNext = 1;
+          qa.emit("hands-imported", 1);
+          await sleep(200);
+          return "banner";
+        }
+        if (action === "emptyrefresh") {
+          // No table at first (start=empty); tables open and the tracker says so.
+          const before = panelState();
+          const emptyText = text().includes("Open a table in PokerStars") ? 1 : 0;
+          qa.world = qa.fullWorld();
+          qa.emit("tracked-tables-changed", []);
+          await sleep(300);
+          return `before=${before} nextStep=${emptyText} after=${panelState()} rows=${rows().length}`;
+        }
+        return undefined;
+      }
+
+      (async () => {
+        await settle();
+        for (const id of (params.get("expand") ?? "").split(",").filter(Boolean)) buttonOf(Number(id))?.click();
+        await sleep(50);
+        let result;
+        const action = params.get("action");
+        if (action) {
+          try {
+            result = await act(action);
+          } catch (err) {
+            result = `error=${String(err)}`;
+          }
+        }
+        report(result);
+        document.body.dataset.qaReady = "1";
+      })();
+    </script>
+    <script type="module" src="/src/panel/main.tsx"></script>
+  </body>
+</html>
