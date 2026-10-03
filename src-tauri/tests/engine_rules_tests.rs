@@ -181,6 +181,47 @@ fn profile_small_sample_extreme_is_shrunk_below_threshold() {
     assert!(fires(&cash(&[(Vpip, 0, 60), (Pfr, 0, 60)]), "pf.profile.nit"));
 }
 
+#[test]
+fn profile_thresholds_follow_format_priors() {
+    // Pro review (D107): the profile reads are deltas from the format's
+    // priors; with the cash priors they are D106's absolute numbers (the
+    // cash boundaries above are unchanged).
+    let spin = FormatKey::Spin;
+    // Spin & Go, VPIP prior .38, PFR .25: 27/60 VPIP and 3/60 PFR shrink to
+    // (27 + 7.6)/80 = .4325 and (3 + 5)/80 = .10. D106's absolute .40 read
+    // that as loose-passive; in a 3-max hyper it is an ordinary player.
+    let ordinary = [(Vpip, 27, 60), (Pfr, 3, 60), (Wtsd, 5, 30)];
+    assert!(fires(&cash(&ordinary), "pf.profile.loose_passive"));
+    assert!(!fires(&input(spin, &ordinary), "pf.profile.loose_passive"));
+    // Spin loose: VPIP ≥ .38 + .13 = .51 → (h + 7.6)/80 ≥ .51 → h = 34
+    // (.52); 33 is .5075.
+    assert!(fires(&input(spin, &[(Vpip, 34, 60), (Pfr, 3, 60), (Wtsd, 5, 30)]), "pf.profile.loose_passive"));
+    assert!(!fires(&input(spin, &[(Vpip, 33, 60), (Pfr, 3, 60), (Wtsd, 5, 30)]), "pf.profile.loose_passive"));
+    // Spin station: WTSD prior .30 → ≥ .35: (h + 6)/50 → h = 12 fires, 11 not.
+    assert!(fires(&input(spin, &[(Vpip, 34, 60), (Pfr, 3, 60), (Wtsd, 12, 30)]), "pf.profile.station"));
+    assert!(!fires(&input(spin, &[(Vpip, 34, 60), (Pfr, 3, 60), (Wtsd, 11, 30)]), "pf.profile.station"));
+
+    // Spin nit: VPIP ≤ .38 − .12 = .26: 13/60 → (13 + 7.6)/80 = .2575 fires,
+    // 14/60 → .27 does not. In cash 13/60 is .23, nowhere near a nit.
+    assert!(fires(&input(spin, &[(Vpip, 13, 60), (Pfr, 5, 60)]), "pf.profile.nit"));
+    assert!(!fires(&input(spin, &[(Vpip, 14, 60), (Pfr, 5, 60)]), "pf.profile.nit"));
+    assert!(!fires(&cash(&[(Vpip, 13, 60), (Pfr, 5, 60)]), "pf.profile.nit"));
+    // Zoom (prior .23) is tighter than cash: nit ≤ .11. 6/60 is a cash nit
+    // ((6 + 5.4)/80 = .1425) but not a Zoom one ((6 + 4.6)/80 = .1325).
+    assert!(fires(&cash(&[(Vpip, 6, 60), (Pfr, 5, 60)]), "pf.profile.nit"));
+    assert!(!fires(&input(FormatKey::Zoom, &[(Vpip, 6, 60), (Pfr, 5, 60)]), "pf.profile.nit"));
+    assert!(fires(&input(FormatKey::Zoom, &[(Vpip, 4, 60), (Pfr, 3, 60)]), "pf.profile.nit"));
+
+    // MTT LAG: VPIP ≥ .24 + .05 = .29, PFR ≥ .17 + .05 = .22. 19/60 and
+    // 15/60 → .2975 and .23 fire; 18/60 → .285 and 14/60 → .2175 do not.
+    let mtt = FormatKey::Mtt;
+    assert!(fires(&input(mtt, &[(Vpip, 19, 60), (Pfr, 15, 60)]), "pf.profile.lag"));
+    assert!(!fires(&input(mtt, &[(Vpip, 18, 60), (Pfr, 15, 60)]), "pf.profile.lag"));
+    assert!(!fires(&input(mtt, &[(Vpip, 19, 60), (Pfr, 14, 60)]), "pf.profile.lag"));
+    // The same counts in cash are under the cash LAG line (.32).
+    assert!(!fires(&cash(&[(Vpip, 19, 60), (Pfr, 15, 60)]), "pf.profile.lag"));
+}
+
 // ------------------------------------------------- opens and steals (P01, P02)
 
 #[test]
@@ -218,6 +259,33 @@ fn steal_rules_fire_at_threshold_and_not_below() {
     // vs .60).
     assert!(fires(&cash(&[(Steal, 25, 40)]), "pf.steal.high"));
     assert!(!fires(&input(FormatKey::Spin, &[(Steal, 25, 40)]), "pf.steal.high"));
+}
+
+#[test]
+fn sb_open_rule_fires_at_threshold_and_not_below() {
+    // Pro review (D107, P13): small-blind raise-first-in against the big
+    // blind. Cash prior .36, k 15: (h + 5.4)/55 ≥ .51 → 23 of 40.
+    let c = FormatKey::Cash;
+    assert_eq!(assert_above(c, "pf.rfi_sb.wide", RfiSb, 40, 0.15, &[]), 23);
+    let reads = evaluate_rules(&cash(&[(RfiSb, 24, 40)]));
+    let r = read(&reads, "pf.rfi_sb.wide").unwrap();
+    assert_eq!(r.observation, "Opens 60% (24/40) of his small blinds when folded to.");
+    assert_eq!(r.advice, "3-bet and defend your big blind wider against his small-blind opens.");
+    assert_eq!((r.tag.as_deref(), r.scenario_id.as_str(), r.category), (Some("SB+"), "P13", RuleCategory::Exploit));
+    // Spin & Go's SB prior is .45: the same 23/40 is (23 + 6.75)/55 = .54,
+    // under .60.
+    assert!(!fires(&input(FormatKey::Spin, &[(RfiSb, 23, 40)]), "pf.rfi_sb.wide"));
+    // Under the 8-opportunity floor nothing shows.
+    assert!(!fires(&cash(&[(RfiSb, 7, 7)]), "pf.rfi_sb.wide"));
+    // He opens in front of the hero: the seat suffix is for the right side.
+    let mut v = cash(&[(RfiSb, 30, 40)]);
+    let mut ctx = context(c, 100.0);
+    ctx.seat = Some(seat(5, 6));
+    v.context = Some(ctx);
+    assert_eq!(
+        read(&evaluate_rules(&v), "pf.rfi_sb.wide").unwrap().advice,
+        "3-bet and defend your big blind wider against his small-blind opens, and he sits directly on your right."
+    );
 }
 
 // ------------------------------------------------ blind defence (P03, P04)
@@ -311,6 +379,26 @@ fn limp_followup_rules_fire_at_threshold_and_not_below() {
     assert!(!fires(&cash(&[(LimpReraise, 1, 5)]), "pf.limp_reraise.seen"));
     let reads = evaluate_rules(&cash(&[(LimpReraise, 3, 10)]));
     assert_eq!(read(&reads, "pf.limp_reraise.seen").unwrap().observation, "Has limp-reraised 3 of 10 times after limping.");
+}
+
+#[test]
+fn limp_call_rule_fires_at_threshold_and_not_below() {
+    // Pro review (D107, P14): the sticky limper. Prior .40, k 8:
+    // (h + 3.2)/28 ≥ .60 → 14 of 20.
+    let c = FormatKey::Cash;
+    assert_eq!(assert_above(c, "pf.limp_call.high", LimpCall, 20, 0.20, &[]), 14);
+    let reads = evaluate_rules(&cash(&[(LimpCall, 14, 20)]));
+    let r = read(&reads, "pf.limp_call.high").unwrap();
+    assert_eq!(r.observation, "Calls 70% (14/20) of raises after limping.");
+    assert_eq!(r.tag.as_deref(), Some("LPC"));
+    assert_eq!(r.scenario_id, "P14");
+    // Small-sample extreme: 4 of 4 is under the 5-opportunity floor, and 5
+    // of 5 shrinks to (5 + 3.2)/13 = .63, which does fire: five calls out of
+    // five raises is already a sticky limper.
+    assert!(!fires(&cash(&[(LimpCall, 4, 4)]), "pf.limp_call.high"));
+    assert!(fires(&cash(&[(LimpCall, 5, 5)]), "pf.limp_call.high"));
+    // A limp-folder and a limp-caller are different reads of the same spot.
+    assert!(!fires(&cash(&[(LimpCall, 14, 20)]), "pf.limp_fold.high"));
 }
 
 #[test]
@@ -508,7 +596,7 @@ fn big_bounty_villain_gets_wider_call_advice() {
         read(&reads, "ko.big_bounty").unwrap().advice,
         "Call his shoves by range; you win his bounty only when you cover him."
     );
-    assert_eq!(read(&reads, "ko.hunts_bounties").unwrap().advice, "Shove for value only into him when he covers you.");
+    assert_eq!(read(&reads, "ko.hunts_bounties").unwrap().advice, "When he covers you, shove into him for value only.");
 
     // Under 2× the initial bounty: no big-bounty read.
     ctx.bounty.as_mut().unwrap().ratio = Some(1.99);
@@ -599,6 +687,49 @@ fn fold_to_barrel_rules_fire_at_threshold_and_not_below() {
     let c = FormatKey::Cash;
     assert_above(c, "post.fold_cbet_turn.high", FoldToCbetTurn, 30, 0.15, &[]);
     assert_below(c, "post.fold_cbet_river.low", FoldToCbetRiver, 30, 0.15, &[]);
+}
+
+#[test]
+fn fold_to_river_barrel_rule_fires_at_threshold_and_not_below() {
+    // Pro review (D107, F14): calls flop and turn, then folds the river.
+    // Prior .48, k 10: (h + 4.8)/40 ≥ .63 → 21 of 30.
+    let c = FormatKey::Cash;
+    assert_eq!(assert_above(c, "post.fold_cbet_river.high", FoldToCbetRiver, 30, 0.15, &[]), 21);
+    let reads = evaluate_rules(&cash(&[(FoldToCbetRiver, 21, 30)]));
+    let r = read(&reads, "post.fold_cbet_river.high").unwrap();
+    assert_eq!(r.observation, "Folds to 70% (21/30) of river barrels after calling the turn.");
+    assert_eq!(r.advice, "Fire more third barrels against him.");
+    assert_eq!((r.tag.as_deref(), r.scenario_id.as_str()), (Some("RVF"), "F14"));
+    // The opposite read of the same stat never fires with it.
+    assert!(read(&reads, "post.fold_cbet_river.low").is_none());
+    // Small-sample extreme: 6 of 6 river folds is (6 + 4.8)/16 = .675, which
+    // fires; 5 of 5 is under the 6-opportunity floor.
+    assert!(fires(&cash(&[(FoldToCbetRiver, 6, 6)]), "post.fold_cbet_river.high"));
+    assert!(!fires(&cash(&[(FoldToCbetRiver, 5, 5)]), "post.fold_cbet_river.high"));
+}
+
+#[test]
+fn pro_review_reads_respect_push_fold_and_sample_floors() {
+    // Every D107 read is a preflop or postflop read: at 15bb or less in a
+    // tournament only push/fold reads show, and none fires under its floor.
+    let m = FormatKey::Mtt;
+    let busy = [(RfiSb, 30, 40), (LimpCall, 15, 20), (FoldToCbetRiver, 25, 30), (OpenShove, 15, 30)];
+    let free = evaluate_rules(&input(m, &busy));
+    for id in ["pf.rfi_sb.wide", "pf.limp_call.high", "post.fold_cbet_river.high"] {
+        assert!(read(&free, id).is_some(), "{id} fires with deep stacks");
+    }
+    let mut short = input(m, &busy);
+    short.context = Some(context(m, 12.0));
+    let reads = evaluate_rules(&short);
+    for id in ["pf.rfi_sb.wide", "pf.limp_call.high", "post.fold_cbet_river.high"] {
+        assert!(read(&reads, id).is_none(), "{id} must not show at 12bb");
+    }
+    assert!(read(&reads, "stk.open_shove.wide").is_some());
+    for (key, floor) in [(RfiSb, 8), (LimpCall, 5), (FoldToCbetRiver, 6)] {
+        assert_eq!(stat_spec(key).n_min, floor, "{key:?}");
+        let under = cash(&[(key, floor - 1, floor - 1)]);
+        assert!(evaluate_rules(&under).is_empty(), "{key:?} under its floor: {:?}", ids(&evaluate_rules(&under)));
+    }
 }
 
 #[test]
@@ -927,6 +1058,83 @@ fn no_observation_contains_imperative_verbs() {
     assert!(words("Fold more often").iter().any(|w| IMPERATIVE_VERBS.contains(&w.as_str())));
 }
 
+/// In-hand state a between-hands read may never point at (D107 review):
+/// the street, bet or pot of a hand in progress. Substrings, lower case.
+const IN_HAND_STATE: [&str; 18] = [
+    "current", "this hand", "this street", "this bet", "this pot", "this round", "this flop",
+    "this turn", "this river", "in progress", "live hand", "the hand you are in", "you are facing",
+    "facing his bet", "to call now", "on the flop now", "still to act", "action is on",
+];
+
+fn assert_no_in_hand_state(id: &str, text: &str) {
+    let lower = text.to_lowercase();
+    for phrase in IN_HAND_STATE {
+        assert!(!lower.contains(phrase), "{id} advice refers to in-hand state (\"{phrase}\"): {text}");
+    }
+    assert!(!words(text).iter().any(|w| w == "now"), "{id} advice contains \"now\": {text}");
+}
+
+#[test]
+fn no_advice_references_in_hand_state() {
+    // Every advice template and variant, as written.
+    let advice: Vec<_> = templates().into_iter().filter(|(_, kind, _)| *kind == TemplateKind::Advice).collect();
+    assert!(advice.len() > RULES.len());
+    for (id, _, text) in &advice {
+        assert_no_in_hand_state(id, text);
+    }
+    // The guard itself catches the phrasings it is about.
+    for bad in ["Raise his current street bet.", "Fold to this hand's bet.", "Call now."] {
+        let caught = std::panic::catch_unwind(|| assert_no_in_hand_state("probe", bad));
+        assert!(caught.is_err(), "guard must reject: {bad}");
+    }
+
+    // And as rendered: a villain on whom most rules fire, in every context
+    // that changes advice (late stage, knockout covered or not, seat left
+    // and right, push/fold).
+    let mut contexts = Vec::new();
+    for (format, eff) in [(FormatKey::Cash, 100.0), (FormatKey::Cash, 200.0), (FormatKey::Mtt, 20.0), (FormatKey::Mtt, 12.0)] {
+        for seat_at in [None, Some(seat(1, 6)), Some(seat(5, 6))] {
+            let mut ctx = context(format, eff);
+            ctx.seat = seat_at;
+            contexts.push(Some(ctx.clone()));
+            if format == FormatKey::Mtt {
+                ctx.stage = Some(Stage::Late);
+                for covers in [true, false] {
+                    ctx.bounty = Some(BountyContext {
+                        amount: 40.0,
+                        currency: Some("USD".into()),
+                        ratio: Some(3.0),
+                        hero_covers: Some(covers),
+                    });
+                    contexts.push(Some(ctx.clone()));
+                }
+            }
+        }
+    }
+    contexts.push(None);
+    let mut seen = std::collections::BTreeSet::new();
+    for ctx in contexts {
+        let mut v = busy_villain(FormatKey::Mtt);
+        for (key, hits, n) in [(RfiSb, 30, 40), (LimpCall, 15, 20), (FoldToCbetRiver, 25, 30), (FoldToStealBb, 28, 30), (IsoRaise, 18, 20)] {
+            v.stats.insert(key, stat(FormatKey::Mtt, key, hits, n));
+        }
+        v.ko_call_vs_shove = Some(stat(FormatKey::Mtt, CallVsShove, 14, 20));
+        v.late_fold_to_steal_bb = Some(stat(FormatKey::Mtt, FoldToStealBb, 16, 20));
+        v.sizing = vec![tell(SizeBucket::Overbet, 4, 0, 0)];
+        v.recent_form = Some(form(12, 9, 49, Some(FormFlag::Tilt), 3.3));
+        v.context = ctx;
+        for r in evaluate_rules(&v) {
+            assert_no_in_hand_state(&r.rule_id, &r.advice);
+            assert_no_in_hand_state(&r.rule_id, &r.observation);
+            seen.insert(r.rule_id);
+        }
+    }
+    // The rendered pass reached advice variants and the new D107 reads.
+    for id in ["ko.big_bounty", "ko.hunts_bounties", "stage.late.overfolds_blinds", "pf.rfi_sb.wide", "pf.limp_call.high", "post.fold_cbet_river.high", "rec.tilt", "ctx.short_stack", "ctx.deep_stack"] {
+        assert!(seen.contains(id), "{id} was not rendered");
+    }
+}
+
 #[test]
 fn advice_never_restates_observation() {
     for def in RULES {
@@ -981,7 +1189,7 @@ fn every_rule_has_a_unique_id_known_tag_and_catalogue_row() {
         "F3B", "C3B", "4B+", "F4B", "SQZ", "LMP", "ISO", "LRR", "LF", "CC+", "SHV", "NSV", "CLS",
         "TCS", "RSV", "RS-", "DEEP", "KO", "HNT", "CB+", "CB-", "FCB", "NFC", "BRL", "GIV", "TRB",
         "RV-", "DLY", "XR+", "XR-", "DNK", "FLT", "PRB", "RV+", "RR+", "WSD", "WWS", "H2H", "SDV",
-        "SDB", "SVB", "LSE", "TGT",
+        "SDB", "SVB", "LSE", "TGT", "SB+", "LPC", "RVF",
     ];
     // docs/ is local-only (git-excluded), so the spec is read at runtime and the
     // spec-membership checks are skipped on a checkout without it;

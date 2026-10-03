@@ -52,6 +52,18 @@ pub const SD_RIVER_BLUFF_MIN: u32 = 6;
 /// boundary fires on either side of floating-point rounding.
 const EPS: f64 = 1e-9;
 
+/// Profile thresholds (row P12) as deltas from the format's priors (D107):
+/// nit VPIP ≤ prior − .12; loose VPIP ≥ prior + .13 with a VPIP–PFR gap at
+/// least .08 wider than the priors' gap; station WTSD ≥ prior + .05; LAG
+/// VPIP ≥ prior + .05 and PFR ≥ prior + .05. With the 6-max cash priors
+/// these are D106's absolute .15, .40, .15, .32 and .32/.25.
+pub const PROFILE_NIT: f64 = 0.12;
+pub const PROFILE_LOOSE: f64 = 0.13;
+pub const PROFILE_PASSIVE_GAP: f64 = 0.08;
+pub const PROFILE_STATION_WTSD: f64 = 0.05;
+pub const PROFILE_LAG_VPIP: f64 = 0.05;
+pub const PROFILE_LAG_PFR: f64 = 0.05;
+
 /// Payload family of a read (section 13).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -168,8 +180,12 @@ pub const RULES: &[RuleDef] = &[
         "Steals {raw}% when folded to in late position.",
         "3-bet his steals wider from the blinds.")),
     right(rule("pf.steal.low", "P02", F::Preflop, T, Some("ST-"),
-        "Steals only {raw}% when folded to.",
+        "Steals only {raw}% when folded to in late position.",
         "Fold more blind hands to his steals.")),
+    // Pro review (D107, P13): the small blind's open against the big blind.
+    right(rule("pf.rfi_sb.wide", "P13", F::Preflop, X, Some("SB+"),
+        "Opens {raw}% of his small blinds when folded to.",
+        "3-bet and defend your big blind wider against his small-blind opens.")),
     // ---- blind defence (P03, P04)
     left(with(
         rule("pf.fold_to_steal.high", "P03", F::Preflop, X, Some("FTS"),
@@ -220,13 +236,17 @@ pub const RULES: &[RuleDef] = &[
         "Isolate his limps with a wide raising range.")),
     left(rule("pf.iso.high", "P09", F::Preflop, T, Some("ISO"),
         "Raises over limpers {raw}% of the time.",
-        "Limp-reraise or overlimp less in front of him.")),
+        "Overlimp less in front of him; when you limp, plan to limp-reraise.")),
     right(rule("pf.limp_fold.high", "P10", F::Preflop, X, Some("LF"),
         "Folds to {raw}% of raises after limping.",
         "Raise his limps with any two playable cards.")),
     right(rule("pf.limp_reraise.seen", "P10", F::Preflop, T, Some("LRR"),
         "Has limp-reraised {hits} of {n} times after limping.",
         "Isolate his limps with hands that can call a reraise.")),
+    // Pro review (D107, P14): the sticky limper.
+    right(rule("pf.limp_call.high", "P14", F::Preflop, X, Some("LPC"),
+        "Calls {raw}% of raises after limping.",
+        "Isolate his limps bigger with hands that play well postflop, and bluff less once he calls.")),
     left(rule("pf.cold_call.high", "P11", F::Preflop, X, Some("CC+"),
         "Cold-calls {raw}% of opens.",
         "Open bigger for value and squeeze more when he flats.")),
@@ -281,7 +301,7 @@ pub const RULES: &[RuleDef] = &[
     with(
         rule("ko.hunts_bounties", "K01", F::Bounty, X, Some("HNT"),
             "Calls {raw}% of shoves in bounty games.",
-            "Shove for value only into him when he covers you."),
+            "When he covers you, shove into him for value only."),
         &[(Variant::HeroCovers, "Shove wider into him while you cover him; he cannot win your bounty.")],
     ),
     // ---- postflop (F01–F12)
@@ -289,7 +309,7 @@ pub const RULES: &[RuleDef] = &[
         "C-bets {raw}% of flops as the preflop raiser.",
         "Float and check-raise his flop c-bets more."),
     rule("post.cbet_flop.low", "F01", F::Postflop, T, Some("CB-"),
-        "C-bets only {raw}% of flops.",
+        "C-bets only {raw}% of flops as the preflop raiser.",
         "Give his flop c-bets credit; stab when he checks."),
     rule("post.fold_cbet_flop.high", "F02", F::Postflop, X, Some("FCB"),
         "Folds to {raw}% of flop c-bets.",
@@ -315,6 +335,10 @@ pub const RULES: &[RuleDef] = &[
     rule("post.fold_cbet_river.low", "F05", F::Postflop, X, Some("STN"),
         "Folds to only {raw}% of river barrels.",
         "Stop bluffing his rivers; value bet thinner."),
+    // Pro review (D107, F14): calls flop and turn, then gives up the river.
+    rule("post.fold_cbet_river.high", "F14", F::Postflop, X, Some("RVF"),
+        "Folds to {raw}% of river barrels after calling the turn.",
+        "Fire more third barrels against him."),
     rule("post.delayed_cbet.high", "F06", F::Postflop, T, Some("DLY"),
         "Bets {raw}% of turns after checking the flop as raiser.",
         "Check back fewer flops in position; bet the turn yourself when he checks twice."),
@@ -341,7 +365,7 @@ pub const RULES: &[RuleDef] = &[
         "Fold more to his river bets."),
     rule("post.river_raise.high", "F11", F::Postflop, T, Some("RR+"),
         "Raises {raw}% of river bets he faces.",
-        "Value bet thinner only with hands that can call a raise."),
+        "Value bet thin only with hands that can call his raise."),
     rule("post.station", "F12", F::Postflop, X, Some("STN"),
         "Goes to showdown {raw}% and wins there only {wsd}%.",
         "Value bet thin and stop bluffing him."),
@@ -1020,21 +1044,29 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
     use StatKey::*;
     let mut out = Out { adapt: Adapt { context: input.context.as_ref() }, reads: Vec::new() };
 
-    // ---- profile (P12): absolute thresholds on shrunk VPIP / PFR / WTSD.
+    // ---- profile (P12): shrunk VPIP / PFR / WTSD against the format's
+    // priors (D107). The deltas are the D106 6-max cash anchors (.15, .40,
+    // a .15 gap, .32, .32/.25) expressed relative to the cash priors, so a
+    // Spin (VPIP prior .38) is no longer read on cash numbers.
     let shown = |key| input.stat(key).filter(|s| s.displayable());
     if let (Some(vpip), Some(pfr)) = (shown(Vpip), shown(Pfr)) {
-        let passive = vpip.shrunk >= 0.40 - EPS && pfr.shrunk <= vpip.shrunk - 0.15 + EPS;
-        let station = passive && shown(Wtsd).is_some_and(|w| w.shrunk >= 0.32 - EPS);
-        if vpip.shrunk <= 0.15 + EPS {
+        let gap = vpip.shrunk - pfr.shrunk;
+        let prior_gap = vpip.prior - pfr.prior;
+        let passive = vpip.shrunk >= vpip.prior + PROFILE_LOOSE - EPS && gap >= prior_gap + PROFILE_PASSIVE_GAP - EPS;
+        let wtsd = shown(Wtsd).filter(|w| w.shrunk >= w.prior + PROFILE_STATION_WTSD - EPS);
+        if vpip.shrunk <= vpip.prior - PROFILE_NIT + EPS {
             out.stat("pf.profile.nit", single(Some(vpip)));
         }
-        if station {
-            out.stat("pf.profile.station", single(Some(vpip)).map(|h| h.and(pfr).and(shown(Wtsd).unwrap())));
-        } else if passive {
-            out.stat("pf.profile.loose_passive", single(Some(vpip)).map(|h| h.and(pfr)));
+        match (passive, wtsd) {
+            (true, Some(wtsd)) => out.stat("pf.profile.station", single(Some(vpip)).map(|h| h.and(pfr).and(wtsd))),
+            (true, None) => out.stat("pf.profile.loose_passive", single(Some(vpip)).map(|h| h.and(pfr))),
+            _ => {}
         }
         // "raises most of them": PFR at least half of VPIP.
-        if vpip.shrunk >= 0.32 - EPS && pfr.shrunk >= 0.25 - EPS && pfr.shrunk >= 0.5 * vpip.shrunk - EPS {
+        if vpip.shrunk >= vpip.prior + PROFILE_LAG_VPIP - EPS
+            && pfr.shrunk >= pfr.prior + PROFILE_LAG_PFR - EPS
+            && pfr.shrunk >= 0.5 * vpip.shrunk - EPS
+        {
             out.stat("pf.profile.lag", single(Some(vpip)).map(|h| h.and(pfr)));
         }
     }
@@ -1046,6 +1078,7 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
     out.stat("pf.rfi.tight_late", single(any_of(input, &[RfiCo, RfiBtn], Dir::Below(0.12))));
     out.stat("pf.steal.high", single(one(input, Steal, Dir::Above(0.12))));
     out.stat("pf.steal.low", single(one(input, Steal, Dir::Below(0.12))));
+    out.stat("pf.rfi_sb.wide", single(one(input, RfiSb, Dir::Above(0.15))));
 
     // ---- blind defence (P03, P04)
     out.stat(
@@ -1073,6 +1106,7 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
     out.stat("pf.limp.high", single(one(input, Limp, Dir::Above(0.08))));
     out.stat("pf.iso.high", single(one(input, IsoRaise, Dir::Above(0.15))));
     out.stat("pf.limp_fold.high", single(one(input, LimpFold, Dir::Above(0.20))));
+    out.stat("pf.limp_call.high", single(one(input, LimpCall, Dir::Above(0.20))));
     out.stat(
         "pf.limp_reraise.seen",
         single(shown(LimpReraise).filter(|s| s.shrunk >= 0.15 - EPS && s.hits >= 2)),
@@ -1166,6 +1200,7 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
     out.stat("post.cbet_river.high", single(one(input, CbetRiver, Dir::Above(0.15))));
     out.stat("post.cbet_river.low", single(one(input, CbetRiver, Dir::Below(0.15))));
     out.stat("post.fold_cbet_river.low", single(one(input, FoldToCbetRiver, Dir::Below(0.15))));
+    out.stat("post.fold_cbet_river.high", single(one(input, FoldToCbetRiver, Dir::Above(0.15))));
     out.stat("post.delayed_cbet.high", single(one(input, DelayedCbet, Dir::Above(0.15))));
     out.stat("post.check_raise.high", single(one(input, CheckRaiseFlop, Dir::Above(0.06))));
     out.stat(

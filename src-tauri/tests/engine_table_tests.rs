@@ -151,6 +151,50 @@ fn soft_table_scores_above_tough_table() {
 }
 
 #[test]
+fn quality_labels_fish_soft_regs_and_nits_tough_unknowns_neutral() {
+    // Pro review (D107): soft_i = clamp((.35 L + .45 P + .20 S) / 1.25).
+    // Fish: loose, passive, showdown-bound.
+    let fish = table_quality(&[villain(200, 0.45, 0.08, 0.38); 5]).unwrap();
+    assert_eq!(fish.label, QualityLabel::Soft, "{fish:?}");
+    assert!(fish.score >= 85, "{fish:?}");
+
+    // Solid 6-max regulars, 23/19 with a normal WTSD: L = −.5, P = −.375,
+    // S = 0 → −.275 × 200/220 = −.25 → 37.5. D106's (.5 L + .3 P + .2 S)/2
+    // gave −.18 × .91 → 42, "average": a table of five regs was not tough.
+    let regs = table_quality(&[villain(200, 0.23, 0.19, 0.27); 5]).unwrap();
+    assert_eq!(regs.label, QualityLabel::Tough, "{regs:?}");
+    assert!((37..=38).contains(&regs.score), "{regs:?}");
+    // Nits (13/11, rarely at showdown) are tough to get paid by.
+    let nits = table_quality(&[villain(200, 0.13, 0.11, 0.22); 5]).unwrap();
+    assert_eq!(nits.label, QualityLabel::Tough, "{nits:?}");
+    assert!(nits.score < regs.score, "{nits:?} vs {regs:?}");
+    // A mix of regs and nits is tough as well.
+    let mut mixed = vec![villain(150, 0.23, 0.19, 0.27); 3];
+    mixed.extend([villain(150, 0.13, 0.11, 0.22); 2]);
+    assert_eq!(table_quality(&mixed).unwrap().label, QualityLabel::Tough);
+
+    // A loose but aggressive regular (30/26) is not soft: his VPIP–PFR gap
+    // is narrower than the pool's.
+    let lag_reg = villain_softness(&villain(200, 0.30, 0.26, 0.26));
+    assert!(lag_reg < 0.0, "{lag_reg}");
+    // A maniac (55/45) still is: his looseness dominates.
+    assert!(villain_softness(&villain(200, 0.55, 0.45, 0.30)) > 0.5);
+
+    // Unknowns: a fresh table of five strangers with 5–10 hands each, whose
+    // shrunk stats sit a little either side of the priors, scores neutral.
+    let unknowns = [
+        villain(10, 0.33, 0.17, 0.30),
+        villain(8, 0.22, 0.18, 0.25),
+        villain(6, 0.30, 0.15, 0.29),
+        villain(6, 0.25, 0.21, 0.26),
+        villain(5, 0.29, 0.19, 0.28),
+    ];
+    let q = table_quality(&unknowns).expect("35 hands, one villain at 10");
+    assert_eq!(q.label, QualityLabel::Average, "{q:?}");
+    assert!((45..=55).contains(&q.score), "{q:?}");
+}
+
+#[test]
 fn unknown_players_pull_quality_toward_neutral() {
     let fish = villain(200, 0.50, 0.06, 0.40);
     let alone = table_quality(&[fish]).expect("quality");

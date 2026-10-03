@@ -20,6 +20,16 @@ pub const RULE_MULTI_TABLE: &str = "table.multi_table";
 const LOOSE_SCALE: f64 = 0.08;
 /// `S` divides by this spread (the WTSD scale).
 const SHOWDOWN_SCALE: f64 = 0.06;
+/// Weights of `L` (loose), `P` (passive) and `S` (sticky) in `soft_i`
+/// (D107): calling preflop is the surest marker of a losing player, so `P`
+/// outweighs `L`, and a loose but aggressive regular is not counted soft.
+const LOOSE_WEIGHT: f64 = 0.35;
+const PASSIVE_WEIGHT: f64 = 0.45;
+const STICKY_WEIGHT: f64 = 0.20;
+/// The weighted sum is divided by this before clamping. D106 divided by 2,
+/// which left a table of solid regulars at 42 ("average"); 1.25 puts it in
+/// "tough" while a pool-average player still scores exactly 0.
+const SOFTNESS_DIVISOR: f64 = 1.25;
 /// `c_i = hands / (hands + HANDS_K)`.
 const HANDS_K: f64 = 20.0;
 /// No score below this many villain hands in total...
@@ -67,7 +77,8 @@ pub fn villain_softness(v: &VillainQuality) -> f64 {
     let loose = (v.vpip - v.prior_vpip) / LOOSE_SCALE;
     let passive = ((v.vpip - v.pfr) - (v.prior_vpip - v.prior_pfr)) / LOOSE_SCALE;
     let sticky = (v.wtsd - v.prior_wtsd) / SHOWDOWN_SCALE;
-    ((0.5 * loose + 0.3 * passive + 0.2 * sticky) / 2.0).clamp(-1.0, 1.0)
+    ((LOOSE_WEIGHT * loose + PASSIVE_WEIGHT * passive + STICKY_WEIGHT * sticky) / SOFTNESS_DIVISOR)
+        .clamp(-1.0, 1.0)
 }
 
 /// The table's quality from its non-hero villains, or `None` below the
