@@ -1,0 +1,409 @@
+PokerStars Hand #273000000101:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/04 18:00:00 ET
+Table 'Audit Engine Postflop' 6-max Seat #2 is the button
+Seat 1: Hero ($50 in chips)
+Seat 2: Pax ($50 in chips)
+Seat 3: Rue ($50 in chips)
+Seat 4: Sol ($50 in chips)
+Seat 5: Tex ($50 in chips)
+Seat 6: Uri ($50 in chips)
+Rue: posts small blind $0.25
+Sol: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Ks Qd]
+Tex: folds
+Uri: folds
+Hero: raises $0.75 to $1.25
+Pax: folds
+Rue: calls $1
+Sol: calls $0.75
+*** FLOP *** [Kc 7d 2h]
+Rue: checks
+Sol: checks
+Hero: bets $2
+Rue: calls $2
+Sol: calls $2
+*** TURN *** [Kc 7d 2h] [4s]
+Rue: checks
+Sol: checks
+Hero: bets $5
+Rue: calls $5
+Sol: calls $5
+*** RIVER *** [Kc 7d 2h 4s] [9c]
+Rue: checks
+Sol: checks
+Hero: bets $12
+Rue: folds
+Sol: calls $12
+*** SHOW DOWN ***
+Hero: shows [Ks Qd] (a pair of Kings)
+Sol: shows [7c 7s] (three of a kind, Sevens)
+Sol collected $48.75 from pot
+*** SUMMARY ***
+Total pot $48.75 | Rake $0
+Board [Kc 7d 2h 4s 9c]
+Seat 1: Hero showed [Ks Qd] and lost with a pair of Kings
+Seat 2: Pax (button) folded before Flop (didn't bet)
+Seat 3: Rue (small blind) folded on the River
+Seat 4: Sol (big blind) showed [7c 7s] and won ($48.75) with three of a kind, Sevens
+Seat 5: Tex folded before Flop (didn't bet)
+Seat 6: Uri folded before Flop (didn't bet)
+
+
+
+PokerStars Hand #273000000102:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/04 18:01:00 ET
+Table 'Audit Engine Postflop' 6-max Seat #3 is the button
+Seat 1: Hero ($50 in chips)
+Seat 2: Pax ($50 in chips)
+Seat 3: Rue ($50 in chips)
+Seat 4: Sol ($50 in chips)
+Seat 5: Tex ($50 in chips)
+Seat 6: Uri ($50 in chips)
+Sol: posts small blind $0.25
+Tex: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [9c 4d]
+Uri: raises $0.75 to $1.25
+Hero: folds
+Pax: folds
+Rue: calls $1.25
+Sol: folds
+Tex: folds
+*** FLOP *** [Qs 8c 3d]
+Uri: checks
+Rue: checks
+*** TURN *** [Qs 8c 3d] [Jh]
+Uri: bets $2
+Rue: folds
+Uncalled bet ($2) returned to Uri
+Uri collected $3.25 from pot
+Uri: doesn't show hand
+*** SUMMARY ***
+Total pot $3.25 | Rake $0
+Board [Qs 8c 3d Jh]
+Seat 1: Hero folded before Flop (didn't bet)
+Seat 2: Pax folded before Flop (didn't bet)
+Seat 3: Rue (button) folded on the Turn
+Seat 4: Sol (small blind) folded before Flop
+Seat 5: Tex (big blind) folded before Flop
+Seat 6: Uri collected ($3.25)
+
+
+
+PokerStars Hand #273000000103:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/04 18:02:00 ET
+Table 'Audit Engine Postflop' 6-max Seat #6 is the button
+Seat 1: Hero ($50 in chips)
+Seat 2: Pax ($50 in chips)
+Seat 3: Rue ($50 in chips)
+Seat 4: Sol ($50 in chips)
+Seat 5: Tex ($50 in chips)
+Seat 6: Uri ($50 in chips)
+Hero: posts small blind $0.25
+Pax: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [8d 3c]
+Rue: folds
+Sol: folds
+Tex: folds
+Uri: raises $0.75 to $1.25
+Hero: folds
+Pax: calls $0.75
+*** FLOP *** [Ts 6h 2c]
+Pax: checks
+Uri: checks
+*** TURN *** [Ts 6h 2c] [3s]
+Pax: checks
+Uri: checks
+*** RIVER *** [Ts 6h 2c 3s] [Ad]
+Pax: bets $2
+Uri: raises $4 to $6
+Pax: calls $4
+*** SHOW DOWN ***
+Uri: shows [Ah Tc] (two pair, Aces and Tens)
+Pax: shows [Kd 2d] (a pair of Twos)
+Uri collected $14.75 from pot
+*** SUMMARY ***
+Total pot $14.75 | Rake $0
+Board [Ts 6h 2c 3s Ad]
+Seat 1: Hero (small blind) folded before Flop
+Seat 2: Pax (big blind) showed [Kd 2d] and lost with a pair of Twos
+Seat 3: Rue folded before Flop (didn't bet)
+Seat 4: Sol folded before Flop (didn't bet)
+Seat 5: Tex folded before Flop (didn't bet)
+Seat 6: Uri (button) showed [Ah Tc] and won ($14.75) with two pair, Aces and Tens
+
+
+
+PokerStars Hand #273000000104:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/04 18:03:00 ET
+Table 'Audit Engine Postflop' 6-max Seat #4 is the button
+Seat 1: Hero ($50 in chips)
+Seat 2: Pax ($50 in chips)
+Seat 3: Rue ($50 in chips)
+Seat 4: Sol ($50 in chips)
+Seat 5: Tex ($50 in chips)
+Seat 6: Uri ($50 in chips)
+Tex: posts small blind $0.25
+Uri: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Ac Ah]
+Hero: raises $0.75 to $1.25
+Pax: calls $1.25
+Rue: folds
+Sol: calls $1.25
+Tex: folds
+Uri: folds
+*** FLOP *** [9d 5s 4h]
+Hero: bets $2.50
+Pax: calls $2.50
+Sol: calls $2.50
+*** TURN *** [9d 5s 4h] [Kh]
+Hero: checks
+Pax: bets $6
+Sol: folds
+Hero: raises $12 to $18
+Pax: folds
+Uncalled bet ($12) returned to Hero
+Hero collected $24 from pot
+Hero: doesn't show hand
+*** SUMMARY ***
+Total pot $24 | Rake $0
+Board [9d 5s 4h Kh]
+Seat 1: Hero collected ($24)
+Seat 2: Pax folded on the Turn
+Seat 3: Rue folded before Flop (didn't bet)
+Seat 4: Sol (button) folded on the Turn
+Seat 5: Tex (small blind) folded before Flop
+Seat 6: Uri (big blind) folded before Flop
+
+
+
+PokerStars Hand #273000000105:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/04 18:04:00 ET
+Table 'Audit Engine Postflop' 6-max Seat #5 is the button
+Seat 1: Hero ($50 in chips)
+Seat 2: Pax ($50 in chips)
+Seat 3: Rue ($50 in chips)
+Seat 4: Sol ($50 in chips)
+Seat 5: Tex ($50 in chips)
+Seat 6: Uri ($50 in chips)
+Uri: posts small blind $0.25
+Hero: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Qh Jh]
+Pax: folds
+Rue: folds
+Sol: folds
+Tex: folds
+Uri: raises $1 to $1.50
+Hero: calls $1
+*** FLOP *** [Jc 8s 4d]
+Uri: checks
+Hero: bets $1.50
+Uri: raises $3.50 to $5
+Hero: folds
+Uncalled bet ($3.50) returned to Uri
+Uri collected $6 from pot
+Uri: doesn't show hand
+*** SUMMARY ***
+Total pot $6 | Rake $0
+Board [Jc 8s 4d]
+Seat 1: Hero (big blind) folded on the Flop
+Seat 2: Pax folded before Flop (didn't bet)
+Seat 3: Rue folded before Flop (didn't bet)
+Seat 4: Sol folded before Flop (didn't bet)
+Seat 5: Tex (button) folded before Flop (didn't bet)
+Seat 6: Uri (small blind) collected ($6)
+
+
+
+PokerStars Hand #273000000106:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/04 18:05:00 ET
+Table 'Audit Engine Postflop' 6-max Seat #1 is the button
+Seat 1: Hero ($50 in chips)
+Seat 2: Pax ($50 in chips)
+Seat 3: Rue ($50 in chips)
+Seat 4: Sol ($50 in chips)
+Seat 5: Tex ($50 in chips)
+Seat 6: Uri ($50 in chips)
+Pax: posts small blind $0.25
+Rue: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Ad Qc]
+Sol: folds
+Tex: folds
+Uri: raises $0.75 to $1.25
+Hero: raises $2.75 to $4
+Pax: folds
+Rue: folds
+Uri: folds
+Uncalled bet ($2.75) returned to Hero
+Hero collected $3.25 from pot
+Hero: doesn't show hand
+*** SUMMARY ***
+Total pot $3.25 | Rake $0
+Seat 1: Hero (button) collected ($3.25)
+Seat 2: Pax (small blind) folded before Flop
+Seat 3: Rue (big blind) folded before Flop
+Seat 4: Sol folded before Flop (didn't bet)
+Seat 5: Tex folded before Flop (didn't bet)
+Seat 6: Uri folded before Flop
+
+
+
+PokerStars Hand #273000000107:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/04 18:06:00 ET
+Table 'Audit Engine Postflop' 6-max Seat #2 is the button
+Seat 1: Hero ($50 in chips)
+Seat 2: Pax ($50 in chips)
+Seat 3: Rue ($50 in chips)
+Seat 4: Sol ($50 in chips)
+Seat 5: Tex ($50 in chips)
+Seat 6: Uri ($50 in chips)
+Rue: posts small blind $0.25
+Sol: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Kh Kc]
+Tex: raises $0.75 to $1.25
+Uri: folds
+Hero: raises $2.75 to $4
+Pax: folds
+Rue: folds
+Sol: folds
+Tex: calls $2.75
+*** FLOP *** [Jd 6s 2c]
+Tex: checks
+Hero: bets $4
+Tex: folds
+Uncalled bet ($4) returned to Hero
+Hero collected $8.75 from pot
+Hero: doesn't show hand
+*** SUMMARY ***
+Total pot $8.75 | Rake $0
+Board [Jd 6s 2c]
+Seat 1: Hero collected ($8.75)
+Seat 2: Pax (button) folded before Flop (didn't bet)
+Seat 3: Rue (small blind) folded before Flop
+Seat 4: Sol (big blind) folded before Flop
+Seat 5: Tex folded on the Flop
+Seat 6: Uri folded before Flop (didn't bet)
+
+
+
+PokerStars Hand #273000000108:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/04 18:07:00 ET
+Table 'Audit Engine Postflop' 6-max Seat #3 is the button
+Seat 1: Hero ($50 in chips)
+Seat 2: Pax ($50 in chips)
+Seat 3: Rue ($50 in chips)
+Seat 4: Sol ($50 in chips)
+Seat 5: Tex ($50 in chips)
+Seat 6: Uri ($50 in chips)
+Sol: posts small blind $0.25
+Tex: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Jc Ts]
+Uri: folds
+Hero: raises $0.75 to $1.25
+Pax: raises $2.75 to $4
+Rue: folds
+Sol: folds
+Tex: folds
+Hero: folds
+Uncalled bet ($2.75) returned to Pax
+Pax collected $3.25 from pot
+Pax: doesn't show hand
+*** SUMMARY ***
+Total pot $3.25 | Rake $0
+Seat 1: Hero folded before Flop
+Seat 2: Pax collected ($3.25)
+Seat 3: Rue (button) folded before Flop (didn't bet)
+Seat 4: Sol (small blind) folded before Flop
+Seat 5: Tex (big blind) folded before Flop
+Seat 6: Uri folded before Flop (didn't bet)
+
+
+
+PokerStars Hand #273000000109:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/04 18:08:00 ET
+Table 'Audit Engine Postflop' 6-max Seat #4 is the button
+Seat 1: Hero ($50 in chips)
+Seat 2: Pax ($50 in chips)
+Seat 3: Rue ($50 in chips)
+Seat 4: Sol ($50 in chips)
+Seat 5: Tex ($50 in chips)
+Seat 6: Uri ($50 in chips)
+Tex: posts small blind $0.25
+Uri: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [7h 2s]
+Hero: folds
+Pax: folds
+Rue: folds
+Sol: raises $0.75 to $1.25
+Tex: calls $1
+Uri: calls $0.75
+*** FLOP *** [8s 5d 5c]
+Tex: checks
+Uri: checks
+Sol: bets $2
+Tex: calls $2
+Uri: calls $2
+*** TURN *** [8s 5d 5c] [Qh]
+Tex: checks
+Uri: checks
+Sol: bets $5
+Tex: folds
+Uri: calls $5
+*** RIVER *** [8s 5d 5c Qh] [3c]
+Uri: checks
+Sol: checks
+*** SHOW DOWN ***
+Uri: shows [Qc Jc] (two pair, Queens and Fives)
+Sol: shows [Ah Kh] (a pair of Fives)
+Uri collected $19.75 from pot
+*** SUMMARY ***
+Total pot $19.75 | Rake $0
+Board [8s 5d 5c Qh 3c]
+Seat 1: Hero folded before Flop (didn't bet)
+Seat 2: Pax folded before Flop (didn't bet)
+Seat 3: Rue folded before Flop (didn't bet)
+Seat 4: Sol (button) showed [Ah Kh] and lost with a pair of Fives
+Seat 5: Tex (small blind) folded on the Turn
+Seat 6: Uri (big blind) showed [Qc Jc] and won ($19.75) with two pair, Queens and Fives
+
+
+
+PokerStars Hand #273000000110:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/04 18:09:00 ET
+Table 'Audit Engine Postflop' 6-max Seat #5 is the button
+Seat 1: Hero ($50 in chips)
+Seat 2: Pax ($50 in chips)
+Seat 3: Rue ($50 in chips)
+Seat 4: Sol ($50 in chips)
+Seat 5: Tex ($50 in chips)
+Seat 6: Uri ($50 in chips)
+Uri: posts small blind $0.25
+Hero: posts big blind $0.50
+Rue: posts small & big blinds $0.75
+*** HOLE CARDS ***
+Dealt to Hero [9s 3h]
+Pax: folds
+Rue: checks
+Sol: folds
+Tex: folds
+Uri: calls $0.25
+Hero: checks
+*** FLOP *** [Kd 9c 4s]
+Uri: checks
+Hero: checks
+Rue: bets $1
+Uri: folds
+Hero: folds
+Uncalled bet ($1) returned to Rue
+Rue collected $1.75 from pot
+Rue: doesn't show hand
+*** SUMMARY ***
+Total pot $1.75 | Rake $0
+Board [Kd 9c 4s]
+Seat 1: Hero (big blind) folded on the Flop
+Seat 2: Pax folded before Flop (didn't bet)
+Seat 3: Rue collected ($1.75)
+Seat 4: Sol folded before Flop (didn't bet)
+Seat 5: Tex (button) folded before Flop (didn't bet)
+Seat 6: Uri (small blind) folded on the Flop
+
+
+
