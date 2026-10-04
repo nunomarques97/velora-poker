@@ -17,6 +17,7 @@ use velora_poker_lib::engine::pooling::shrink;
 use velora_poker_lib::engine::rules::{
     observation_template, Variant, BB_VS_SB_OVERDEFEND, FOLD_TO_STEAL_LOW, FOLD_TO_STEAL_SB_HIGH,
     HOVER_CARD_ADVICE_BUDGET, JAM_DEPTH_MAX_BB, LIMP_HIGH, PREFLOP_OPPOSITES, SEAT_SUFFIX,
+    STAGE_EARLY_LIMP,
 };
 use velora_poker_lib::engine::{
     evaluate_rules, latest_table_hand, player_rule_input, rule_def, stat_spec, templates,
@@ -515,7 +516,8 @@ fn short_stack_villain_gets_only_push_fold_reads() {
     for r in &reads {
         assert!(
             matches!(r.family, Family::Stack | Family::Bounty | Family::Recency | Family::Showdown)
-                || r.rule_id == "ctx.short_stack",
+                || r.rule_id == "ctx.short_stack"
+                || r.rule_id == "stage.late.overfolds_blinds",
             "{} is not a push/fold read",
             r.rule_id
         );
@@ -599,7 +601,7 @@ fn late_stage_turns_fold_to_steal_into_shove_advice() {
     let late = read(&reads, "stage.late.overfolds_blinds").expect("late-stage read");
     // Over late-stage hands only: 16/20, prior .55, k 12: (16 + 6.6)/32 = .706 ≥ .65.
     assert_eq!(late.observation, "Folds his big blind to 80% (16/20) of steals late in the tournament.");
-    assert!(late.advice.starts_with("Shove"));
+    assert_eq!(late.advice, "Min-raise any two from the button or small blind into his big blind.");
     // Under the threshold: (13 + 6.6)/32 = .6125 < .65.
     v.late_fold_to_steal_bb = Some(stat(m, FoldToStealBb, 13, 20));
     assert!(!fires(&v, "stage.late.overfolds_blinds"));
@@ -625,17 +627,17 @@ fn big_bounty_villain_gets_wider_call_advice() {
     let reads = evaluate_rules(&v);
     let ko = read(&reads, "ko.big_bounty").expect("big bounty read");
     assert_eq!(ko.observation, "Carries a 2× bounty (€27.00).");
-    assert_eq!(ko.advice, "Call his shoves wider when you cover him; the bounty adds equity.");
+    assert_eq!(ko.advice, "When you cover him, call his shoves with any pair, any ace and K9s+.");
     assert_eq!(ko.tag.as_deref(), Some("KO"));
     // KO: call-vs-shove advice switches to the bounty variant.
     assert_eq!(
         read(&reads, "stk.call_shove.wide").unwrap().advice,
-        "Shove only for value against him; bounty equity widens his calls further."
+        "Shove only pairs, aces and broadways; tighter still when he covers you."
     );
     // Over KO hands: (14 + 2.5)/30 = .55 ≥ .40. The hero covers him, so he
     // cannot win the hero's bounty.
     let hunter = read(&reads, "ko.hunts_bounties").expect("bounty hunter read");
-    assert_eq!(hunter.advice, "Shove wider into him while you cover him; he cannot win your bounty.");
+    assert_eq!(hunter.advice, "While you cover him, shove pairs, aces and broadways into him.");
 
     // The hero does not cover him: no bounty to win, call by range.
     ctx.bounty.as_mut().unwrap().hero_covers = Some(false);
@@ -643,9 +645,9 @@ fn big_bounty_villain_gets_wider_call_advice() {
     let reads = evaluate_rules(&v);
     assert_eq!(
         read(&reads, "ko.big_bounty").unwrap().advice,
-        "Call his shoves by range; you win his bounty only when you cover him."
+        "You don't cover him: ignore his bounty and call his shoves with 55+, A9+, KQ."
     );
-    assert_eq!(read(&reads, "ko.hunts_bounties").unwrap().advice, "When he covers you, shove into him for value only.");
+    assert_eq!(read(&reads, "ko.hunts_bounties").unwrap().advice, "When he covers you, shove into him only with 77+, AT+ and KQ.");
 
     // Under 2× the initial bounty: no big-bounty read.
     ctx.bounty.as_mut().unwrap().ratio = Some(1.99);
@@ -656,11 +658,86 @@ fn big_bounty_villain_gets_wider_call_advice() {
     v.context = Some(ctx);
     assert_eq!(
         read(&evaluate_rules(&v), "stk.call_shove.wide").unwrap().advice,
-        "Shove only for value against him; stop pure bluff shoves."
+        "Shove only pairs, aces and broadways into him; no K5o or 65s-type shoves."
     );
     // ko.hunts_bounties needs its KO-hand sample: 5 opportunities is short.
     v.ko_call_vs_shove = Some(stat(m, CallVsShove, 5, 5));
     assert!(!fires(&v, "ko.hunts_bounties"));
+}
+
+#[test]
+fn late_stage_blind_read_stays_eligible_at_push_fold() {
+    // Section 5 (audit 2026-10): late-stage blind battles are played at
+    // 15bb or less, so an overfolding big blind is the read that matters
+    // most there. The stage read stays eligible at push/fold with shove
+    // wording; the preflop steal read does not.
+    let m = FormatKey::Mtt;
+    let mut v = input(m, &[(FoldToStealBb, 24, 30)]);
+    v.late_fold_to_steal_bb = Some(stat(m, FoldToStealBb, 16, 20));
+    let mut ctx = context(m, 12.0);
+    ctx.stage = Some(Stage::Late);
+    v.context = Some(ctx.clone());
+    let reads = evaluate_rules(&v);
+    let late = read(&reads, "stage.late.overfolds_blinds").expect("late-stage read at 12bb");
+    assert_eq!(late.advice, "Shove any two from the button or small blind into his big blind at 10bb or less.");
+    assert!(late.adapted_by.contains(&"stack.push_fold"), "{:?}", late.adapted_by);
+    assert!(read(&reads, "pf.fold_to_steal.high").is_none(), "preflop reads stay out at push/fold");
+    // Under its threshold it still does not fire at push/fold.
+    v.late_fold_to_steal_bb = Some(stat(m, FoldToStealBb, 13, 20));
+    assert!(!fires(&v, "stage.late.overfolds_blinds"));
+    // Above push/fold: the min-raise text.
+    v.late_fold_to_steal_bb = Some(stat(m, FoldToStealBb, 16, 20));
+    ctx.effective_stack_bb = Some(15.1);
+    ctx.stack_bucket = Some(StackBucket::of(15.1));
+    v.context = Some(ctx.clone());
+    let late = read(&evaluate_rules(&v), "stage.late.overfolds_blinds").cloned().expect("late-stage read at 15.1bb");
+    assert_eq!(late.advice, "Min-raise any two from the button or small blind into his big blind.");
+    assert!(!late.adapted_by.contains(&"stack.push_fold"));
+
+    // The early-stage limp read is a preflop limp read: not at push/fold.
+    let mut v = input(m, &[]);
+    v.early_limp = Some(stat(m, Limp, 8, 40));
+    let mut ctx = context(m, 12.0);
+    ctx.stage = Some(Stage::Early);
+    v.context = Some(ctx.clone());
+    assert!(!fires(&v, "stage.early.passive"));
+    ctx.effective_stack_bb = Some(30.0);
+    ctx.stack_bucket = Some(StackBucket::of(30.0));
+    v.context = Some(ctx);
+    assert!(fires(&v, "stage.early.passive"));
+}
+
+#[test]
+fn early_stage_limp_threshold_follows_format() {
+    // A Spin & Go's small blind limps by design (limp prior .12), so the
+    // early-stage limp read needs the same + .12 as `pf.limp.high` there
+    // (section 17.3); MTT keeps + .06. Spin, k 20, prior .12, n 40:
+    // 9/40 → (9 + 2.4)/60 = .19 (≥ .18, fired before) does not fire;
+    // 14/40 → (14 + 2.4)/60 = .273 (≥ .24) fires.
+    let s = FormatKey::Spin;
+    let mut v = input(s, &[]);
+    let mut ctx = context(s, 22.0);
+    ctx.stage = Some(Stage::Early);
+    v.context = Some(ctx);
+    v.early_limp = Some(stat(s, Limp, 9, 40));
+    assert!(!fires(&v, "stage.early.passive"), "Spin 9/40 must not fire");
+    let h = first_above(s, Limp, 40, STAGE_EARLY_LIMP[3]);
+    v.early_limp = Some(stat(s, Limp, h, 40));
+    assert!(fires(&v, "stage.early.passive"), "Spin {h}/40 fires");
+    v.early_limp = Some(stat(s, Limp, h - 1, 40));
+    assert!(!fires(&v, "stage.early.passive"), "Spin {}/40 does not", h - 1);
+
+    let m = FormatKey::Mtt;
+    let mut v = input(m, &[]);
+    let mut ctx = context(m, 30.0);
+    ctx.stage = Some(Stage::Early);
+    v.context = Some(ctx);
+    let h = first_above(m, Limp, 40, STAGE_EARLY_LIMP[0]);
+    v.early_limp = Some(stat(m, Limp, h, 40));
+    assert!(fires(&v, "stage.early.passive"), "MTT {h}/40 fires");
+    v.early_limp = Some(stat(m, Limp, h - 1, 40));
+    assert!(!fires(&v, "stage.early.passive"), "MTT {}/40 does not", h - 1);
+    assert_eq!(STAGE_EARLY_LIMP, [0.06, 0.06, 0.06, 0.12]);
 }
 
 // ------------------------------------------------------- seat relation (C01)
@@ -697,6 +774,35 @@ fn seat_relation_reflected_in_advice() {
     );
     // The seat relation is a suffix, never a read of its own.
     assert!(!fires(&v, "ctx.seat_relation"));
+}
+
+#[test]
+fn zoom_context_never_appends_a_seat_suffix() {
+    // Section 5 (audit 2026-10): Zoom reseats players every hand, so a seat
+    // relation in a Zoom context (cash or tournament) never reaches the
+    // advice, even when a caller supplies one.
+    let stats = [(ThreeBetIp, 8, 40), (FoldTo3betIp, 25, 30)];
+    for (format, variant) in [(FormatKey::Zoom, "zoom_cash"), (FormatKey::Mtt, "zoom_tournament")] {
+        let mut v = input(format, &stats);
+        let mut ctx = context(format, 100.0);
+        ctx.variant = Some(variant.into());
+        ctx.seat = Some(seat(1, 6));
+        v.context = Some(ctx.clone());
+        let reads = evaluate_rules(&v);
+        let three = read(&reads, "pf.3bet.high_ip").unwrap();
+        assert!(!three.advice.contains("your left"), "{variant}: {}", three.advice);
+        assert!(!three.adapted_by.contains(&"ctx.seat_relation"), "{variant}");
+        ctx.seat = Some(seat(5, 6));
+        v.context = Some(ctx);
+        let fold = read(&evaluate_rules(&v), "pf.fold_to_3bet.high").cloned().unwrap();
+        assert!(!fold.advice.contains("your right"), "{variant}: {}", fold.advice);
+    }
+    // The same villain at a fixed-seat table keeps the suffix.
+    let mut v = input(FormatKey::Mtt, &stats);
+    let mut ctx = context(FormatKey::Mtt, 100.0);
+    ctx.seat = Some(seat(1, 6));
+    v.context = Some(ctx);
+    assert!(read(&evaluate_rules(&v), "pf.3bet.high_ip").unwrap().advice.ends_with("(directly on your left)."));
 }
 
 // ------------------------------------- preflop advice audit (section 17)
@@ -1752,7 +1858,7 @@ fn every_advice_fits_the_hover_card() {
 
 /// Families whose advice must name a concrete lever (section 17.1). Each
 /// audit task adds the family it rewrites, until the list holds them all.
-const LEVER_FAMILIES: [Family; 1] = [Family::Preflop];
+const LEVER_FAMILIES: [Family; 5] = [Family::Preflop, Family::Stack, Family::Context, Family::Stage, Family::Bounty];
 
 /// The concrete levers an advice names: hand classes (`A2s-A5s`, `QQ+`,
 /// `Kx`, suited aces, broadways, top pair), sizing (`3x`, min-raise, jam,
@@ -1785,14 +1891,65 @@ fn every_advice_names_a_concrete_lever() {
         assert!(!concrete_levers(concrete).is_empty(), "{concrete}");
     }
 
+    // The stack/context/stage/bounty audit's old texts name none either
+    // ("Shove wider into him." and "Open freely into him; his reshove range
+    // is narrow." name a shove; the range guard
+    // `push_fold_advice_names_ranges_depth_and_cover` rejects them).
+    for generic in [
+        "Call his short-stack shoves wider.",
+        "Isolate him wide while stacks are deep.",
+        "Call his shoves by range; you win his bounty only when you cover him.",
+    ] {
+        assert!(concrete_levers(generic).is_empty(), "{generic}: {:?}", concrete_levers(generic));
+    }
+
     let mut checked = 0;
-    for def in RULES.iter().filter(|r| LEVER_FAMILIES.contains(&r.family)) {
+    // The seat suffix is appended to other advice, never shown alone.
+    for def in RULES.iter().filter(|r| LEVER_FAMILIES.contains(&r.family) && r.id != "ctx.seat_relation") {
         for text in std::iter::once(def.advice).chain(def.variants.iter().map(|(_, t)| *t)) {
             assert!(!concrete_levers(text).is_empty(), "{} advice names no hand class, size or seat: {text}", def.id);
             checked += 1;
         }
     }
-    assert!(checked >= RULES.iter().filter(|r| r.family == Family::Preflop).count());
+    let covered = RULES.iter().filter(|r| LEVER_FAMILIES.contains(&r.family) && r.id != "ctx.seat_relation").count();
+    assert!(checked >= covered);
+    for family in [Family::Stack, Family::Context, Family::Stage, Family::Bounty] {
+        assert!(RULES.iter().any(|r| r.family == family && r.id != "ctx.seat_relation"), "{family:?} has rules");
+    }
+}
+
+#[test]
+fn push_fold_advice_names_ranges_depth_and_cover() {
+    // Section 17.4, stack/context/stage/bounty rows: push/fold advice names
+    // the shove or call range by hand class (or the bb depth it holds at),
+    // and every knockout text states whose cover it depends on.
+    let range = regex::Regex::new(
+        // Case-sensitive, so "at" is not read as a hand.
+        r"\b(?:[2-9TJQKA]{2}[so]?|any two|any (?:pair|ace)|pairs|aces|broadways|suited (?:king|aces|connectors)|\d+bb)\b",
+    )
+    .unwrap();
+    // The guard rejects the texts the audit replaced; "at" is not a hand.
+    for old in [
+        "Shove wider into him.",
+        "Call his short-stack shoves wider.",
+        "Open freely into him; his reshove range is narrow.",
+        "Shove wider into him at a loose table.",
+    ] {
+        assert!(!range.is_match(old), "the guard must reject: {old}");
+    }
+    for def in RULES.iter().filter(|r| matches!(r.family, Family::Stack | Family::Bounty) || r.id.starts_with("stage.late")) {
+        for text in std::iter::once(def.advice).chain(def.variants.iter().map(|(_, t)| *t)) {
+            assert!(range.is_match(text), "{} names no range or depth: {text}", def.id);
+        }
+    }
+    for def in RULES.iter().filter(|r| r.family == Family::Bounty) {
+        for text in std::iter::once(def.advice).chain(def.variants.iter().map(|(_, t)| *t)) {
+            assert!(text.contains("cover"), "{} states no cover condition: {text}", def.id);
+        }
+    }
+    for (_, text) in rule_def("stk.call_shove.wide").variants.iter().chain(rule_def("stk.call_shove.tight").variants) {
+        assert!(text.contains("cover"), "bounty variant states no cover condition: {text}");
+    }
 }
 
 #[test]

@@ -169,14 +169,56 @@ fn seat_relation_left_right_and_distance() {
     assert!(cole.direct_right && !cole.direct_left);
     assert_eq!(seat_relation(&hand, player_id(&conn, HERO)), None);
 
-    // Three-handed (real Zoom KO hand): Hero in seat 2.
+    // Three-handed (real Spin & Go hand; a Zoom table has no fixed seats,
+    // see `zoom_hands_carry_no_seat_relation`): Hero in seat 1.
     let mut conn = velora_poker_lib::db::open(std::path::Path::new(":memory:")).unwrap();
+    import::import_text(&mut conn, SPIN).unwrap();
+    let hand = latest_table_hand(&conn, "3900000001 1").unwrap().unwrap();
+    let left = seat_relation(&hand, player_id(&conn, "SpinCycle_9")).unwrap();
+    assert_eq!((left.distance, left.side, left.direct_left), (1, Side::Left, true));
+    let right = seat_relation(&hand, player_id(&conn, "GrindHouse")).unwrap();
+    assert_eq!((right.distance, right.side, right.direct_right), (2, Side::Right, true));
+}
+
+#[test]
+fn zoom_hands_carry_no_seat_relation() {
+    // Section 5 (audit 2026-10): Zoom reseats every player after every
+    // hand, so where a villain sat in the last hand says nothing about the
+    // next one. Zoom cash and Zoom tournaments carry no seat relation.
+    let mut conn = velora_poker_lib::db::open(std::path::Path::new(":memory:")).unwrap();
+    import::import_text(&mut conn, ZOOM_CASH).unwrap();
     import::import_text(&mut conn, BOUNTY).unwrap();
-    let hand = latest_table_hand(&conn, "4002441239 7").unwrap().unwrap();
-    let p2 = seat_relation(&hand, player_id(&conn, "Player2")).unwrap();
-    assert_eq!((p2.distance, p2.side, p2.direct_left), (1, Side::Left, true));
-    let p1 = seat_relation(&hand, player_id(&conn, "Player1")).unwrap();
-    assert_eq!((p1.distance, p1.side, p1.direct_right), (2, Side::Right, true));
+    for (table, variant) in [("Halley", "zoom_cash"), ("4002441239 7", "zoom_tournament")] {
+        let hand = latest_table_hand(&conn, table).unwrap().unwrap();
+        assert_eq!(hand.variant.as_deref(), Some(variant));
+        assert!(hand.hero().is_some(), "{table}: the hero is seated");
+        for seat in hand.seats.iter().filter(|s| !s.is_hero) {
+            assert_eq!(seat_relation(&hand, seat.player_id), None, "{variant}: seat {:?}", seat.seat);
+            let ctx = villain_context(&hand, seat.player_id).unwrap();
+            assert_eq!(ctx.seat, None, "{variant}: context seat");
+            assert!(ctx.effective_stack_bb.is_some(), "{variant}: the rest of the context stays");
+        }
+    }
+    // A fixed-seat table keeps it.
+    let mut t = Table::cash("Ctx Fixed", 300_000_450, &SIX);
+    let conn = import(&t.walk(0));
+    let hand = latest_table_hand(&conn, "Ctx Fixed").unwrap().unwrap();
+    assert!(villain_context(&hand, player_id(&conn, "Vil")).unwrap().seat.is_some());
+}
+
+#[test]
+fn spin_stage_buckets_use_spin_bounds() {
+    // A Spin & Go starts at 25bb (500 chips at 10/20), so the MTT bounds
+    // (early from 40bb) would put its first level in `middle` and never
+    // reach `early`. Section 5 (audit 2026-10): Spin early ≥ 20bb, middle
+    // 12–20bb, late < 12bb.
+    let mut conn = velora_poker_lib::db::open(std::path::Path::new(":memory:")).unwrap();
+    import::import_text(&mut conn, SPIN).unwrap();
+    let hand = latest_table_hand(&conn, "3900000001 1").unwrap().unwrap();
+    let ctx = villain_context(&hand, player_id(&conn, "GrindHouse")).unwrap();
+    assert_eq!(ctx.format, FormatKey::Spin);
+    assert_eq!(ctx.avg_stack_bb, Some(25.0));
+    assert_eq!(ctx.stage, Some(Stage::Early), "the first Spin level is early");
 }
 
 #[test]
@@ -233,8 +275,16 @@ fn context_serialises_to_the_spec_json_shape() {
     assert_eq!(json["format"], "mtt");
     assert_eq!(json["stage"], "early");
     assert_eq!(json["bounty"]["heroCovers"], false);
+    // A Zoom tournament carries no seat relation (section 5).
+    assert_eq!(json["seat"], serde_json::Value::Null);
+
+    let mut t = Table::cash("Ctx Json", 300_000_700, &SIX);
+    let conn = import(&t.walk(0));
+    let hand = latest_table_hand(&conn, "Ctx Json").unwrap().unwrap();
+    let json = serde_json::to_value(villain_context(&hand, player_id(&conn, "Sam")).unwrap()).unwrap();
     assert_eq!(json["seat"]["actsAfterHero"], true);
     assert_eq!(json["seat"]["side"], "left");
+    assert_eq!(json["seat"]["directLeft"], true);
 }
 
 // ---------------------------------------------------------- recency views

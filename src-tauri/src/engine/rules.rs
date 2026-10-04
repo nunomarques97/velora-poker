@@ -18,7 +18,10 @@ use rusqlite::Connection;
 use serde::Serialize;
 
 use super::aggregate::{aggregate_player, H2hKey, H2hStat, PlayerAggregate, StatAgg, View};
-use super::context::{average_stack_bb, EngineContext, Side, Stage, StackBucket, PUSH_FOLD_MAX_BB};
+use super::context::{
+    average_stack_bb, reseats_every_hand, EngineContext, SeatRelation, Side, Stage, StackBucket,
+    PUSH_FOLD_MAX_BB,
+};
 use super::facts::{load_player_hands, HandFacts, StatKey};
 use super::pooling::{confidence, stat_spec, FormatKey, ShrunkStat};
 use super::pot::SizeBucket;
@@ -79,6 +82,10 @@ pub const FOLD_TO_STEAL_LOW: [f64; 4] = [0.25, 0.20, 0.20, 0.20];
 pub const BB_VS_SB_OVERDEFEND: [f64; 4] = [0.25, 0.20, 0.20, 0.20];
 /// `pf.limp.high`: limp at least prior plus this.
 pub const LIMP_HIGH: [f64; 4] = [0.08, 0.08, 0.08, 0.12];
+/// `stage.early.passive`: early-stage limp at least prior plus this. Spin
+/// takes the + .12 of [`LIMP_HIGH`] (its small blind limps by design); cash
+/// and Zoom have no stage.
+pub const STAGE_EARLY_LIMP: [f64; 4] = [0.06, 0.06, 0.06, 0.12];
 
 /// Upper bound of the 3-bet-jam depth (section 5): above push/fold and up
 /// to this effective stack, preflop re-raises are all-ins, so the
@@ -128,6 +135,9 @@ pub enum Variant {
     /// MTT or Spin & Go: smaller opens (min-raises) and isolations than in
     /// cash, because of antes.
     Tournament,
+    /// Effective stack at push/fold depth (15bb or less): steals are
+    /// shoves (audit 2026-10; the late-stage blind read stays eligible there).
+    PushFold,
 }
 
 /// One catalogue rule: identity and every text it can show.
@@ -351,59 +361,64 @@ pub const RULES: &[RuleDef] = &[
             (Variant::Tournament, "Open 2.5x for value; squeeze his flats with 99+, AQ+ and A5s."),
         ],
     )),
-    // ---- stack depth (S01–S03)
+    // ---- stack depth (S01–S03). Audit 2026-10 (section 17): call and
+    // shove ranges are named by hand class and depth, with the bounty and
+    // cover condition where a knockout changes them.
     right(rule("stk.open_shove.wide", "S01", F::Stack, X, Some("SHV"),
         "Open-shoves {raw}% when folded to at 15bb or less.",
-        "Call his short-stack shoves wider.")),
+        "Call his shoves from the blinds with 22+, any ace and K9s+.")),
     right(rule("stk.open_shove.tight", "S01", F::Stack, T, Some("NSV"),
         "Open-shoves only {raw}% when folded to at 15bb or less.",
-        "Give his short-stack shoves credit; steal into him more.")),
+        "Call his rare shoves only with 88+, AJ+ and KQs.")),
     with(
         rule("stk.call_shove.wide", "S02", F::Stack, X, Some("CLS"),
             "Calls {raw}% of all-in shoves.",
-            "Shove only for value against him; stop pure bluff shoves."),
-        &[(Variant::Bounty, "Shove only for value against him; bounty equity widens his calls further.")],
+            "Shove only pairs, aces and broadways into him; no K5o or 65s-type shoves."),
+        &[(Variant::Bounty, "Shove only pairs, aces and broadways; tighter still when he covers you.")],
     ),
     with(
         rule("stk.call_shove.tight", "S02", F::Stack, X, Some("TCS"),
             "Calls only {raw}% of all-in shoves.",
-            "Shove wider into him."),
-        &[(Variant::Bounty, "Shove wider into him, but less when he covers you and your bounty is at stake.")],
+            "Shove any two into him at 10bb or less; any pair, ace or suited king up to 20bb."),
+        &[(Variant::Bounty, "Shove any two into him at 10bb or less, tighter when he covers your bounty.")],
     ),
     left(rule("stk.reshove.high", "S03", F::Stack, X, Some("RSV"),
         "Reshoves {raw}% over opens at 15–25bb.",
-        "Open tighter or smaller into him and call his reshoves wider.")),
+        "Call his reshoves with 66+, A9+ and KQ; cut K7o-type opens.")),
     left(rule("stk.reshove.low", "S03", F::Stack, T, Some("RS-"),
         "Reshoves only {raw}% over opens at 15–25bb.",
-        "Open freely into him; his reshove range is narrow.")),
+        "Min-raise wider into him; call his reshove with JJ+ and AK.")),
     // ---- context (S04, S05, C01)
     rule("ctx.short_stack", "S04", F::Context, T, Some("NNbb"),
         "Sits on {eff}bb effective after the last hand.",
-        "Treat his entries as push/fold; call his shoves by range, not by feel."),
+        "Shove or fold against him; don't min-raise hands you'd fold to his jam."),
     rule("ctx.deep_stack", "S05", F::Context, T, Some("DEEP"),
         "Sits on {eff}bb effective after the last hand.",
-        "4-bet bluff less and value bet bigger against him."),
+        "Flat his opens in position with pairs and suited connectors; 4-bet bluff less."),
     rule(RULE_SEAT_RELATION, "C01", F::Context, T, None,
         "Sits {distance} seats to your {side}.",
         SEAT_SUFFIX),
     // ---- tournament stage (T01) and bounties (K01)
-    rule("stage.late.overfolds_blinds", "T01", F::Stage, X, Some("FTS"),
-        "Folds his big blind to {raw}% of steals late in the tournament.",
-        "Shove or min-raise any two playable cards into his big blind."),
+    with(
+        rule("stage.late.overfolds_blinds", "T01", F::Stage, X, Some("FTS"),
+            "Folds his big blind to {raw}% of steals late in the tournament.",
+            "Min-raise any two from the button or small blind into his big blind."),
+        &[(Variant::PushFold, "Shove any two from the button or small blind into his big blind at 10bb or less.")],
+    ),
     rule("stage.early.passive", "T01", F::Stage, X, Some("LMP"),
         "Open-limps {raw}% in the early levels.",
-        "Isolate him wide while stacks are deep."),
+        "Isolate his limps to 4x with pairs, suited aces and broadways."),
     with(
         rule("ko.big_bounty", "K01", F::Bounty, T, Some("KO"),
             "Carries a {ratio}× bounty ({amount}).",
-            "Call his shoves wider when you cover him; the bounty adds equity."),
-        &[(Variant::HeroCovered, "Call his shoves by range; you win his bounty only when you cover him.")],
+            "When you cover him, call his shoves with any pair, any ace and K9s+."),
+        &[(Variant::HeroCovered, "You don't cover him: ignore his bounty and call his shoves with 55+, A9+, KQ.")],
     ),
     with(
         rule("ko.hunts_bounties", "K01", F::Bounty, X, Some("HNT"),
             "Calls {raw}% of shoves in bounty games.",
-            "When he covers you, shove into him for value only."),
-        &[(Variant::HeroCovers, "Shove wider into him while you cover him; he cannot win your bounty.")],
+            "When he covers you, shove into him only with 77+, AT+ and KQ."),
+        &[(Variant::HeroCovers, "While you cover him, shove pairs, aces and broadways into him.")],
     ),
     // ---- postflop (F01–F12)
     rule("post.cbet_flop.high", "F01", F::Postflop, X, Some("CB+"),
@@ -761,7 +776,9 @@ impl PlayerReplay {
         let mut ko_hands = 0;
         for hand in hands.iter().filter(|h| h.seat_of(player_id).is_some()) {
             let knockout = hand.seats.iter().any(|s| s.bounty.is_some());
-            let stage = tournament(hand).then(|| average_stack_bb(hand).map(Stage::of)).flatten();
+            let stage = tournament(hand)
+                .then(|| average_stack_bb(hand).map(|avg| Stage::in_format(avg, FormatKey::of_hand(hand))))
+                .flatten();
             if !knockout && stage.is_none() {
                 continue;
             }
@@ -1080,7 +1097,8 @@ impl Adapt<'_> {
     }
 
     /// Section 5: at `push_fold` only stack, short-stack, bounty, recency
-    /// and showdown reads apply.
+    /// and showdown reads apply, plus the late-stage blind read: late-stage
+    /// blind battles are played at that depth (audit 2026-10).
     fn eligible(&self, def: &RuleDef) -> bool {
         if self.bucket() != Some(StackBucket::PushFold) {
             return true;
@@ -1088,8 +1106,16 @@ impl Adapt<'_> {
         match def.family {
             Family::Stack | Family::Bounty | Family::Recency | Family::Showdown => true,
             Family::Context => def.id == "ctx.short_stack",
-            Family::Preflop | Family::Postflop | Family::Stage | Family::H2h => false,
+            Family::Stage => def.id == "stage.late.overfolds_blinds",
+            Family::Preflop | Family::Postflop | Family::H2h => false,
         }
+    }
+
+    /// The seat behind the seat suffix. Zoom reseats every player every
+    /// hand, so a Zoom context never gives one, even when a caller supplies
+    /// it (section 5).
+    fn seat(&self) -> Option<SeatRelation> {
+        self.context.filter(|c| !reseats_every_hand(c.variant.as_deref())).and_then(|c| c.seat)
     }
 
     fn multiplier(&self, def: &RuleDef) -> f64 {
@@ -1114,6 +1140,7 @@ impl Adapt<'_> {
             Variant::HeroCovers => self.knockout() && self.hero_covers() == Some(true),
             Variant::JamDepth => self.jam_depth(),
             Variant::Tournament => self.tournament(),
+            Variant::PushFold => self.bucket() == Some(StackBucket::PushFold),
         };
         // The first matching variant in the rule's list wins, so each list
         // is written in precedence order (late stage, jam depth, format).
@@ -1124,10 +1151,11 @@ impl Adapt<'_> {
                 Variant::LateStage => "stage.late",
                 Variant::JamDepth => "stack.jam_depth",
                 Variant::Tournament => "format.tournament",
+                Variant::PushFold => "stack.push_fold",
                 Variant::Bounty | Variant::HeroCovered | Variant::HeroCovers => "ko.variant",
             });
         }
-        if let (Some(side), Some(seat)) = (def.seat, self.context.and_then(|c| c.seat)) {
+        if let (Some(side), Some(seat)) = (def.seat, self.seat()) {
             if seat.side == side {
                 let place = if seat.direct_left || seat.direct_right { "directly on" } else { "on" };
                 let side = match seat.side {
@@ -1350,7 +1378,9 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
         if ctx.stage == Some(Stage::Early) {
             out.stat(
                 "stage.early.passive",
-                single(input.early_limp.as_ref().filter(|s| s.displayable() && passes(s, Dir::Above(0.06)))),
+                single(input.early_limp.as_ref().filter(|s| {
+                    s.displayable() && passes(s, Dir::Above(by_format(input.format_key(), STAGE_EARLY_LIMP)))
+                })),
             );
         }
 

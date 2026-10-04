@@ -25,6 +25,10 @@ pub const STANDARD_MAX_BB: f64 = 150.0;
 pub const STAGE_EARLY_MIN_BB: f64 = 40.0;
 /// Average table stack (bb) at or above which a tournament is `middle`.
 pub const STAGE_MIDDLE_MIN_BB: f64 = 20.0;
+/// Spin & Go stage bounds (audit 2026-10): a Spin starts at 25bb, so its
+/// first level is `early` from 20bb and push/fold (`late`) starts under 12bb.
+pub const SPIN_STAGE_EARLY_MIN_BB: f64 = 20.0;
+pub const SPIN_STAGE_MIDDLE_MIN_BB: f64 = 12.0;
 /// Bounty ratio from which a villain is a `big_bounty`.
 pub const BIG_BOUNTY_RATIO: f64 = 2.0;
 
@@ -63,10 +67,24 @@ pub enum Stage {
 }
 
 impl Stage {
+    /// The MTT bounds (section 5).
     pub fn of(avg_stack_bb: f64) -> Stage {
-        if avg_stack_bb >= STAGE_EARLY_MIN_BB {
+        Stage::within(avg_stack_bb, STAGE_EARLY_MIN_BB, STAGE_MIDDLE_MIN_BB)
+    }
+
+    /// The stage under the bounds of the tournament's format: Spin & Go has
+    /// its own, every other tournament uses the MTT bounds.
+    pub fn in_format(avg_stack_bb: f64, format: FormatKey) -> Stage {
+        match format {
+            FormatKey::Spin => Stage::within(avg_stack_bb, SPIN_STAGE_EARLY_MIN_BB, SPIN_STAGE_MIDDLE_MIN_BB),
+            _ => Stage::of(avg_stack_bb),
+        }
+    }
+
+    fn within(avg_stack_bb: f64, early_min: f64, middle_min: f64) -> Stage {
+        if avg_stack_bb >= early_min {
             Stage::Early
-        } else if avg_stack_bb >= STAGE_MIDDLE_MIN_BB {
+        } else if avg_stack_bb >= middle_min {
             Stage::Middle
         } else {
             Stage::Late
@@ -131,7 +149,7 @@ pub struct EngineContext {
     pub level: Option<u32>,
     pub avg_stack_bb: Option<f64>,
     pub bounty: Option<BountyContext>,
-    /// `None` when the hero was not seated.
+    /// `None` when the hero was not seated, and at Zoom tables.
     pub seat: Option<SeatRelation>,
 }
 
@@ -248,10 +266,19 @@ pub fn bounty_context(hand: &HandFacts, villain_id: i64) -> Option<BountyContext
     })
 }
 
+/// Zoom (cash and tournaments) moves every player to a new table after
+/// every hand, so a seat in the last hand says nothing about the next one.
+pub fn reseats_every_hand(variant: Option<&str>) -> bool {
+    matches!(variant, Some("zoom_cash") | Some("zoom_tournament"))
+}
+
 /// Where the villain sits relative to the hero over the seats occupied in
-/// the hand (section 5). `None` when the hero was not seated, or the villain
-/// is the hero.
+/// the hand (section 5). `None` when the hero was not seated, the villain
+/// is the hero, or the table is Zoom ([`reseats_every_hand`]).
 pub fn seat_relation(hand: &HandFacts, villain_id: i64) -> Option<SeatRelation> {
+    if reseats_every_hand(hand.variant.as_deref()) {
+        return None;
+    }
     let hero = hand.hero()?;
     if hero.player_id == villain_id {
         return None;
@@ -278,15 +305,16 @@ pub fn seat_relation(hand: &HandFacts, villain_id: i64) -> Option<SeatRelation> 
 pub fn villain_context(hand: &HandFacts, villain_id: i64) -> Option<EngineContext> {
     hand.seat_of(villain_id)?;
     let tournament = is_tournament(hand);
+    let format = FormatKey::of_hand(hand);
     let avg_stack_bb = average_stack_bb(hand);
     let effective_stack_bb = effective_stack_after_bb(hand, villain_id);
     Some(EngineContext {
         source_hand_id: hand.hand_ref.clone(),
         variant: hand.variant.clone(),
-        format: FormatKey::of_hand(hand),
+        format,
         effective_stack_bb,
         stack_bucket: effective_stack_bb.map(StackBucket::of),
-        stage: if tournament { avg_stack_bb.map(Stage::of) } else { None },
+        stage: if tournament { avg_stack_bb.map(|avg| Stage::in_format(avg, format)) } else { None },
         level: if tournament { hand.level.as_deref().and_then(parse_level) } else { None },
         avg_stack_bb,
         bounty: bounty_context(hand, villain_id),
