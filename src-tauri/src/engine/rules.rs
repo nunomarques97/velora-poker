@@ -711,7 +711,9 @@ pub struct EngineRuleResult {
     pub scenario_id: String,
     pub family: Family,
     pub tag: Option<String>,
-    /// `deviation × confidence × weight × multiplier` (section 7).
+    /// `deviation × confidence × weight × multiplier` (section 7), or the
+    /// higher score of a read it replaced (section 7.2, specific-first
+    /// pairs).
     pub score: f64,
     /// `|shrunk − prior| / scale` of the basis stat; for context and
     /// recency reads the spec's fixed base score.
@@ -1238,13 +1240,16 @@ impl Adapt<'_> {
     /// Section 5: at `push_fold` only stack, short-stack, bounty, recency
     /// and showdown reads apply, plus the late-stage reads: late-stage blind
     /// battles (audit 2026-10) and the late shoves and calls of row T02 are
-    /// played at that depth.
+    /// played at that depth. `stk.reshove.low` is not: "min-raise wider into
+    /// him" contradicts shove-or-fold there, and it counts 15–25bb (section
+    /// 18).
     fn eligible(&self, def: &RuleDef) -> bool {
         if self.bucket() != Some(StackBucket::PushFold) {
             return true;
         }
         match def.family {
-            Family::Stack | Family::Bounty | Family::Recency | Family::Showdown => true,
+            Family::Stack => def.id != "stk.reshove.low",
+            Family::Bounty | Family::Recency | Family::Showdown => true,
             Family::Context => def.id == "ctx.short_stack",
             Family::Stage => def.id.starts_with("stage.late."),
             Family::Preflop | Family::Postflop | Family::H2h => false,
@@ -1709,7 +1714,7 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
     }
 
     let reshove_depth = out.adapt.bucket() == Some(StackBucket::Reshove);
-    drop_opposites(&mut out.reads, reshove_depth);
+    drop_opposites(&mut out.reads, reshove_depth, out.adapt.jam_depth());
     out.reads
 }
 
@@ -1799,8 +1804,10 @@ pub const TOURNAMENT_OPPOSITES: [(&str, &str); 6] = [
 /// His reshove reads against his 3-bet reads at 15–25bb (section 7.2).
 /// There his 3-bet is an all-in, so "jam over his 3-bets" or "fold JJ and
 /// AQ to his 3-bets" cannot be played as written, while the reshove read
-/// counts the same re-raise at this depth. Applied only in the `reshove`
-/// bucket; the first read of each pair always stays.
+/// counts the same re-raise at this depth. Applied in the `reshove` bucket;
+/// the `stk.reshove.high` pairs also up to [`JAM_DEPTH_MAX_BB`] (section
+/// 18): his 3-bet sample above 15bb is then mostly those jams, so his 3-bet
+/// still cannot be jammed over. The first read of each pair always stays.
 pub const DEPTH_OPPOSITES: [(&str, &str); 7] = [
     ("stk.reshove.high", "pf.3bet.high_ip"),
     ("stk.reshove.high", "pf.3bet.high_oop"),
@@ -1816,10 +1823,12 @@ pub const DEPTH_OPPOSITES: [(&str, &str); 7] = [
 /// context-adapted score of section 7.2) goes, then the lower deviation; a
 /// tie keeps the pair's first read. Of every [`H2H_OPPOSITES`],
 /// [`SHOWDOWN_OPPOSITES`], [`TOURNAMENT_OPPOSITES`] and [`REFINED_OPPOSITES`]
-/// pair, and of every [`DEPTH_OPPOSITES`] pair at `reshove` depth, the
-/// general read goes, whatever the scores. Runs before ranking, so the top
-/// reads never hold both reads of a pair.
-fn drop_opposites(reads: &mut Vec<EngineRuleResult>, reshove_depth: bool) {
+/// pair, and of every [`DEPTH_OPPOSITES`] pair at `reshove` depth (its
+/// `stk.reshove.high` pairs through jam depth), the general read goes,
+/// whatever the scores, and the read that stays takes its score when it is
+/// higher. Runs before ranking, so the top reads never hold both reads of a
+/// pair.
+fn drop_opposites(reads: &mut Vec<EngineRuleResult>, reshove_depth: bool, jam_depth: bool) {
     let at = |reads: &[EngineRuleResult], id: &str| reads.iter().position(|r| r.rule_id == id);
     for (a, b) in PREFLOP_OPPOSITES.into_iter().chain(POSTFLOP_OPPOSITES) {
         let (Some(i), Some(j)) = (at(reads, a), at(reads, b)) else { continue };
@@ -1827,17 +1836,37 @@ fn drop_opposites(reads: &mut Vec<EngineRuleResult>, reshove_depth: bool) {
         let order = x.score.total_cmp(&y.score).then(x.deviation.total_cmp(&y.deviation));
         reads.remove(if order.is_lt() { i } else { j });
     }
-    let depth: &[(&str, &str)] = if reshove_depth { &DEPTH_OPPOSITES } else { &[] };
+    let depth = DEPTH_OPPOSITES
+        .into_iter()
+        .filter(|(specific, _)| reshove_depth || (jam_depth && *specific == "stk.reshove.high"));
     let specific_first = H2H_OPPOSITES
         .into_iter()
         .chain(SHOWDOWN_OPPOSITES)
         .chain(TOURNAMENT_OPPOSITES)
         .chain(REFINED_OPPOSITES)
-        .chain(depth.iter().copied());
-    for (specific, general) in specific_first {
-        if let (Some(_), Some(j)) = (at(reads, specific), at(reads, general)) {
-            reads.remove(j);
+        .chain(depth);
+    // Every pair is matched against the reads that fired, so a general read
+    // still drops the reads it refines when a more specific one replaces it
+    // (section 18: the overbet tell replaces the overbet share, and "call his
+    // river bets with second pair+" stays gone).
+    let pairs: Vec<(usize, usize)> = specific_first.filter_map(|(s, g)| Some((at(reads, s)?, at(reads, g)?))).collect();
+    // The read that stays is the same spot with better evidence: it ranks at
+    // the highest score along the reads it replaces.
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for &(i, j) in &pairs {
+            if reads[j].score > reads[i].score {
+                reads[i].score = reads[j].score;
+                changed = true;
+            }
         }
+    }
+    let mut gone: Vec<usize> = pairs.iter().map(|&(_, j)| j).collect();
+    gone.sort_unstable();
+    gone.dedup();
+    for j in gone.into_iter().rev() {
+        reads.remove(j);
     }
 }
 

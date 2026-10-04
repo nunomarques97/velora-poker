@@ -6,7 +6,8 @@
 //! play separate corpora, and the read profiles must also converge to their
 //! engine stat targets. In the `strategic-analysis` build each villain's
 //! top read and chip tag must be the profile's expected one (none for a
-//! profile whose leak exists only in tournaments), and the tilting player
+//! profile whose leak exists only in tournaments) and his second read one
+//! the pro read oracle accepts (`expected.accepted`), and the tilting player
 //! must show `TILT` inside his tilt episodes and (all but rarely) not
 //! before them.
 //!
@@ -374,12 +375,14 @@ fn tilt_checkpoints(manifest: &Value) -> Vec<(u64, String, bool)> {
 }
 
 /// What the overlay would show for a player, adapted to the latest hand at
-/// his latest table: the chip tag, and his top read leaving out context
-/// facts (`ctx.*`, such as `DEEP`), as `(tag, rule id)`.
+/// his latest table: the chip tag, his top read leaving out context facts
+/// (`ctx.*`, such as `DEEP`), as `(tag, rule id)`, and the rule id of his
+/// second read.
 #[derive(Debug, Clone, PartialEq)]
 struct Seen {
     chip: Option<String>,
     read: Option<(Option<String>, String)>,
+    second: Option<String>,
 }
 
 #[cfg(feature = "strategic-analysis")]
@@ -399,12 +402,10 @@ fn engine_tag(conn: &Connection, name: &str) -> Option<Seen> {
     let payload = EngineCache::new().payload(conn, pid, context).expect("engine payload");
     let top: Vec<String> = payload.reads.iter().take(4).map(|r| format!("{} {:.2}", r.rule_id, r.score)).collect();
     eprintln!("{name}: tag {:?}, reads {top:?}", payload.tag.as_ref().map(|t| &t.text));
-    let read = payload
-        .reads
-        .iter()
-        .find(|r| !r.rule_id.starts_with("ctx."))
-        .map(|r| (r.tag.clone(), r.rule_id.clone()));
-    Some(Seen { chip: payload.tag.map(|t| t.text), read })
+    let mut tendencies = payload.reads.iter().filter(|r| !r.rule_id.starts_with("ctx."));
+    let read = tendencies.next().map(|r| (r.tag.clone(), r.rule_id.clone()));
+    let second = tendencies.next().map(|r| r.rule_id.clone());
+    Some(Seen { chip: payload.tag.map(|t| t.text), read, second })
 }
 
 #[cfg(not(feature = "strategic-analysis"))]
@@ -433,21 +434,35 @@ fn assert_tilt_checks(results: &[(&u64, String, bool, Option<Seen>)]) {
 }
 
 /// Each villain's top read (context facts aside) is one of his profile's
-/// expected reads, with its chip tag. An empty list (the oracle's `(none)`:
-/// a profile whose leak exists only in tournaments plays cash as a regular
-/// at the baseline) expects no tendency read from at least one of its
-/// players: the rules read a recency-weighted sample (half-life 150 cash hands,
-/// section 6), where a baseline regular can still clear one threshold
-/// by chance, but the profile itself must not produce a read.
+/// expected reads, with its chip tag, and his second read is an expected or
+/// `expected.accepted` read or a showdown-backed `sd.*` one (the oracle's
+/// top-2, section 16). An empty list (the oracle's `(none)`: a profile whose
+/// own leak exists only in tournaments plays cash on the read base) expects
+/// from at least one of its players no tendency read, or only accepted and
+/// showdown-backed ones (section 16: where `(none)` is accepted, so is an
+/// `sd.*` first read): the rules read a recency-weighted sample (section 6),
+/// where a regular can still clear one threshold by chance.
+/// The rule ids an `expected` block accepts in the first two reads: its
+/// `reads` and its `accepted`.
+#[allow(dead_code)]
+fn accepted_ids(expected: &Value) -> Vec<String> {
+    let reads = expected["reads"].as_array().expect("expected.reads").iter().map(|r| r["ruleId"].as_str().unwrap());
+    let accepted = expected["accepted"].as_array().expect("expected.accepted").iter().map(|r| r.as_str().unwrap());
+    reads.chain(accepted).map(String::from).collect()
+}
+
 #[allow(dead_code)]
 fn assert_top_reads(conn: &Connection, roster: &[Value]) {
     let mut wrong = Vec::new();
     for profile in roster {
         if profile["expected"]["reads"].as_array().is_some_and(Vec::is_empty) {
             let names: Vec<&str> = profile["players"].as_array().unwrap().iter().map(|n| n.as_str().unwrap()).collect();
-            let seen: Vec<_> = names.iter().map(|name| engine_tag(conn, name).expect("engine payload").read).collect();
-            if seen.iter().all(Option::is_some) {
-                wrong.push(format!("{names:?}: expected no read from at least one, got {seen:?}"));
+            let accepted = accepted_ids(&profile["expected"]);
+            let seen: Vec<_> = names.iter().map(|name| engine_tag(conn, name).expect("engine payload")).collect();
+            let ok = |id: &String| id.starts_with("sd.") || accepted.contains(id);
+            let hits = |s: &Seen| s.read.iter().map(|r| &r.1).chain(&s.second).all(ok);
+            if !seen.iter().any(hits) {
+                wrong.push(format!("{names:?}: expected no read or accepted ones from at least one, got {seen:?}"));
             }
             continue;
         }
@@ -470,6 +485,10 @@ fn assert_top_reads(conn: &Connection, roster: &[Value]) {
             };
             if !ok {
                 wrong.push(format!("{name}: expected one of {reads:?}, got {:?}", seen.read));
+            }
+            let accepted = accepted_ids(expected);
+            if let Some(second) = seen.second.as_ref().filter(|id| !id.starts_with("sd.") && !accepted.contains(id)) {
+                wrong.push(format!("{name}: second read {second} is not an accepted read, got {seen:?}"));
             }
         }
     }

@@ -468,12 +468,29 @@ fn river_bet_and_raise_count_correctly() {
 
     let hero = events(&conn, "Hero", HERO_CHECKS_TWICE);
     assert_no_spot(&hero, StatKey::RiverBet);
-    assert_spot(&hero, StatKey::RiverRaise, false);
+    // Bob's bet is a block bet (1 into 2.75): no river_raise spot for Hero.
+    assert_no_spot(&hero, StatKey::RiverRaise);
     assert_spot(&events(&conn, "Bob", HERO_CHECKS_TWICE), StatKey::RiverBet, true);
     // All in on the flop: no river decision.
     let ugo = events(&conn, "Ugo", FLOP_ALL_IN_VS_HERO);
     assert_no_spot(&ugo, StatKey::RiverBet);
     assert_no_spot(&ugo, StatKey::RiverRaise);
+}
+
+#[test]
+fn river_raise_ignores_block_bets() {
+    // Matrix validation (section 18): raising a bet under 40% of the pot is
+    // the standard value-heavy answer to a block bet, not river aggression.
+    // Counted as a river_raise spot, it made every player who faced the
+    // simulated block bettors look like a river raiser, and RR+ told the
+    // hero to call his raises with top pair. A block bet gives no spot.
+    let conn = setup();
+    // Bob bets 1 into 2.75 (small): Hero's answer is no river_raise spot.
+    assert_no_spot(&events(&conn, "Hero", HERO_CHECKS_TWICE), StatKey::RiverRaise);
+    // Bob's 6-into-5.25 overbet still gives Hal a spot (he raised it).
+    assert_spot(&events(&conn, "Hal", RIVER_OVERBET_RAISED), StatKey::RiverRaise, true);
+    // Cole's medium bet (5 into 7.75) still gives Ugo, who folds, a spot.
+    assert_spot(&events(&conn, "Ugo", FLOAT_CHECKED_BEHIND), StatKey::RiverRaise, false);
 }
 
 // ---- F15: river sizing shares

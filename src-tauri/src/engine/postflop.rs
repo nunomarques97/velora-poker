@@ -343,12 +343,21 @@ pub fn extract_postflop(hand: &HandFacts, player_id: i64) -> Vec<StatEvent> {
         }
     }
     // River raise: the player's first river action taken while facing a
-    // bet, before they bet or raised on the river themselves.
+    // bet, before they bet or raised on the river themselves. Facing a lone
+    // block bet (under 40% of the pot) gives no spot: raising it is the
+    // value-heavy answer to the size, not river aggression (section 9.2).
     for pos in (0..river.0.len()).filter(|&i| river.get(i).player_id == player_id) {
         if river.aggression_before(pos) {
             let at = river.get(pos).index;
-            let bettor = river.0[..pos].iter().rev().find(|a| is_aggression(a)).map(|a| a.player_id);
-            events.push(event(StatKey::RiverRaise, is(&river, pos, ActionType::Raise), bettor, &river, at));
+            let last = river.0[..pos].iter().rev().find(|a| is_aggression(a));
+            let block_bet = last.is_some_and(|a| {
+                a.kind == ActionType::Bet
+                    && replay_pot(hand).action(a.index).and_then(|r| r.bucket) == Some(SizeBucket::Small)
+            });
+            if !block_bet {
+                let bettor = last.map(|a| a.player_id);
+                events.push(event(StatKey::RiverRaise, is(&river, pos, ActionType::Raise), bettor, &river, at));
+            }
             break;
         }
         if is_aggression(river.get(pos)) {

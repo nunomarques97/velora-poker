@@ -78,7 +78,7 @@ test("every generated hand is internally consistent (cash and Zoom)", async () =
   let soloSidePots = 0;
   for (const format of ["cash", "zoom"]) {
     const out = scratch(`consistency-${format}`);
-    const manifest = await runSession({ format, seed: `consistency-${format}`, out, tables: 3, hands: 300, pace: 0 });
+    const manifest = await runSession({ format, seed: `consistency-${format}-b`, out, tables: 3, hands: 300, pace: 0 });
     const stakes = profiles.stakes[format];
     const ids = new Set();
     let showdowns = 0;
@@ -103,7 +103,9 @@ test("every generated hand is internally consistent (cash and Zoom)", async () =
     assert.ok(rakes > 50, `${format}: raked pots (${rakes})`);
   }
   // A side pot only one live player covered (folded chips above a short
-  // all-in) occurs in these seeds, so the check above has exercised it.
+  // all-in) occurs in these seeds, so the check above has exercised it. It
+  // is rare (about three seeds in five at this size); the seeds moved to
+  // `-b` when the read profiles' river raises fell to .02 (spec section 18).
   assert.ok(soloSidePots > 0, "a side pot with a single eligible player was generated and checked");
 });
 

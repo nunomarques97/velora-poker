@@ -13,7 +13,7 @@ use super::facts::{HandFacts, StatEvent, StatKey};
 use super::pooling::{shrink, stat_spec, FormatKey, ShrunkStat};
 use super::postflop::extract_postflop;
 use super::preflop::extract_preflop;
-use super::recency::{hand_weights, last_n_start, LAST_N};
+use super::recency::{last_n_start, recency_weight, LAST_N};
 use crate::parser::ActionType;
 
 /// Head-to-head stats need this many opportunities to be displayed.
@@ -50,7 +50,8 @@ impl StatAgg {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum View {
     AllTime,
-    /// Weighted by `0.5 ^ (age / H)`; rules evaluate this view.
+    /// Weighted by `0.5 ^ (age / H)`, age counted in the stat's own
+    /// newer opportunities; rules evaluate this view.
     Recency,
     /// The villain's last [`LAST_N`] hands.
     LastN,
@@ -285,16 +286,23 @@ pub fn hand_events(hand: &HandFacts, player_id: i64) -> Vec<StatEvent> {
 
 /// Builds every view from the villain's hands, oldest first (as
 /// `load_player_hands` returns them). Hands he was not dealt into are
-/// skipped. `format` sets the recency half-life.
+/// skipped. `format` sets the recency half-life, counted in the stat's own
+/// opportunities: an opportunity's age is the number of newer opportunities
+/// he had at the same stat (section 6).
 pub fn aggregate_player(hands: &[HandFacts], player_id: i64, format: FormatKey) -> PlayerAggregate {
     let own: Vec<&HandFacts> = hands.iter().filter(|h| h.seat_of(player_id).is_some()).collect();
-    let weights = hand_weights(own.len(), format.half_life());
+    let half_life = format.half_life();
     let recent_from = last_n_start(own.len(), LAST_N);
     let mut agg = PlayerAggregate { player_id, hands: own.len() as u32, ..Default::default() };
-    for (i, hand) in own.iter().enumerate() {
+    let mut stat_age: BTreeMap<StatKey, usize> = BTreeMap::new();
+    let mut h2h_age: BTreeMap<H2hKey, usize> = BTreeMap::new();
+    // Newest first, so each counter holds the number of newer opportunities.
+    for (i, hand) in own.iter().enumerate().rev() {
         let events = hand_events(hand, player_id);
         for event in events.iter().filter(|e| e.opportunity) {
-            agg.all_time.entry(event.key).or_default().add(event.success, weights[i]);
+            let age = stat_age.entry(event.key).or_default();
+            agg.all_time.entry(event.key).or_default().add(event.success, recency_weight(*age, half_life));
+            *age += 1;
             if i >= recent_from {
                 agg.last_n.entry(event.key).or_default().add(event.success, 1.0);
             }
@@ -303,7 +311,9 @@ pub fn aggregate_player(hands: &[HandFacts], player_id: i64, format: FormatKey) 
             agg.h2h_hands += 1;
         }
         for (key, success) in h2h_events(hand, &events, player_id) {
-            agg.h2h.entry(key).or_default().add(success, weights[i]);
+            let age = h2h_age.entry(key).or_default();
+            agg.h2h.entry(key).or_default().add(success, recency_weight(*age, half_life));
+            *age += 1;
         }
     }
     agg

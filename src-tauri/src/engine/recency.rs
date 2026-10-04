@@ -38,12 +38,13 @@ pub const LOOSER_MIN_GAP: f64 = 0.20;
 pub const TIGHTER_MIN_GAP: f64 = 0.15;
 pub const FORM_MIN_Z: f64 = 2.5;
 
-/// `0.5 ^ (age / H)`: `age` = how many of the villain's hands are newer.
+/// `0.5 ^ (age / H)`: `age` = how many of the villain's opportunities at
+/// the same stat are newer.
 pub fn recency_weight(age: usize, half_life: f64) -> f64 {
     0.5_f64.powf(age as f64 / half_life)
 }
 
-/// The weight of each of `count` hands ordered oldest first.
+/// The weight of each of `count` opportunities ordered oldest first.
 pub fn hand_weights(count: usize, half_life: f64) -> Vec<f64> {
     (0..count).map(|i| recency_weight(count - 1 - i, half_life)).collect()
 }

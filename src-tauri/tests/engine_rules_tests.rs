@@ -549,8 +549,8 @@ fn reshove_family_takes_priority_at_20bb() {
     // confidence 12/22 → score 1.57. 3-bet IP 8/40: (8 + 1.75)/65 = .15,
     // d = 2.67, confidence 40/65 → score 1.64. Section 7.2: ×1.5 for the
     // reshove and call-shove reads at 15–25bb, ×1.25 for the reshove read
-    // at 25–40bb, ×1 above; at 15–25bb the 3-bet read yields to the reshove
-    // read (DEPTH_OPPOSITES).
+    // at 25–40bb, ×1 above; up to 40bb the 3-bet read yields to the reshove
+    // read (DEPTH_OPPOSITES, section 18).
     let mut v = input(FormatKey::Mtt, &[(Reshove, 5, 12), (ThreeBetIp, 8, 40), (CallVsShove, 15, 30)]);
     v.context = Some(context(FormatKey::Mtt, 60.0));
     let mid = evaluate_rules(&v);
@@ -561,7 +561,7 @@ fn reshove_family_takes_priority_at_20bb() {
 
     let score = |reads: &[EngineRuleResult], id: &str| read(reads, id).unwrap().score;
     assert!(score(&mid, "pf.3bet.high_ip") > score(&mid, "stk.reshove.high"));
-    assert!(score(&jam, "stk.reshove.high") > score(&jam, "pf.3bet.high_ip"));
+    assert!(read(&jam, "pf.3bet.high_ip").is_none(), "{:?}", ids(&jam));
     assert!(read(&reshove, "pf.3bet.high_ip").is_none(), "{:?}", ids(&reshove));
     for id in ["stk.reshove.high", "stk.call_shove.wide"] {
         let ratio = score(&reshove, id) / score(&mid, id);
@@ -569,7 +569,35 @@ fn reshove_family_takes_priority_at_20bb() {
     }
     assert!((score(&jam, "stk.reshove.high") / score(&mid, "stk.reshove.high") - 1.25).abs() < 1e-9);
     assert_eq!(score(&jam, "stk.call_shove.wide"), score(&mid, "stk.call_shove.wide"));
-    assert_eq!(score(&jam, "pf.3bet.high_ip"), score(&mid, "pf.3bet.high_ip"));
+}
+
+#[test]
+fn reshove_read_replaces_his_3bet_reads_through_jam_depth() {
+    // Matrix validation (section 18): TwentyBigBlinds, a 20bb cash reshover
+    // who has grown to 28.7bb, showed "Jam over his 3-bets" second, but his
+    // 3-bet sample above 15bb is mostly his 15–25bb jams, so his 3-bet
+    // cannot be jammed over. Up to 40bb (JAM_DEPTH_MAX_BB) the reshove read
+    // replaces his 3-bet reads; deeper, both stay. `stk.reshove.low` keeps
+    // its pairs at 15–25bb only: a player who never jams there 3-bets to a
+    // size above it, and that 3-bet can be jammed over.
+    let mut v = input(FormatKey::Cash, &[(Reshove, 5, 12), (ThreeBetIp, 8, 40), (ThreeBetOop, 8, 40)]);
+    for eff in [28.7, 40.0] {
+        v.context = Some(context(FormatKey::Cash, eff));
+        let reads = evaluate_rules(&v);
+        assert!(read(&reads, "stk.reshove.high").is_some(), "{eff}bb: {:?}", ids(&reads));
+        for id in ["pf.3bet.high_ip", "pf.3bet.high_oop"] {
+            assert!(read(&reads, id).is_none(), "{eff}bb: {id} next to the reshove read: {:?}", ids(&reads));
+        }
+    }
+    v.context = Some(context(FormatKey::Cash, 40.1));
+    let reads = evaluate_rules(&v);
+    assert!(read(&reads, "pf.3bet.high_ip").is_some(), "{:?}", ids(&reads));
+
+    let mut low = input(FormatKey::Mtt, &[(Reshove, 0, 30), (ThreeBetIp, 8, 40)]);
+    low.context = Some(context(FormatKey::Mtt, 30.0));
+    let reads = evaluate_rules(&low);
+    assert!(read(&reads, "stk.reshove.low").is_some(), "{:?}", ids(&reads));
+    assert!(read(&reads, "pf.3bet.high_ip").is_some(), "{:?}", ids(&reads));
 }
 
 #[test]
@@ -674,6 +702,31 @@ fn big_bounty_villain_gets_wider_call_advice() {
     // ko.hunts_bounties needs its KO-hand sample: 5 opportunities is short.
     v.ko_call_vs_shove = Some(stat(m, CallVsShove, 5, 5));
     assert!(!fires(&v, "ko.hunts_bounties"));
+}
+
+/// Simulator validation (section 18): at 15bb or less the short-stack
+/// read says "shove or fold, don't min-raise", so "min-raise wider into
+/// him" (`stk.reshove.low`, counted at 15–25bb) cannot stand next to it,
+/// in any tournament format. Above 15bb it is back; his frequent reshoves
+/// (`stk.reshove.high`, "call his reshoves wider") stay at every depth.
+#[test]
+fn rare_reshove_read_is_not_shown_at_push_fold() {
+    for format in [FormatKey::Mtt, FormatKey::Spin] {
+        let mut v = input(format, &[(Reshove, 0, 40)]);
+        for eff in [15.0, 12.0, 6.0] {
+            v.context = Some(context(format, eff));
+            let reads = evaluate_rules(&v);
+            assert!(read(&reads, "ctx.short_stack").is_some(), "{format:?} {eff}bb");
+            assert!(read(&reads, "stk.reshove.low").is_none(), "{format:?} {eff}bb: {:?}", ids(&reads));
+        }
+        for eff in [15.1, 20.0, 30.0] {
+            v.context = Some(context(format, eff));
+            assert!(read(&evaluate_rules(&v), "stk.reshove.low").is_some(), "{format:?} {eff}bb");
+        }
+        let mut high = input(format, &[(Reshove, 20, 40)]);
+        high.context = Some(context(format, 12.0));
+        assert!(read(&evaluate_rules(&high), "stk.reshove.high").is_some(), "{format:?} 12bb");
+    }
 }
 
 #[test]
@@ -2345,6 +2398,46 @@ fn shown_river_bluffs_overrule_river_frequency_reads() {
         assert!(read(&reads, sd).is_some(), "{sd} stays: {:?}", ids(&reads));
         assert!(read(&reads, frequency).is_none(), "{frequency} fired next to {sd}: {:?}", ids(&reads));
     }
+}
+
+/// An overbettor whose overbets were also shown as value (simulator
+/// validation, section 18). The tell replaces the sizing read, and the
+/// reads the sizing read refines stay gone: "call his river bets with
+/// second pair+" must not come back next to "fold weak top pair to his
+/// overbets" just because the read that dropped it was itself replaced.
+#[test]
+fn a_replaced_read_still_drops_the_reads_it_refines() {
+    let mut v = h2h_sd_rec_firing(FormatKey::Cash, "sd.tell.big_is_value");
+    for id in ["post.river_sizing.polar", "post.river_bet.high", "post.cbet_river.high"] {
+        for (key, hits, n) in postflop_firing(id) {
+            v.stats.insert(key, stat(FormatKey::Cash, key, hits, n));
+        }
+    }
+    let reads = evaluate_rules(&v);
+    assert!(read(&reads, "sd.tell.big_is_value").is_some(), "{:?}", ids(&reads));
+    for general in ["post.river_sizing.polar", "post.river_bet.high", "post.cbet_river.high"] {
+        assert!(read(&reads, general).is_none(), "{general} next to the overbet tell: {:?}", ids(&reads));
+    }
+}
+
+/// The read that stays of a specific-first pair is the same spot with
+/// better evidence, so it ranks where the read it replaced would have
+/// (section 7.2): four shown overbets must not push a 50% overbet share
+/// below an outcome read such as a high WWSF.
+#[test]
+fn the_read_that_replaces_another_keeps_its_rank() {
+    let (polar_stat, wwsf_stat) = ((RiverBetPolar, 18, 30), (Wwsf, 36, 60));
+    let polar = read(&evaluate_rules(&cash(&[polar_stat])), "post.river_sizing.polar").expect("polar fires alone").score;
+    let mut v = h2h_sd_rec_firing(FormatKey::Cash, "sd.tell.big_is_value");
+    for (key, hits, n) in [polar_stat, wwsf_stat] {
+        v.stats.insert(key, stat(FormatKey::Cash, key, hits, n));
+    }
+    let reads = evaluate_rules(&v);
+    let tell = read(&reads, "sd.tell.big_is_value").expect("the tell stays");
+    let wwsf = read(&reads, "post.wwsf_high").expect("WWSF fires");
+    assert!(polar > wwsf.score, "fixture: the sizing read outranks WWSF alone ({polar:.2} vs {:.2})", wwsf.score);
+    assert!((tell.score - polar).abs() < 1e-12, "the tell ranks at the sizing read's {polar:.2}, got {:.2}", tell.score);
+    assert!(tell.score > wwsf.score);
 }
 
 #[test]

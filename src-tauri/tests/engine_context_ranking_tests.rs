@@ -218,21 +218,36 @@ fn assert_top(label: &str, p: &EnginePayload, expected: &[&str]) {
 // ------------------------------------------------------------------ checks
 
 /// Seat relation (section 7.2): directly on the hero's left, his answers to
-/// the hero's opens (flats, 3-bets) lead; directly on the right, his own
-/// opens lead.
-fn check_seat(conn: &Connection, cache: &mut EngineCache, name: &str, n: u32, left_top: &str, right_top: &str) {
+/// the hero's opens (flats, 3-bets) move up; directly on the right, his own
+/// opens lead. `left_leads`: the left read is his top read on the left;
+/// otherwise it only climbs above the right read there (section 18: no MTT
+/// villain of the corpus has reads close enough to flip on both sides).
+/// `plain_top` leads without a seat (no table scope): the bigger read.
+fn check_seat(
+    conn: &Connection,
+    cache: &mut EngineCache,
+    name: &str,
+    n: u32,
+    (left_read, right_top): (&str, &str),
+    left_leads: bool,
+    plain_top: &str,
+) {
     let (pid, base) = villain(conn, name);
     let plain = payload(cache, conn, pid, &at(&base, 100.0));
     let left = payload(cache, conn, pid, &seated(at(&base, 100.0), 1, n));
     let right = payload(cache, conn, pid, &seated(at(&base, 100.0), n - 1, n));
-    assert_top(&format!("{name} directly on the left"), &left, &[left_top]);
+    if left_leads {
+        assert_top(&format!("{name} directly on the left"), &left, &[left_read]);
+    } else {
+        assert!(position(&plain, right_top) < position(&plain, left_read), "{name} without a seat: {}", listing(&plain));
+        assert!(position(&left, left_read) < position(&left, right_top), "{name} directly on the left: {}", listing(&left));
+    }
     assert_top(&format!("{name} directly on the right"), &right, &[right_top]);
-    assert_eq!(rule_def(left_top).seat, Some(Side::Left), "{left_top} is a left-side read");
+    assert_eq!(rule_def(left_read).seat, Some(Side::Left), "{left_read} is a left-side read");
     assert_eq!(rule_def(right_top).seat, Some(Side::Right), "{right_top} is a right-side read");
-    // Without a seat (no table scope) the bigger read leads.
-    assert_top(&format!("{name} without a seat"), &plain, &[right_top]);
+    assert_top(&format!("{name} without a seat"), &plain, &[plain_top]);
     // The factors are section 7.2's, and the advice says where he sits.
-    let l = find(&left, left_top);
+    let l = find(&left, left_read);
     assert!((l.multiplier - SEAT_DIRECT).abs() < 1e-12, "{}", listing(&left));
     assert!(l.advice.ends_with("(directly on your left)."), "{}", l.advice);
     let r = find(&left, right_top);
@@ -240,18 +255,19 @@ fn check_seat(conn: &Connection, cache: &mut EngineCache, name: &str, n: u32, le
 }
 
 /// Zoom (section 5): the same seat, the same villain; at a Zoom table the
-/// seat changes nothing, at a ring table it moves his flats to the top.
+/// seat changes nothing, at a ring table directly on the hero's right it
+/// moves his 4-bets of the hero's 3-bets to the top.
 fn check_zoom(conn: &Connection, cache: &mut EngineCache) {
-    let (pid, base) = villain(conn, "SprayAndPray");
+    let (pid, base) = villain(conn, "TwentyBigBlinds");
     let plain = payload(cache, conn, pid, &at(&base, 100.0));
-    let mut zoom = seated(at(&base, 100.0), 1, 6);
+    let mut zoom = seated(at(&base, 100.0), 5, 6);
     zoom.variant = Some("zoom_cash".into());
     let mut ring = zoom.clone();
     ring.variant = Some("cash".into());
     let zoom = payload(cache, conn, pid, &zoom);
     let ring = payload(cache, conn, pid, &ring);
-    assert_top("Zoom, a seat directly on the left", &zoom, &["pf.rfi.loose_early"]);
-    assert_top("ring table, the same seat", &ring, &["pf.cold_call.high"]);
+    assert_top("Zoom, a seat directly on the right", &zoom, &["pf.3bet.high_ip"]);
+    assert_top("ring table, the same seat", &ring, &["pf.4bet.high"]);
     assert_eq!(zoom.reads.len(), plain.reads.len());
     for (z, p) in zoom.reads.iter().zip(&plain.reads) {
         assert_eq!((z.rule_id.as_str(), z.score, z.advice.as_str()), (p.rule_id.as_str(), p.score, p.advice.as_str()), "Zoom ignores the seat");
@@ -276,14 +292,15 @@ fn check_depth(conn: &Connection, cache: &mut EngineCache) {
     assert_top("LAG at 12bb", &push_fold, &["stk.call_shove.wide"]);
     assert!(tendency(&push_fold).iter().all(|id| id.starts_with("stk.") || id.starts_with("sd.")), "{}", listing(&push_fold));
     assert_top("LAG at 20bb", &reshove, &["pf.rfi.loose_early", "stk.call_shove.wide"]);
-    assert_top("LAG at 100bb", &standard, &["pf.rfi.loose_early", "pf.cold_call.high"]);
+    assert_top("LAG at 100bb", &standard, &["pf.rfi.loose_early", "post.river_bet.high"]);
     assert_top("LAG at 200bb", &deep, &["pf.rfi.loose_early", "post.river_bet.high"]);
     assert!((find(&reshove, "stk.call_shove.wide").multiplier - RESHOVE_PRIORITY).abs() < 1e-12);
     assert!((find(&standard, "stk.call_shove.wide").multiplier - STANDARD_ALL_IN).abs() < 1e-12);
     assert!((find(&deep, "stk.call_shove.wide").multiplier - DEEP_ALL_IN).abs() < 1e-12);
     assert!((find(&deep, "post.river_bet.high").multiplier - DEEP_POSTFLOP).abs() < 1e-12);
-    assert!(position(&deep, "post.river_bet.high") < position(&deep, "pf.cold_call.high"));
-    assert!(position(&standard, "post.river_bet.high") > position(&standard, "pf.cold_call.high"));
+    // Above 150bb his probes pass his flats.
+    assert!(position(&deep, "post.probe.high") < position(&deep, "pf.cold_call.high"));
+    assert!(position(&standard, "post.probe.high") > position(&standard, "pf.cold_call.high"));
 
     // A 20bb reshover: his reshoves lead down to push/fold depth, his
     // 3-bets from 60bb up.
@@ -297,8 +314,11 @@ fn check_depth(conn: &Connection, cache: &mut EngineCache) {
     for (label, p) in [("12bb", &push_fold), ("20bb", &reshove), ("30bb", &jam)] {
         assert_top(&format!("reshover at {label}"), p, &["stk.reshove.high"]);
     }
-    assert!(tendency(&reshove).iter().all(|id| !id.starts_with("pf.3bet.")), "depth pair at 20bb: {}", listing(&reshove));
-    assert!(position(&jam, "stk.reshove.high") < position(&jam, "pf.3bet.high_ip"));
+    // Depth pair at 20bb and, for his reshove read, through jam depth
+    // (section 18): his 3-bet sample is his jams.
+    for (label, p) in [("20bb", &reshove), ("30bb", &jam)] {
+        assert!(tendency(p).iter().all(|id| !id.starts_with("pf.3bet.")), "depth pair at {label}: {}", listing(p));
+    }
     for (label, p) in [("100bb", &standard), ("200bb", &deep)] {
         assert_top(&format!("reshover at {label}"), p, &["pf.3bet.high_ip"]);
     }
@@ -308,10 +328,10 @@ fn check_depth(conn: &Connection, cache: &mut EngineCache) {
 /// Tournament stage (section 7.2), effective stack 30bb: all-in and blind
 /// battle reads rank ×1.25 late, limp reads ×1.25 early.
 fn check_stage(conn: &Connection, cache: &mut EngineCache) {
-    let (pid, base) = villain(conn, "RockSolidRui");
+    let (pid, base) = villain(conn, "FoldEquityFern");
     let early = payload(cache, conn, pid, &staged(at(&base, 30.0), Stage::Early));
     let late = payload(cache, conn, pid, &staged(at(&base, 30.0), Stage::Late));
-    assert_top("nit, early stage", &early, &["pf.rfi.tight_early"]);
+    assert_top("nit, early stage", &early, &["pf.profile.nit"]);
     assert_top("nit, late stage", &late, &["stk.call_shove.tight"]);
     assert!((find(&late, "stk.call_shove.tight").multiplier - LATE_STAGE_PRIORITY).abs() < 1e-12);
     assert_eq!(find(&early, "stk.call_shove.tight").multiplier, 1.0);
@@ -330,10 +350,14 @@ fn check_stage(conn: &Connection, cache: &mut EngineCache) {
 
 /// Bounties (section 7.2) at 25bb or less: when he covers the hero, his
 /// calls of the hero's shoves lead (×1.25); when the hero covers a big
-/// bounty, the hero's calls of his shoves and reshoves rank ×1.5; above
-/// 25bb the bounty changes nothing.
+/// bounty, the hero's calls of his shoves and reshoves rank ×1.5, so his
+/// reshoves lead; above 25bb the bounty changes nothing.
 fn check_bounty(conn: &Connection, cache: &mut EngineCache) {
-    for (name, otherwise) in [("GrindHouseGus", "sd.tell.big_is_value"), ("FoldEquityFern", "pf.profile.nit")] {
+    // Two nits (section 18: GrindHouseGus has no call-vs-shove read on this
+    // corpus after the section 18 engine fixes).
+    let (pid, base) = villain(conn, "RockSolidRui");
+    assert_top("RockSolidRui at 20bb, no bounty", &payload(cache, conn, pid, &at(&base, 20.0)), &["pf.rfi.tight_early"]);
+    for (name, otherwise) in [("RockSolidRui", "stk.reshove.low"), ("FoldEquityFern", "stk.reshove.low")] {
         let (pid, base) = villain(conn, name);
         let covered = payload(cache, conn, pid, &bounty(at(&base, 20.0), 1.0, false));
         let covering = payload(cache, conn, pid, &bounty(at(&base, 20.0), 3.0, true));
@@ -345,8 +369,14 @@ fn check_bounty(conn: &Connection, cache: &mut EngineCache) {
     let (pid, base) = villain(conn, "TwentyBigBlinds");
     let big = payload(cache, conn, pid, &bounty(at(&base, 12.0), 3.0, true));
     let small = payload(cache, conn, pid, &bounty(at(&base, 12.0), 1.0, true));
-    assert_top("the hero covers his 3x bounty at 12bb", &big, &["stk.reshove.high", "stk.open_shove.wide"]);
+    // His reshoves lead either way; the 3x bounty ranks them ×1.5 (section
+    // 18: his open-shove read no longer fires on this corpus after the
+    // section 18 engine fixes).
+    assert_top("the hero covers his 3x bounty at 12bb", &big, &["stk.reshove.high", "sd.tell.big_is_value"]);
     assert_top("the hero covers his 1x bounty at 12bb", &small, &["stk.reshove.high", "sd.tell.big_is_value"]);
+    let factor = find(&big, "stk.reshove.high").multiplier / find(&small, "stk.reshove.high").multiplier;
+    assert!((factor - 1.5).abs() < 1e-12, "{}
+{}", listing(&big), listing(&small));
 }
 
 /// The chip tag keeps section 7's precedence under the context ranking: a
@@ -390,8 +420,12 @@ fn check_opposites(conn: &Connection, cache: &mut EngineCache, n: u32, tournamen
                             ctx = bounty(ctx, *ratio, *covers);
                         }
                         let p = payload(cache, conn, pid, &ctx);
-                        let depth: &[(&str, &str)] = if eff > 15.0 && eff <= 25.0 { &DEPTH_OPPOSITES } else { &[] };
-                        for (a, b) in always.iter().chain(depth) {
+                        // Section 18: the `stk.reshove.high` pairs hold through jam depth (40bb).
+                        let depth: Vec<(&str, &str)> = DEPTH_OPPOSITES
+                            .into_iter()
+                            .filter(|(s, _)| (eff > 15.0 && eff <= 25.0) || (eff > 15.0 && eff <= 40.0 && *s == "stk.reshove.high"))
+                            .collect();
+                        for (a, b) in always.iter().chain(&depth) {
                             let has = |reads: &[EngineRuleResult], id: &str| reads.iter().any(|r| r.rule_id == id);
                             assert!(!(has(&p.top_reads, a) && has(&p.top_reads, b)), "{name} {ctx:?}: {a} and {b} in the top reads");
                             assert!(!(has(&p.reads, a) && has(&p.reads, b)), "{name} {ctx:?}: {a} and {b} in the reads");
@@ -418,8 +452,9 @@ fn cash_villains_top_reads_follow_seat_zoom_and_stack_depth() {
     let tmp = tempfile::tempdir().expect("temp dir");
     let conn = corpus(tmp.path(), "cash");
     let mut cache = EngineCache::new();
-    // A LAG who opens 40%+ from early seats and flats a lot.
-    check_seat(&conn, &mut cache, "SprayAndPray", 6, "pf.cold_call.high", "pf.rfi.loose_early");
+    // A short-stack 3-bettor who also 4-bets: on the hero's left his 3-bets
+    // of the hero's opens lead, on the right his 4-bets of the hero's 3-bets.
+    check_seat(&conn, &mut cache, "TwentyBigBlinds", 6, ("pf.3bet.high_ip", "pf.4bet.high"), true, "pf.3bet.high_ip");
     check_zoom(&conn, &mut cache);
     check_depth(&conn, &mut cache);
     check_opposites(&conn, &mut cache, 6, false);
@@ -430,9 +465,12 @@ fn mtt_villains_top_reads_follow_seat_stage_and_bounty() {
     let tmp = tempfile::tempdir().expect("temp dir");
     let conn = corpus(tmp.path(), "mtt");
     let mut cache = EngineCache::new();
-    // A LAG who 3-bets 11%: on the hero's left his 3-bets of the hero's
-    // opens matter most, on the right his 40%+ early opens.
-    check_seat(&conn, &mut cache, "TripleBarrelTom", 9, "pf.3bet.high_ip", "pf.rfi.loose_early");
+    // A nit: on the hero's right his tight early opens lead (fold to them
+    // light, steal behind him); on the left his blind folds to steals climb
+    // above them (section 18: TripleBarrelTom's in-position 3-bets, .098 over
+    // 246, no longer fire the 3-bet read once recency counts each stat's own
+    // opportunities).
+    check_seat(&conn, &mut cache, "RockSolidRui", 9, ("pf.fold_to_steal.high", "pf.rfi.tight_early"), false, "pf.rfi.tight_early");
     check_stage(&conn, &mut cache);
     check_bounty(&conn, &mut cache);
     check_chip_tag(&conn, &mut cache);
@@ -481,3 +519,5 @@ fn context_ranking_tie_break_is_deterministic() {
         assert!(def.family != Family::H2h || def.seat.is_none(), "{}", def.id);
     }
 }
+
+

@@ -328,6 +328,38 @@ fn recency_weights_halve_every_half_life() {
 }
 
 #[test]
+fn recency_half_life_counts_the_stats_own_opportunities() {
+    // Matrix validation (section 18): counted in hands, a 150-hand half-life
+    // kept about 216 hands of a 1,800-hand cash sample, so a spot he meets
+    // once in 30 hands (a flop c-bet) kept a handful of weighted
+    // observations: FitOrFoldFiona's 83% fold to 64 c-bets shrank to 56%
+    // and showed no read. The age of an opportunity is now the number of
+    // newer opportunities at the same stat.
+    let mut t = Table::cash("Spot", 300_003_000, &SIX);
+    let mut text = String::new();
+    // One hand in four Vil is under the gun (an early-seat spot); in the
+    // others he is in the small blind and folded to (a steal spot). Every
+    // hand is a VPIP spot. Stacks reset so nobody goes broke.
+    for i in 0..600 {
+        for stack in t.stacks.values_mut() {
+            *stack = 50.0;
+        }
+        t.button = if i % 4 == 0 { 1 } else { 3 };
+        text += &if i % 8 == 1 { t.open_and_take(i, "Vil") } else { t.walk(i) };
+    }
+    let conn = import(&text);
+    let vil = player_id(&conn, "Vil");
+    let agg = aggregate_player(&load_player_hands(&conn, vil).unwrap(), vil, FormatKey::Cash);
+    let ep = agg.counts(View::Recency, StatKey::RfiEp);
+    assert!(ep.opportunities >= 20 && ep.opportunities * 3 < agg.hands, "{} early-seat spots in {} hands", ep.opportunities, agg.hands);
+    let expected: f64 = (0..ep.opportunities as usize).map(|age| recency_weight(age, 150.0)).sum();
+    assert!((ep.opportunities_w - expected).abs() < 1e-9, "weighted {} vs {expected}", ep.opportunities_w);
+    let vpip = agg.counts(View::Recency, StatKey::Vpip);
+    let expected: f64 = (0..vpip.opportunities as usize).map(|age| recency_weight(age, 150.0)).sum();
+    assert!((vpip.opportunities_w - expected).abs() < 1e-9, "weighted {} vs {expected}", vpip.opportunities_w);
+}
+
+#[test]
 fn last_n_window_uses_latest_hands() {
     let mut t = Table::cash("LastN", 300_002_000, &SIX);
     let mut text = String::new();

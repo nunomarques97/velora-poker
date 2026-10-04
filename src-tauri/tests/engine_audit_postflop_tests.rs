@@ -103,10 +103,11 @@ const CBET_SPOTS_COUNTS: &[(&str, &str)] = &[
 /// behind and nobody left to bet: neither has a flop decision. Hand 202: an
 /// all-in c-bet called all-in for less. Hand 203: the preflop raiser Lars is
 /// all-in (no c-bet for anyone); Kye and Hob play on, a three-way field
-/// counting the all-in Lars, and Kye wins the side pot only.
+/// counting the all-in Lars, and Kye wins the side pot only. Kye's river bet
+/// (15 into about 44) is a block bet: Hob has no river_raise spot.
 const POSTFLOP_ALLIN_COUNTS: &[(&str, &str)] = &[
     ("Gia", "cbet_flop 1/1 wtsd 1/1 wsd 1/1 wwsf 1/1"),
-    ("Hob", "river_raise 0/1 river_raise.mw 0/1 wtsd 1/1 wtsd.mw 1/1 wsd 0/1 wsd.mw 0/1 wwsf 0/1 wwsf.mw 0/1"),
+    ("Hob", "wtsd 1/1 wtsd.mw 1/1 wsd 0/1 wsd.mw 0/1 wwsf 0/1 wwsf.mw 0/1"),
     ("Ina", ""),
     ("Jem", "fold_to_cbet_flop 0/1 check_raise_flop 0/1 donk_flop 0/1 wtsd 1/1 wsd 0/1 wwsf 0/1"),
     (
@@ -124,12 +125,13 @@ const POSTFLOP_ALLIN_COUNTS: &[(&str, &str)] = &[
 /// bet (7% of the pot) is called by the hero. 404: Sam's three-way all-in
 /// bet is raised by Bob; Sam has no decision left. 405: Cole's small bet is
 /// raised by the hero and re-raised all in. 406: Bob's overbet is raised all
-/// in by the hero and called all in.
+/// in by the hero and called all in. Raising a small (block) bet gives no
+/// river_raise spot (section 9.2): Ugo in 401 and the hero in 405 have none.
 const RIVER_COUNTS: &[(&str, &str)] = &[
     (
         "Hero",
         "cbet_flop 3/3 cbet_flop.mw 1/1 cbet_turn 1/3 cbet_turn.mw 0/1 fold_to_cbet_flop 0/1 \
-         fold_to_cbet_turn 0/1 fold_to_cbet_river 0/1 river_raise 2/4 river_raise.mw 0/1 wtsd 3/4 \
+         fold_to_cbet_turn 0/1 fold_to_cbet_river 0/1 river_raise 1/3 river_raise.mw 0/1 wtsd 3/4 \
          wtsd.mw 0/1 wsd 1/3 wwsf 1/4 wwsf.mw 0/1",
     ),
     (
@@ -148,7 +150,7 @@ const RIVER_COUNTS: &[(&str, &str)] = &[
          wtsd 2/4 wtsd.mw 1/2 wsd 2/2 wsd.mw 1/1 wwsf 2/4 wwsf.mw 1/2 h2h.three_bet_vs_hero_open 0/1 \
          h2h.fold_to_hero_cbet 0/2 h2h.defend_vs_hero_steal 1/1",
     ),
-    ("Ugo", "cbet_flop 0/1 delayed_cbet 0/1 river_raise 1/1 wtsd 0/1 wwsf 1/1"),
+    ("Ugo", "cbet_flop 0/1 delayed_cbet 0/1 wtsd 0/1 wwsf 1/1"),
     (
         "Hal",
         "cbet_flop 0/1 cbet_flop.mw 0/1 delayed_cbet 0/1 delayed_cbet.mw 0/1 river_bet 1/1 river_bet.mw 1/1 \
@@ -261,14 +263,15 @@ const PLAYERS_COUNTS: &[(&str, &str)] = &[
 ];
 
 /// Hand 301: a three-way c-bet, checked turn (Tara declines the float), a
-/// river bet called twice and a split pot; Quinn mucks. Hand 302: three
+/// river bet called twice and a split pot; Quinn mucks. Rosa's river bet
+/// is a block bet (3 into about 10), so Tara and Quinn have no river_raise spot. Hand 302: three
 /// players all-in preflop, a side pot: no postflop event. Uma steals against
 /// the hero's (Rosa's) small blind.
 const POTS_COUNTS: &[(&str, &str)] = &[
     (
         "Quinn",
         "fold_to_cbet_flop 0/1 fold_to_cbet_flop.mw 0/1 check_raise_flop 0/1 check_raise_flop.mw 0/1 \
-         donk_flop 0/1 donk_flop.mw 0/1 river_bet 0/1 river_bet.mw 0/1 river_raise 0/1 river_raise.mw 0/1 \
+         donk_flop 0/1 donk_flop.mw 0/1 river_bet 0/1 river_bet.mw 0/1 \
          wtsd 1/1 wtsd.mw 1/1 wsd 0/1 wsd.mw 0/1 wwsf 0/1 wwsf.mw 0/1 h2h.fold_to_hero_cbet 0/1",
     ),
     (
@@ -279,8 +282,8 @@ const POTS_COUNTS: &[(&str, &str)] = &[
     ),
     (
         "Tara",
-        "fold_to_cbet_flop 0/1 fold_to_cbet_flop.mw 0/1 float_flop 0/1 float_flop.mw 0/1 river_raise 0/1 \
-         river_raise.mw 0/1 wtsd 1/1 wtsd.mw 1/1 wsd 1/1 wsd.mw 1/1 wwsf 1/1 wwsf.mw 1/1 \
+        "fold_to_cbet_flop 0/1 fold_to_cbet_flop.mw 0/1 float_flop 0/1 float_flop.mw 0/1 \
+         wtsd 1/1 wtsd.mw 1/1 wsd 1/1 wsd.mw 1/1 wwsf 1/1 wwsf.mw 1/1 \
          h2h.three_bet_vs_hero_open 0/1 h2h.fold_to_hero_cbet 0/1",
     ),
     ("Uma", "h2h.steal_vs_hero 1/1"),

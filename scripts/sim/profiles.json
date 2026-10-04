@@ -3,7 +3,7 @@
   "notes": [
     "Shared by the generator (scripts/sim), the Rust convergence test (src-tauri/tests/sim_convergence_tests.rs) and the e2e expectations.",
     "targets: imported stats in percent (stats::PlayerStats keys) with an absolute tolerance in percentage points, for cash 6-max at the sample sizes of the convergence test.",
-    "expected.reads: the engine top read (strategic-analysis build) once the player is past min_hands, as the rule ids (with their chip tags) that may rank first for this profile; context facts (ctx.*, e.g. DEEP) are left out of the comparison. For the tilting player it is the read during a tilt episode (expected.during).",
+    "expected.reads: the engine top read (strategic-analysis build) once the player is past min_hands, as the rule ids (with their chip tags) that may rank first for this profile; context facts (ctx.*, e.g. DEEP) are left out of the comparison. For the tilting player it is the read during a tilt episode (expected.during). expected.accepted: the further rule ids the pro read oracle (docs/specs/opponent-engine.md, section 16) accepts in the first two reads in cash and Zoom (tournament.expected.accepted: in its MTT rows); a guard in sim_matrix_tests keeps reads and accepted equal to the oracle.",
     "behaviour: decision ranges as a share of all starting hands (top X%) and postflop frequencies; see scripts/sim/lib/play.mjs.",
     "stakes.mtt / stakes.spin: tournament structures in chips (levels [sb, bb, ante]; buyIn components in cents, three of them for a knockout). avgStackBb is the field's average stack per level, used for villains moved in mid-tournament; a profile's tournament.stackBb overrides it (the short stack always arrives short). tournament.behaviour overrides behaviour in tournaments only (shove: open-shove range at 15bb or less); tournament.expected is the engine read once he is past min_hands, in the push/fold context.",
     "engineTargets.<format>: the read profiles' engine stats (engine::StatKey names in cash; late_* and ko_* replay splits in mtt) with absolute tolerances in percentage points, held by sim_convergence_tests (cash) and sim_formats_tests (mtt, --late-share 0.8). The read profiles play their own corpora (--profiles), apart from the baseline ones. An empty expected.reads is the oracle's (none): no cash read. tournament.late overrides behaviour at an MTT table whose average stack is under 20bb; tournament.expected.context names the hand the tournament read is checked in (push_fold, late or knockout). Expected reads come from the section-16 oracle of docs/specs/opponent-engine.md, written before any engine run."
@@ -171,6 +171,19 @@
             "ruleId": "pf.cold_call.high",
             "tag": "CC+"
           }
+        ],
+        "accepted": [
+          "pf.profile.station",
+          "pf.profile.loose_passive",
+          "pf.limp.high",
+          "pf.limp_call.high",
+          "post.station",
+          "post.fold_cbet_flop.low",
+          "post.fold_cbet_river.low",
+          "pf.fold_to_steal.low",
+          "pf.bb_vs_sb.overdefend",
+          "pf.fold_to_3bet.low",
+          "h2h.defend_vs_hero_steal.high"
         ]
       },
       "behaviour": {
@@ -262,6 +275,20 @@
             "ruleId": "pf.steal.low",
             "tag": "ST-"
           }
+        ],
+        "accepted": [
+          "pf.fold_to_steal.high",
+          "pf.bb_vs_sb.overfold",
+          "pf.rfi.tight_late",
+          "pf.3bet.low",
+          "pf.fold_to_3bet.high",
+          "post.fold_cbet_flop.high",
+          "post.fold_cbet_turn.high",
+          "post.fold_cbet_river.high",
+          "post.wwsf_low",
+          "post.wsd_strong",
+          "h2h.fold_to_hero_cbet.high",
+          "h2h.fold_to_hero_3bet.high"
         ]
       },
       "behaviour": {
@@ -349,6 +376,13 @@
             "ruleId": "pf.rfi.loose_late",
             "tag": "ST+"
           }
+        ],
+        "accepted": [
+          "pf.fold_to_3bet.high",
+          "h2h.fold_to_hero_3bet.high",
+          "h2h.steal_vs_hero.high",
+          "pf.rfi_sb.wide",
+          "post.river_bet.high"
         ]
       },
       "behaviour": {
@@ -436,6 +470,27 @@
             "ruleId": "pf.4bet.high",
             "tag": "4B+"
           }
+        ],
+        "accepted": [
+          "pf.profile.lag",
+          "pf.rfi.loose_late",
+          "pf.steal.high",
+          "post.cbet_flop.high",
+          "pf.3bet.high_ip",
+          "pf.3bet.high_oop",
+          "pf.fold_to_3bet.low",
+          "pf.squeeze.high",
+          "pf.iso.high",
+          "pf.rfi_sb.wide",
+          "post.cbet_turn.high",
+          "post.cbet_river.high",
+          "post.float.high",
+          "post.probe.high",
+          "post.river_bet.high",
+          "post.check_raise.high",
+          "post.fold_cbet_flop.low",
+          "h2h.3bet_vs_hero.high",
+          "h2h.steal_vs_hero.high"
         ]
       },
       "behaviour": {
@@ -506,7 +561,8 @@
               "ruleId": "stk.reshove.high",
               "tag": "RSV"
             }
-          ]
+          ],
+          "accepted": []
         }
       },
       "targets": {
@@ -544,11 +600,12 @@
           {
             "ruleId": "stk.reshove.high",
             "tag": "RSV"
-          },
-          {
-            "ruleId": "pf.squeeze.high",
-            "tag": "SQZ"
           }
+        ],
+        "accepted": [
+          "pf.squeeze.high",
+          "pf.4bet.high",
+          "stk.open_shove.wide"
         ]
       },
       "behaviour": {
@@ -632,6 +689,23 @@
             "ruleId": "rec.tilt",
             "tag": "TILT"
           }
+        ],
+        "accepted": [
+          "rec.looser",
+          "post.river_bet.high",
+          "post.river_raise.high",
+          "pf.cold_call.high",
+          "h2h.3bet_vs_hero.high",
+          "pf.fold_to_steal.low",
+          "pf.3bet.high_ip",
+          "pf.3bet.high_oop",
+          "pf.fold_to_3bet.low",
+          "pf.rfi.loose_early",
+          "pf.profile.lag",
+          "post.fold_cbet_flop.low",
+          "post.fold_cbet_river.low",
+          "post.station",
+          "pf.4bet.high"
         ],
         "during": "tilt-episode"
       },
@@ -764,6 +838,15 @@
             "ruleId": "sd.tell.big_is_bluff",
             "tag": "SDB"
           }
+        ],
+        "accepted": [
+          "pf.bb_vs_sb.overfold",
+          "post.cbet_river.high",
+          "post.check_raise.never",
+          "pf.fold_to_steal.high",
+          "post.wwsf_high",
+          "post.fold_cbet_river.low",
+          "pf.cold_call.high"
         ]
       },
       "behaviour": {
@@ -798,7 +881,7 @@
         "foldToBet": 0.47,
         "foldToTurn": 0.47,
         "foldToRiver": 0.5,
-        "raiseVsBet": 0.07,
+        "raiseVsBet": 0.02,
         "betSize": 0.6,
         "riverSizing": {
           "polar": 0.6,
@@ -870,7 +953,21 @@
           {
             "ruleId": "post.fold_river_raise.high",
             "tag": "FRR"
+          },
+          {
+            "ruleId": "sd.tell.small_is_value",
+            "tag": "SDV"
           }
+        ],
+        "accepted": [
+          "post.river_bet.high",
+          "pf.bb_vs_sb.overfold",
+          "post.cbet_river.high",
+          "post.check_raise.never",
+          "pf.fold_to_steal.high",
+          "post.wwsf_high",
+          "post.fold_cbet_river.low",
+          "pf.cold_call.high"
         ]
       },
       "behaviour": {
@@ -905,7 +1002,7 @@
         "foldToBet": 0.35,
         "foldToTurn": 0.35,
         "foldToRiver": 0.5,
-        "raiseVsBet": 0.07,
+        "raiseVsBet": 0.02,
         "betSize": 0.6,
         "riverSizing": {
           "polar": 0,
@@ -979,6 +1076,19 @@
             "ruleId": "h2h.fold_to_hero_cbet.high",
             "tag": "FCB"
           }
+        ],
+        "accepted": [
+          "post.wwsf_low",
+          "post.fold_cbet_turn.high",
+          "post.fold_cbet_river.high",
+          "post.cbet_turn.giveup",
+          "pf.bb_vs_sb.overfold",
+          "post.cbet_river.high",
+          "post.check_raise.never",
+          "pf.fold_to_steal.high",
+          "post.wsd_strong",
+          "post.fold_cbet_river.low",
+          "pf.cold_call.high"
         ]
       },
       "behaviour": {
@@ -1013,7 +1123,7 @@
         "foldToBet": 0.47,
         "foldToTurn": 0.6,
         "foldToRiver": 0.65,
-        "raiseVsBet": 0.07,
+        "raiseVsBet": 0.02,
         "betSize": 0.6,
         "fitOrFold": {
           "marginal": 0.1
@@ -1072,7 +1182,15 @@
         }
       },
       "expected": {
-        "reads": []
+        "reads": [],
+        "accepted": [
+          "pf.bb_vs_sb.overfold",
+          "post.cbet_river.high",
+          "post.check_raise.never",
+          "pf.fold_to_steal.high",
+          "post.fold_cbet_river.low",
+          "pf.cold_call.high"
+        ]
       },
       "behaviour": {
         "open": {
@@ -1106,7 +1224,7 @@
         "foldToBet": 0.47,
         "foldToTurn": 0.47,
         "foldToRiver": 0.5,
-        "raiseVsBet": 0.07,
+        "raiseVsBet": 0.02,
         "betSize": 0.6
       },
       "tilt": null,
@@ -1132,6 +1250,12 @@
               "ruleId": "stage.late.shoves_wide",
               "tag": "SHV"
             }
+          ],
+          "accepted": [
+            "stk.call_shove.wide",
+            "stk.open_shove.wide",
+            "ko.hunts_bounties",
+            "stk.reshove.low"
           ]
         }
       }
@@ -1187,7 +1311,15 @@
         }
       },
       "expected": {
-        "reads": []
+        "reads": [],
+        "accepted": [
+          "pf.bb_vs_sb.overfold",
+          "post.cbet_river.high",
+          "post.check_raise.never",
+          "pf.fold_to_steal.high",
+          "post.fold_cbet_river.low",
+          "pf.cold_call.high"
+        ]
       },
       "behaviour": {
         "open": {
@@ -1221,7 +1353,7 @@
         "foldToBet": 0.47,
         "foldToTurn": 0.47,
         "foldToRiver": 0.5,
-        "raiseVsBet": 0.07,
+        "raiseVsBet": 0.02,
         "betSize": 0.6
       },
       "tilt": null,
@@ -1236,6 +1368,11 @@
               "ruleId": "ko.calls_when_covering",
               "tag": "KO+"
             }
+          ],
+          "accepted": [
+            "ko.hunts_bounties",
+            "stk.reshove.low",
+            "stk.call_shove.wide"
           ]
         }
       }
