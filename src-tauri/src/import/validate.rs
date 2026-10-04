@@ -60,6 +60,40 @@ pub fn check(hand: &ParsedHand) -> Vec<Problem> {
         ));
     }
 
+    // A hand cut short — the watcher read the file while PokerStars was still
+    // writing it — has no showdown flags or results yet. Storing it would turn
+    // the complete copy of the same hand id into a skipped duplicate, so it is
+    // refused and counted; the next read of the finished file stores it.
+    if !hand.complete {
+        problems.push(Problem::reject(
+            "incomplete_hand",
+            format!(
+                "hand {} ends before its summary lists every dealt-in player",
+                hand.hand_id
+            ),
+        ));
+    }
+
+    // Bytes that were not UTF-8 are decoded as U+FFFD (`import::import_file`).
+    // A name that holds one is not the player's real name: storing it would
+    // file the hand under a player who does not exist.
+    let undecodable = hand
+        .seats
+        .iter()
+        .map(|s| s.player_name.as_str())
+        .chain(hand.actions.iter().map(|a| a.player_name.as_str()))
+        .chain(std::iter::once(hand.table_name.as_str()))
+        .any(|name| name.contains('\u{FFFD}'));
+    if undecodable {
+        problems.push(Problem::reject(
+            "undecodable_text",
+            format!(
+                "hand {} has a player or table name with bytes that are not valid UTF-8",
+                hand.hand_id
+            ),
+        ));
+    }
+
     // No dealt-in players at all. This is exactly the bounty-seat-line failure:
     // the hand imported fine, kept its actions, and stored nobody.
     if hand.seats.is_empty() {

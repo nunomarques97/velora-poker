@@ -66,6 +66,11 @@ pub fn import_text(conn: &mut Connection, text: &str) -> Result<ImportSummary, S
                     let _ = db::record_import_problems(conn, &hand.hand_id, &problems);
                     continue;
                 }
+
+                // Storing a hand clears the findings of any earlier, rejected
+                // copy of it (see `import_hand`), so its warnings are recorded
+                // after the insert, not before.
+                let stored = import_hand(conn, &hand);
                 if !problems.is_empty() {
                     summary.hands_with_warnings += 1;
                     for problem in &problems {
@@ -77,7 +82,7 @@ pub fn import_text(conn: &mut Connection, text: &str) -> Result<ImportSummary, S
                     let _ = db::record_import_problems(conn, &hand.hand_id, &problems);
                 }
 
-                match import_hand(conn, &hand) {
+                match stored {
                     Ok(true) => summary.hands_imported += 1,
                     Ok(false) => summary.hands_skipped_duplicate += 1,
                     Err(err) => {
@@ -104,9 +109,13 @@ pub fn import_text(conn: &mut Connection, text: &str) -> Result<ImportSummary, S
     Ok(summary)
 }
 
+/// Bytes that are not UTF-8 (a stray byte, a write cut inside a multi-byte
+/// character) are decoded as U+FFFD instead of failing the whole file: only a
+/// hand whose names they land in is lost, and the integrity gate counts it
+/// (`undecodable_text`).
 pub fn import_file(conn: &mut Connection, path: &std::path::Path) -> Result<ImportSummary, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    import_text(conn, &text)
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    import_text(conn, &String::from_utf8_lossy(&bytes))
 }
 
 /// Imports every `.txt` file found anywhere under `dir`, including nested
@@ -235,6 +244,11 @@ fn import_hand(conn: &mut Connection, hand: &ParsedHand) -> Result<bool, rusqlit
             ],
         )?;
     }
+
+    // Findings recorded for an earlier copy of this hand id described text
+    // that was refused (typically the same hand read before PokerStars
+    // finished writing it). The hand is stored now, so they no longer apply.
+    tx.execute("DELETE FROM import_problems WHERE hand_id = ?1", params![hand.hand_id])?;
 
     tx.commit()?;
     Ok(true)

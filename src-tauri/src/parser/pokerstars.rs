@@ -553,6 +553,10 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
     // real `*** SUMMARY ***` description. Both feed the dealt-in decision below.
     let mut seat_markers: HashMap<String, String> = HashMap::new();
     let mut summary_described: std::collections::HashSet<String> = std::collections::HashSet::new();
+    // `(seat, player)` of every summary seat line naming a known player: the
+    // completeness check below wants one for each dealt-in seat.
+    let mut summary_seats: std::collections::HashSet<(i64, String)> = std::collections::HashSet::new();
+    let mut has_summary = false;
     // First clean card set seen per player: `Dealt to`, `shows`, `showed` or
     // `mucked`. They agree on a well-formed hand; keeping the first makes the
     // result independent of which of them a malformed line spoiled.
@@ -609,6 +613,7 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
         }
         if line.starts_with("*** SUMMARY ***") {
             in_summary = true;
+            has_summary = true;
             current_street = None;
             continue;
         }
@@ -618,6 +623,7 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
             if let Some(caps) = summary_seat_regex().captures(line) {
                 let rest = caps[2].trim();
                 if let Some((name, desc)) = strip_known_name(rest, &known_names) {
+                    summary_seats.insert((caps[1].parse().unwrap_or(0), name.clone()));
                     let desc = strip_position_tags(desc);
                     if !desc.is_empty() {
                         summary_described.insert(name.clone());
@@ -745,6 +751,15 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
         seat.hole_cards = shown_cards.get(&seat.player_name).cloned();
     }
 
+    // A hand cut anywhere before its last summary seat line is incomplete. A
+    // seat that was never dealt in has no summary line of its own (the
+    // moved-in seat of `real_seat_moved_out_of_hand.txt`), so only dealt-in
+    // seats are required.
+    let complete = has_summary
+        && seats
+            .iter()
+            .all(|s| summary_seats.contains(&(s.seat_number, s.player_name.clone())));
+
     // Net money result is only meaningful for cash games: tournament chips
     // aren't money, and PokerStars hand-history text carries no buy-in/payout
     // to convert them with, so tournament hands never get a `net_result`
@@ -791,6 +806,7 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
         skipped_seats,
         actions,
         results,
+        complete,
         raw_text: block.to_string(),
     })
 }

@@ -1985,6 +1985,14 @@ fn problem_explanation(code: &str) -> &'static str {
             "A hand arrived without a date/time: it was left out of the stats because it \
              can't be placed in the session."
         }
+        "incomplete_hand" => {
+            "A hand was read before it was fully written: it was left out until its complete \
+             copy arrives, so its result is never counted from half a hand."
+        }
+        "undecodable_text" => {
+            "A hand had a player or table name with unreadable characters: it was left out \
+             rather than filed under a player who doesn't exist."
+        }
         "no_dealt_in_players" => {
             "A hand didn't bring any player at the table: it was left out because there is \
              no one to attribute its stats to."

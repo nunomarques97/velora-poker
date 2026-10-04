@@ -205,6 +205,12 @@ pub struct ParsedHand {
     pub skipped_seats: Vec<SkippedSeat>,
     pub actions: Vec<ParsedAction>,
     pub results: HashMap<String, ParsedPlayerResult>,
+    /// True when the text reaches `*** SUMMARY ***` and the summary carries a
+    /// seat line for every dealt-in player, i.e. PokerStars finished writing
+    /// the hand. False for a hand cut short, such as the last hand of a file
+    /// the watcher reads while PokerStars is still writing it: its showdown
+    /// flags and results are not known yet, so it must not be stored.
+    pub complete: bool,
     pub raw_text: String,
 }
 
