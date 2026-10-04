@@ -16,7 +16,7 @@ use velora_poker_lib::engine::context::{BountyContext, SeatRelation};
 use velora_poker_lib::engine::pooling::shrink;
 use velora_poker_lib::engine::rules::{
     observation_template, Variant, BB_VS_SB_OVERDEFEND, FOLD_TO_STEAL_LOW, FOLD_TO_STEAL_SB_HIGH,
-    HOVER_CARD_ADVICE_BUDGET, JAM_DEPTH_MAX_BB, LIMP_HIGH, PREFLOP_OPPOSITES, SEAT_SUFFIX,
+    HOVER_CARD_ADVICE_BUDGET, JAM_DEPTH_MAX_BB, LIMP_HIGH, POSTFLOP_OPPOSITES, PREFLOP_OPPOSITES, SEAT_SUFFIX,
     STAGE_EARLY_LIMP,
 };
 use velora_poker_lib::engine::{
@@ -756,7 +756,7 @@ fn seat_relation_reflected_in_advice() {
     // His fold-to-3-bet matters when he opens in front of the hero.
     assert_eq!(read(&reads, "pf.fold_to_3bet.high").unwrap().advice, "3-bet his opens light with A2s-A5s, K9s+ and 65s+.");
     // Postflop reads never carry the seat.
-    assert_eq!(read(&reads, "post.cbet_flop.high").unwrap().advice, "Float and check-raise his flop c-bets more.");
+    assert_eq!(read(&reads, "post.cbet_flop.high").unwrap().advice, "Raise his flop c-bets with draws and gutshots; call them with any pair.");
 
     ctx.seat = Some(seat(4, 6));
     v.context = Some(ctx.clone());
@@ -1284,7 +1284,7 @@ fn fold_to_river_barrel_rule_fires_at_threshold_and_not_below() {
     let reads = evaluate_rules(&cash(&[(FoldToCbetRiver, 21, 30)]));
     let r = read(&reads, "post.fold_cbet_river.high").unwrap();
     assert_eq!(r.observation, "Folds to 70% (21/30) of river barrels after calling the turn.");
-    assert_eq!(r.advice, "Fire more third barrels against him.");
+    assert_eq!(r.advice, "Fire third barrels on the river at 3/4 pot with missed draws and ace blockers.");
     assert_eq!((r.tag.as_deref(), r.scenario_id.as_str()), (Some("RVF"), "F14"));
     // The opposite read of the same stat never fires with it.
     assert!(read(&reads, "post.fold_cbet_river.low").is_none());
@@ -1335,7 +1335,7 @@ fn check_raise_rules_fire_at_threshold_and_not_below() {
     // Small-sample extreme: 0 of 19 (raw 0%) never fires.
     assert!(!fires(&cash(&[(CheckRaiseFlop, 0, 19)]), "post.check_raise.never"));
     let reads = evaluate_rules(&cash(&[(CheckRaiseFlop, 0, 80)]));
-    assert_eq!(read(&reads, "post.check_raise.never").unwrap().observation, "Has check-raised 0 of 80 flop c-bets.");
+    assert_eq!(read(&reads, "post.check_raise.never").unwrap().observation, "Has check-raised 0 of 80 flop bets after checking.");
 }
 
 #[test]
@@ -1377,7 +1377,8 @@ fn showdown_rules_fire_at_threshold_and_not_below() {
     let wtsd_low = last_below(c, Wtsd, 60, 0.0);
     assert_above(c, "post.wsd_strong", Wsd, 40, 0.08, &[(Wtsd, wtsd_low, 60)]);
     assert!(!fires(&cash(&[(Wtsd, wtsd_low + 1, 60), (Wsd, 40, 40)]), "post.wsd_strong"));
-    assert_below(c, "post.wwsf_low", Wwsf, 60, 0.08, &[]);
+    // Audit 2026-10: the low-WWSF read also needs WTSD at or under its prior.
+    assert_below(c, "post.wwsf_low", Wwsf, 60, 0.08, &[(Wtsd, wtsd_low, 60)]);
     assert_above(c, "post.wwsf_high", Wwsf, 60, 0.08, &[]);
 }
 
@@ -1387,6 +1388,235 @@ fn preflop_all_in_creates_no_postflop_rule_reads() {
     // no postflop read, whatever the preflop numbers.
     let reads = evaluate_rules(&cash(&[(Vpip, 50, 60), (Pfr, 40, 60)]));
     assert!(reads.iter().all(|r| r.family != Family::Postflop));
+}
+
+// ------------------------------------------- postflop audit (section 17.6)
+
+/// Stats on which a postflop rule fires in 6-max cash (shrunk values in the
+/// comments are against the cash priors of section 4.3).
+fn postflop_firing(id: &str) -> Vec<(StatKey, u32, u32)> {
+    match id {
+        // (36 + 8.7)/55 = .81 ≥ .73; (8 + 8.7)/55 = .30 ≤ .43
+        "post.cbet_flop.high" => vec![(CbetFlop, 36, 40)],
+        "post.cbet_flop.low" => vec![(CbetFlop, 8, 40)],
+        // (30 + 6.75)/55 = .67 ≥ .57; (5 + 6.75)/55 = .21 ≤ .30
+        "post.fold_cbet_flop.high" => vec![(FoldToCbetFlop, 30, 40)],
+        "post.fold_cbet_flop.low" => vec![(FoldToCbetFlop, 5, 40)],
+        "post.cbet_turn.high" => vec![(CbetTurn, 25, 30)],
+        "post.cbet_turn.giveup" => vec![(CbetTurn, 4, 30)],
+        "post.fold_cbet_turn.high" => vec![(FoldToCbetTurn, 25, 30)],
+        "post.cbet_river.high" => vec![(CbetRiver, 28, 30)],
+        "post.cbet_river.low" => vec![(CbetRiver, 3, 30)],
+        "post.fold_cbet_river.low" => vec![(FoldToCbetRiver, 2, 30)],
+        "post.fold_cbet_river.high" => vec![(FoldToCbetRiver, 25, 30)],
+        "post.delayed_cbet.high" => vec![(DelayedCbet, 25, 30)],
+        "post.check_raise.high" => vec![(CheckRaiseFlop, 15, 60)],
+        "post.check_raise.never" => vec![(CheckRaiseFlop, 0, 80)],
+        "post.donk.high" => vec![(DonkFlop, 12, 60)],
+        "post.float.high" => vec![(FloatFlop, 25, 30)],
+        "post.probe.high" => vec![(ProbeTurn, 25, 30)],
+        "post.river_bet.high" => vec![(RiverBet, 30, 40)],
+        "post.river_bet.low" => vec![(RiverBet, 2, 40)],
+        "post.river_raise.high" => vec![(RiverRaise, 15, 60)],
+        // WTSD (30 + 5.4)/80 = .44 ≥ .37; W$SD (10 + 7.5)/55 = .32 ≤ .44
+        "post.station" => vec![(Wtsd, 30, 60), (Wsd, 10, 40)],
+        // W$SD (30 + 7.5)/55 = .68 ≥ .58; WTSD (10 + 5.4)/80 = .19 ≤ .27
+        "post.wsd_strong" => vec![(Wsd, 30, 40), (Wtsd, 10, 60)],
+        // WWSF (15 + 9.2)/80 = .30 ≤ .38; WTSD (12 + 5.4)/80 = .22 ≤ .27
+        "post.wwsf_low" => vec![(Wwsf, 15, 60), (Wtsd, 12, 60)],
+        "post.wwsf_high" => vec![(Wwsf, 45, 60)],
+        other => panic!("no postflop firing input for {other}"),
+    }
+}
+
+/// Every postflop advice after the 2026-10 audit (section 17.6): street,
+/// sizing or hand classes, and never the same note as another read.
+const POSTFLOP_ADVICE: [(&str, &str); 24] = [
+    ("post.cbet_flop.high", "Raise his flop c-bets with draws and gutshots; call them with any pair."),
+    ("post.cbet_flop.low", "Fold bottom pair to his flop c-bets; bet 1/2 pot when he checks the flop."),
+    ("post.fold_cbet_flop.high", "C-bet him at 1/3 pot with your whole range on dry flops."),
+    ("post.fold_cbet_flop.low", "C-bet flops at 2/3 pot with top pair+ and draws; check back overcards."),
+    ("post.cbet_turn.high", "Call his turn barrels with second pair+; float flops with pairs, not gutshots."),
+    ("post.cbet_turn.giveup", "Float his flop c-bets in position with overcards; bet 2/3 pot if he checks the turn."),
+    ("post.fold_cbet_turn.high", "Barrel the turn at 2/3 pot with draws and overcards after he calls the flop."),
+    ("post.cbet_river.high", "Bluff-catch his river barrels with top pair and good second pairs."),
+    ("post.cbet_river.low", "Fold one pair to his river barrels; call his turn barrels with draws."),
+    ("post.fold_cbet_river.low", "Size river value bets up to pot with two pair or better after two calls."),
+    ("post.fold_cbet_river.high", "Fire third barrels on the river at 3/4 pot with missed draws and ace blockers."),
+    ("post.delayed_cbet.high", "Call his delayed turn bets with any pair; raise them with draws."),
+    ("post.check_raise.high", "Call his flop check-raises with top pair and open-enders; never fold overpairs."),
+    ("post.check_raise.never", "C-bet second pair on the flop for thin value; fold one pair to his rare check-raise."),
+    ("post.donk.high", "Raise his flop leads to 3x with top pair, draws and overcards."),
+    ("post.float.high", "Check-raise his turn stabs with top pair+ and draws after he calls your c-bet."),
+    ("post.probe.high", "Call his turn probes with second pair+; raise them with flush draws."),
+    ("post.river_bet.high", "Check top pair to him on the river; call his river bets with second pair+."),
+    ("post.river_bet.low", "Fold one pair to his river bets; call them with two pair or better."),
+    ("post.river_raise.high", "Check second pair on the river; call his river raises with top pair or better."),
+    ("post.station", "Value bet middle pair on the river; bet pot with two pair or better."),
+    ("post.wsd_strong", "Value bet top pair on flop and turn only; bet rivers with two pair or better."),
+    ("post.wwsf_low", "Stab 1/2 pot on flops and turns he checks; barrel draws twice."),
+    ("post.wwsf_high", "Bluff him less on turns and rivers; call his flop bets with any pair."),
+];
+
+#[test]
+fn postflop_advice_texts_are_pinned() {
+    let postflop: Vec<&str> = RULES.iter().filter(|r| r.family == Family::Postflop).map(|r| r.id).collect();
+    assert_eq!(postflop, POSTFLOP_ADVICE.iter().map(|(id, _)| *id).collect::<Vec<_>>(), "one pinned text per rule, in catalogue order");
+    for (id, advice) in POSTFLOP_ADVICE {
+        let reads = evaluate_rules(&cash(&postflop_firing(id)));
+        let r = read(&reads, id).unwrap_or_else(|| panic!("{id} must fire on {:?}: {:?}", postflop_firing(id), ids(&reads)));
+        assert_eq!(r.advice, advice, "{id}");
+        // Postflop reads have no variants and no seat side: the text is the
+        // same in every format and context where they show.
+        assert!(rule_def(id).variants.is_empty() && rule_def(id).seat.is_none(), "{id}");
+    }
+    // Observations that described a narrower spot than the stat counts.
+    let reads = evaluate_rules(&cash(&[(CheckRaiseFlop, 15, 60), (FloatFlop, 25, 30)]));
+    assert_eq!(read(&reads, "post.check_raise.high").unwrap().observation, "Check-raises 25% (15/60) of flop bets he faces after checking.");
+    assert_eq!(read(&reads, "post.float.high").unwrap().observation, "Stabs 83% (25/30) of turns checked to him after calling the flop in position.");
+}
+
+#[test]
+fn postflop_thresholds_hold_in_every_format() {
+    // Section 17.4 states each postflop threshold in absolute terms per
+    // format; the deltas are the same in every format and the priors differ.
+    let single: [(&str, StatKey, bool, f64, u32); 20] = [
+        ("post.cbet_flop.high", CbetFlop, true, 0.15, 40),
+        ("post.cbet_flop.low", CbetFlop, false, 0.15, 40),
+        ("post.fold_cbet_flop.high", FoldToCbetFlop, true, 0.12, 40),
+        ("post.fold_cbet_flop.low", FoldToCbetFlop, false, 0.15, 40),
+        ("post.cbet_turn.high", CbetTurn, true, 0.15, 30),
+        ("post.cbet_turn.giveup", CbetTurn, false, 0.15, 30),
+        ("post.fold_cbet_turn.high", FoldToCbetTurn, true, 0.15, 30),
+        ("post.cbet_river.high", CbetRiver, true, 0.15, 30),
+        ("post.cbet_river.low", CbetRiver, false, 0.15, 30),
+        ("post.fold_cbet_river.low", FoldToCbetRiver, false, 0.15, 30),
+        ("post.fold_cbet_river.high", FoldToCbetRiver, true, 0.15, 30),
+        ("post.delayed_cbet.high", DelayedCbet, true, 0.15, 30),
+        ("post.check_raise.high", CheckRaiseFlop, true, 0.06, 60),
+        ("post.donk.high", DonkFlop, true, 0.06, 60),
+        ("post.float.high", FloatFlop, true, 0.15, 30),
+        ("post.probe.high", ProbeTurn, true, 0.15, 30),
+        ("post.river_bet.high", RiverBet, true, 0.12, 40),
+        ("post.river_bet.low", RiverBet, false, 0.12, 40),
+        ("post.river_raise.high", RiverRaise, true, 0.06, 60),
+        ("post.wwsf_high", Wwsf, true, 0.08, 60),
+    ];
+    for format in [FormatKey::Mtt, FormatKey::Cash, FormatKey::Zoom, FormatKey::Spin] {
+        for (id, key, above, delta, n) in single {
+            if above {
+                assert_above(format, id, key, n, delta, &[]);
+            } else {
+                assert_below(format, id, key, n, delta, &[]);
+            }
+        }
+        let wsd_low = last_below(format, Wsd, 40, 0.06);
+        assert_above(format, "post.station", Wtsd, 60, 0.10, &[(Wsd, wsd_low, 40)]);
+        let wtsd_low = last_below(format, Wtsd, 60, 0.0);
+        assert_above(format, "post.wsd_strong", Wsd, 40, 0.08, &[(Wtsd, wtsd_low, 60)]);
+        assert_below(format, "post.wwsf_low", Wwsf, 60, 0.08, &[(Wtsd, wtsd_low, 60)]);
+    }
+}
+
+#[test]
+fn wwsf_low_needs_showdown_frequency_at_or_under_prior() {
+    // A station wins few pots after the flop because he calls down and
+    // loses, not because he gives up: "stab and barrel him" loses money
+    // against him. The low-WWSF read needs WTSD at or under its prior.
+    let c = FormatKey::Cash;
+    let station = cash(&postflop_firing("post.station").into_iter().chain([(Wwsf, 15, 60)]).collect::<Vec<_>>());
+    assert!(fires(&station, "post.station"));
+    assert!(!fires(&station, "post.wwsf_low"), "{:?}", ids(&evaluate_rules(&station)));
+    // Boundary on WTSD: at the last count at or under the prior it fires,
+    // one count above it does not; without a WTSD sample it never fires.
+    let wtsd_at = last_below(c, Wtsd, 60, 0.0);
+    assert!(fires(&cash(&[(Wwsf, 15, 60), (Wtsd, wtsd_at, 60)]), "post.wwsf_low"));
+    assert!(!fires(&cash(&[(Wwsf, 15, 60), (Wtsd, wtsd_at + 1, 60)]), "post.wwsf_low"));
+    assert!(!fires(&cash(&[(Wwsf, 15, 60)]), "post.wwsf_low"));
+    assert!(!fires(&cash(&[(Wwsf, 15, 60), (Wtsd, 5, 9)]), "post.wwsf_low"), "WTSD under its floor");
+}
+
+/// Postflop reads whose advice points opposite ways (section 17.6).
+const POSTFLOP_PAIRS: [(&str, &str); 5] = [
+    ("post.wwsf_high", "post.fold_cbet_turn.high"),
+    ("post.wwsf_high", "post.fold_cbet_river.high"),
+    ("post.river_bet.low", "post.cbet_river.high"),
+    ("post.river_bet.high", "post.cbet_river.low"),
+    ("post.station", "post.river_raise.high"),
+];
+
+#[test]
+fn opposite_postflop_reads_never_fire_together() {
+    // "Bluff him less on turns and rivers" next to "Barrel the turn" or
+    // "Fire third barrels"; "Fold one pair to his river bets" next to
+    // "Bluff-catch his river barrels"; "Value bet middle pair on the river"
+    // next to "Check second pair on the river".
+    assert_eq!(POSTFLOP_OPPOSITES, POSTFLOP_PAIRS);
+    for (a, b) in POSTFLOP_PAIRS {
+        let stats: Vec<_> = postflop_firing(a).into_iter().chain(postflop_firing(b)).collect();
+        let alone = |id: &str| {
+            let reads = evaluate_rules(&cash(&postflop_firing(id)));
+            read(&reads, id).unwrap_or_else(|| panic!("{id} fires alone")).score
+        };
+        let (sa, sb) = (alone(a), alone(b));
+        let reads = evaluate_rules(&cash(&stats));
+        let (ra, rb) = (read(&reads, a).is_some(), read(&reads, b).is_some());
+        assert!(ra != rb, "{a} and {b} fired together (or neither): {:?}", ids(&reads));
+        let kept = if ra { a } else { b };
+        assert_eq!(kept, if sa >= sb { a } else { b }, "the higher score stays ({sa:.3} vs {sb:.3})");
+    }
+}
+
+#[test]
+fn reads_from_different_postflop_stats_give_advice_that_fits_together() {
+    // A station: the preflop profile already says "Value bet top pair on all
+    // three streets; cut your river bluffs." The postflop station and river
+    // non-folder reads must add a lever (thinner river value, sizing), not
+    // repeat "stop bluffing".
+    let fish = cash(&[(Vpip, 30, 60), (Pfr, 5, 60), (Wtsd, 30, 60), (Wsd, 10, 40), (FoldToCbetRiver, 2, 30)]);
+    let reads = evaluate_rules(&fish);
+    let profile = read(&reads, "pf.profile.station").expect("profile station fires").advice.clone();
+    for id in ["post.station", "post.fold_cbet_river.low"] {
+        let advice = &read(&reads, id).unwrap_or_else(|| panic!("{id} fires: {:?}", ids(&reads))).advice;
+        assert!(advice.contains("river"), "{id} names the street: {advice}");
+        assert!(!advice.to_lowercase().contains("bluff"), "{id} repeats the profile's bluff note: {advice}");
+        assert!(!advice.contains("top pair"), "{id} repeats the profile's top-pair note ({profile}): {advice}");
+    }
+    // A nit postflop: rarely bets the river and wins most showdowns he
+    // reaches. Only one of the two notes may be about calling his river
+    // bets; the other says what the hero bets for value.
+    let nit = cash(&[(RiverBet, 2, 40), (Wsd, 30, 40), (Wtsd, 10, 60)]);
+    let reads = evaluate_rules(&nit);
+    let about_his_bets: Vec<&str> = ["post.river_bet.low", "post.wsd_strong"]
+        .into_iter()
+        .filter(|id| read(&reads, id).unwrap_or_else(|| panic!("{id} fires: {:?}", ids(&reads))).advice.contains("his river bets"))
+        .collect();
+    assert_eq!(about_his_bets, ["post.river_bet.low"], "{:?}", reads.iter().map(|r| &r.advice).collect::<Vec<_>>());
+}
+
+#[test]
+fn postflop_advice_names_street_and_lever() {
+    // Section 17.6: every postflop note names the street it is about and a
+    // size or hand class. The guard rejects the texts the audit replaced.
+    let street = regex::Regex::new(r"(?i)\b(?:flops?|turns?|rivers?)\b").unwrap();
+    for old in [
+        "Double-barrel him more.",
+        "Raise his donk bets more.",
+        "Bluff him less postflop.",
+        "C-bet him often with small sizes.",
+        "Value bet thin and stop bluffing him.",
+    ] {
+        assert!(!street.is_match(old), "the street guard must reject: {old}");
+    }
+    for old in ["Give his river barrels credit.", "Fold more to his river bets.", "Check-raise more turns against him."] {
+        assert!(concrete_levers(old).is_empty(), "the lever guard must reject: {old}");
+    }
+    for def in RULES.iter().filter(|r| r.family == Family::Postflop) {
+        for text in std::iter::once(def.advice).chain(def.variants.iter().map(|(_, t)| *t)) {
+            assert!(street.is_match(text), "{} names no street: {text}", def.id);
+            assert!(!concrete_levers(text).is_empty(), "{} names no size or hand class: {text}", def.id);
+        }
+    }
 }
 
 // ----------------------------------------------------- head-to-head (H01–H03)
@@ -1858,7 +2088,8 @@ fn every_advice_fits_the_hover_card() {
 
 /// Families whose advice must name a concrete lever (section 17.1). Each
 /// audit task adds the family it rewrites, until the list holds them all.
-const LEVER_FAMILIES: [Family; 5] = [Family::Preflop, Family::Stack, Family::Context, Family::Stage, Family::Bounty];
+const LEVER_FAMILIES: [Family; 6] =
+    [Family::Preflop, Family::Stack, Family::Context, Family::Stage, Family::Bounty, Family::Postflop];
 
 /// The concrete levers an advice names: hand classes (`A2s-A5s`, `QQ+`,
 /// `Kx`, suited aces, broadways, top pair), sizing (`3x`, min-raise, jam,
@@ -1867,7 +2098,7 @@ const LEVER_FAMILIES: [Family; 5] = [Family::Preflop, Family::Stack, Family::Con
 fn concrete_levers(text: &str) -> Vec<String> {
     let hands = regex::Regex::new(r"\b(?:[2-9TJQKA]{2}[so]?\+?(?:-[2-9TJQKA]{2}[so]?)?|[AKQJT]x[so]?)\b").unwrap();
     let words = regex::Regex::new(
-        r"(?i)\b(?:suited|offsuit|broadways?|pairs?|aces|kings|connectors|any two|premiums|top pair|draws|\d+(?:\.\d+)?x|min-raise|jam|shove|reshove|all-in|squeeze-jam|small (?:bets?|sizes?|sizing|c-bets?)|overbets?|\d/\d pot|from the (?:button|cutoff|small blind|big blind|blinds)|from late seats|your (?:small|big) blind|in position|out of position)\b",
+        r"(?i)\b(?:suited|offsuit|broadways?|pairs?|overpairs?|overcards|gutshots|open-enders|aces|kings|connectors|any two|premiums|top pair|draws|\d+(?:\.\d+)?x|min-raise|jam|shove|reshove|all-in|squeeze-jam|small (?:bets?|sizes?|sizing|c-bets?)|overbets?|\d/\d pot|from the (?:button|cutoff|small blind|big blind|blinds)|from late seats|your (?:small|big) blind|in position|out of position)\b",
     )
     .unwrap();
     hands.find_iter(text).chain(words.find_iter(text)).map(|m| m.as_str().to_string()).collect()
@@ -1902,6 +2133,17 @@ fn every_advice_names_a_concrete_lever() {
     ] {
         assert!(concrete_levers(generic).is_empty(), "{generic}: {:?}", concrete_levers(generic));
     }
+    // The postflop audit's old texts (section 17.6) name none either.
+    for generic in [
+        "Float and check-raise his flop c-bets more.",
+        "Double-barrel him more.",
+        "Fire more third barrels against him.",
+        "Bluff-catch rivers wider against him.",
+        "Apply postflop pressure; he gives up pots easily.",
+        "Value bet thin and stop bluffing him.",
+    ] {
+        assert!(concrete_levers(generic).is_empty(), "{generic}: {:?}", concrete_levers(generic));
+    }
 
     let mut checked = 0;
     // The seat suffix is appended to other advice, never shown alone.
@@ -1913,7 +2155,7 @@ fn every_advice_names_a_concrete_lever() {
     }
     let covered = RULES.iter().filter(|r| LEVER_FAMILIES.contains(&r.family) && r.id != "ctx.seat_relation").count();
     assert!(checked >= covered);
-    for family in [Family::Stack, Family::Context, Family::Stage, Family::Bounty] {
+    for family in [Family::Stack, Family::Context, Family::Stage, Family::Bounty, Family::Postflop] {
         assert!(RULES.iter().any(|r| r.family == family && r.id != "ctx.seat_relation"), "{family:?} has rules");
     }
 }

@@ -420,80 +420,85 @@ pub const RULES: &[RuleDef] = &[
             "When he covers you, shove into him only with 77+, AT+ and KQ."),
         &[(Variant::HeroCovers, "While you cover him, shove pairs, aces and broadways into him.")],
     ),
-    // ---- postflop (F01–F12)
+    // ---- postflop (F01–F12, F14). Audit 2026-10 (section 17.6): every
+    // postflop advice names its street and a size or hand class, and reads
+    // that can fire on the same villain add a lever instead of repeating one.
     rule("post.cbet_flop.high", "F01", F::Postflop, X, Some("CB+"),
         "C-bets {raw}% of flops as the preflop raiser.",
-        "Float and check-raise his flop c-bets more."),
+        "Raise his flop c-bets with draws and gutshots; call them with any pair."),
     rule("post.cbet_flop.low", "F01", F::Postflop, T, Some("CB-"),
         "C-bets only {raw}% of flops as the preflop raiser.",
-        "Give his flop c-bets credit; stab when he checks."),
+        "Fold bottom pair to his flop c-bets; bet 1/2 pot when he checks the flop."),
     rule("post.fold_cbet_flop.high", "F02", F::Postflop, X, Some("FCB"),
         "Folds to {raw}% of flop c-bets.",
-        "C-bet him often with small sizes."),
+        "C-bet him at 1/3 pot with your whole range on dry flops."),
     rule("post.fold_cbet_flop.low", "F02", F::Postflop, X, Some("NFC"),
         "Folds to only {raw}% of flop c-bets.",
-        "C-bet him mostly for value; plan a turn barrel before bluffing."),
+        "C-bet flops at 2/3 pot with top pair+ and draws; check back overcards."),
     rule("post.cbet_turn.high", "F03", F::Postflop, X, Some("BRL"),
         "Fires the turn {raw}% after c-betting the flop.",
-        "Call flops wider with hands that can face a turn barrel."),
+        "Call his turn barrels with second pair+; float flops with pairs, not gutshots."),
     rule("post.cbet_turn.giveup", "F03", F::Postflop, X, Some("GIV"),
         "Fires the turn only {raw}% after c-betting the flop.",
-        "Float his flop c-bets and take the pot when he checks the turn."),
+        "Float his flop c-bets in position with overcards; bet 2/3 pot if he checks the turn."),
     rule("post.fold_cbet_turn.high", "F05", F::Postflop, X, Some("TRB"),
         "Folds to {raw}% of turn barrels.",
-        "Double-barrel him more."),
+        "Barrel the turn at 2/3 pot with draws and overcards after he calls the flop."),
     rule("post.cbet_river.high", "F04", F::Postflop, X, Some("BRL"),
         "Fires the river {raw}% after barrelling the turn.",
-        "Bluff-catch his river barrels more often."),
+        "Bluff-catch his river barrels with top pair and good second pairs."),
     rule("post.cbet_river.low", "F04", F::Postflop, T, Some("RV-"),
         "Fires the river only {raw}% after barrelling the turn.",
-        "Give his river barrels credit."),
+        "Fold one pair to his river barrels; call his turn barrels with draws."),
     rule("post.fold_cbet_river.low", "F05", F::Postflop, X, Some("STN"),
         "Folds to only {raw}% of river barrels.",
-        "Stop bluffing his rivers; value bet thinner."),
+        "Size river value bets up to pot with two pair or better after two calls."),
     // Pro review (D107, F14): calls flop and turn, then gives up the river.
     rule("post.fold_cbet_river.high", "F14", F::Postflop, X, Some("RVF"),
         "Folds to {raw}% of river barrels after calling the turn.",
-        "Fire more third barrels against him."),
+        "Fire third barrels on the river at 3/4 pot with missed draws and ace blockers."),
     rule("post.delayed_cbet.high", "F06", F::Postflop, T, Some("DLY"),
         "Bets {raw}% of turns after checking the flop as raiser.",
-        "Check back fewer flops in position; bet the turn yourself when he checks twice."),
+        "Call his delayed turn bets with any pair; raise them with draws."),
+    // The stat counts every flop bet he faces after checking, not only
+    // c-bets (section 9.2), and the observation says so.
     rule("post.check_raise.high", "F07", F::Postflop, X, Some("XR+"),
-        "Check-raises {raw}% of flop c-bets.",
-        "C-bet tighter into him and call his check-raises wider."),
+        "Check-raises {raw}% of flop bets he faces after checking.",
+        "Call his flop check-raises with top pair and open-enders; never fold overpairs."),
     rule("post.check_raise.never", "F07", F::Postflop, T, Some("XR-"),
-        "Has check-raised {hits} of {n} flop c-bets.",
-        "C-bet freely into him; his check-raise range is narrow."),
+        "Has check-raised {hits} of {n} flop bets after checking.",
+        "C-bet second pair on the flop for thin value; fold one pair to his rare check-raise."),
     rule("post.donk.high", "F08", F::Postflop, X, Some("DNK"),
         "Leads into the raiser on {raw}% of flops.",
-        "Raise his donk bets more."),
+        "Raise his flop leads to 3x with top pair, draws and overcards."),
+    // The spot needs the raiser to check the turn to him (section 9.2).
     rule("post.float.high", "F09", F::Postflop, X, Some("FLT"),
-        "Bets {raw}% of turns after calling flop c-bets in position.",
-        "Check-raise more turns against him."),
+        "Stabs {raw}% of turns checked to him after calling the flop in position.",
+        "Check-raise his turn stabs with top pair+ and draws after he calls your c-bet."),
     rule("post.probe.high", "F10", F::Postflop, X, Some("PRB"),
         "Bets {raw}% of turns after the raiser checks the flop.",
-        "Check back weaker hands and call his probes wider."),
+        "Call his turn probes with second pair+; raise them with flush draws."),
     rule("post.river_bet.high", "F11", F::Postflop, X, Some("RV+"),
         "Bets {raw}% of rivers when checked to or first to act.",
-        "Bluff-catch rivers wider against him."),
+        "Check top pair to him on the river; call his river bets with second pair+."),
     rule("post.river_bet.low", "F11", F::Postflop, T, Some("RV-"),
         "Bets only {raw}% of rivers when given the chance.",
-        "Fold more to his river bets."),
+        "Fold one pair to his river bets; call them with two pair or better."),
     rule("post.river_raise.high", "F11", F::Postflop, T, Some("RR+"),
         "Raises {raw}% of river bets he faces.",
-        "Value bet thin only with hands that can call his raise."),
+        "Check second pair on the river; call his river raises with top pair or better."),
     rule("post.station", "F12", F::Postflop, X, Some("STN"),
         "Goes to showdown {raw}% and wins there only {wsd}%.",
-        "Value bet thin and stop bluffing him."),
+        "Value bet middle pair on the river; bet pot with two pair or better."),
     rule("post.wsd_strong", "F12", F::Postflop, T, Some("WSD"),
         "Wins {raw}% of the showdowns he reaches.",
-        "Fold more bluff-catchers to his river bets."),
+        "Value bet top pair on flop and turn only; bet rivers with two pair or better."),
     rule("post.wwsf_low", "F12", F::Postflop, X, Some("WWS"),
         "Wins only {raw}% of pots after seeing the flop.",
-        "Apply postflop pressure; he gives up pots easily."),
+        "Stab 1/2 pot on flops and turns he checks; barrel draws twice."),
     rule("post.wwsf_high", "F12", F::Postflop, T, Some("WWS"),
         "Wins {raw}% of pots after seeing the flop.",
-        "Bluff him less postflop."),
+        "Bluff him less on turns and rivers; call his flop bets with any pair."),
     // ---- head-to-head (H01–H03)
     rule("h2h.3bet_vs_hero.high", "H01", F::H2h, X, Some("H2H"),
         "3-bets your opens {raw}% ({hits}/{n}).",
@@ -1448,7 +1453,12 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
     if let (Some(wsd), Some(wtsd)) = (one(input, Wsd, Dir::Above(0.08)), one(input, Wtsd, Dir::Below(0.0))) {
         out.stat("post.wsd_strong", single(Some(wsd)).map(|h| h.and(wtsd)));
     }
-    out.stat("post.wwsf_low", single(one(input, Wwsf, Dir::Below(0.08))));
+    // Audit 2026-10 (section 17.6): a low WWSF is a "gives up" read only
+    // when he reaches showdown no more often than the prior; a station's low
+    // WWSF comes from calling down and losing, where pressure loses money.
+    if let Some(wtsd) = one(input, Wtsd, Dir::Below(0.0)) {
+        out.stat("post.wwsf_low", single(one(input, Wwsf, Dir::Below(0.08))).map(|h| h.and(wtsd)));
+    }
     out.stat("post.wwsf_high", single(one(input, Wwsf, Dir::Above(0.08))));
 
     // ---- head-to-head (H01–H03): shrunk toward the villain's own overall
@@ -1554,12 +1564,24 @@ pub const PREFLOP_OPPOSITES: [(&str, &str); 5] = [
     ("pf.fold_to_steal.high", "pf.fold_to_steal.low"),
 ];
 
-/// Removes the weaker read of every [`PREFLOP_OPPOSITES`] pair that fired
-/// together: the lower score goes, then the lower deviation; a tie keeps the
-/// pair's first read.
+/// Postflop reads whose advice points opposite ways (audit 2026-10, section
+/// 17.6). They rest on different stats that one villain can show together,
+/// e.g. "Bluff him less on turns and rivers" (high WWSF) next to "Barrel the
+/// turn" (turn overfold); only the read with the higher score stays.
+pub const POSTFLOP_OPPOSITES: [(&str, &str); 5] = [
+    ("post.wwsf_high", "post.fold_cbet_turn.high"),
+    ("post.wwsf_high", "post.fold_cbet_river.high"),
+    ("post.river_bet.low", "post.cbet_river.high"),
+    ("post.river_bet.high", "post.cbet_river.low"),
+    ("post.station", "post.river_raise.high"),
+];
+
+/// Removes the weaker read of every [`PREFLOP_OPPOSITES`] and
+/// [`POSTFLOP_OPPOSITES`] pair that fired together: the lower score goes,
+/// then the lower deviation; a tie keeps the pair's first read.
 fn drop_opposites(reads: &mut Vec<EngineRuleResult>) {
     let at = |reads: &[EngineRuleResult], id: &str| reads.iter().position(|r| r.rule_id == id);
-    for (a, b) in PREFLOP_OPPOSITES {
+    for (a, b) in PREFLOP_OPPOSITES.into_iter().chain(POSTFLOP_OPPOSITES) {
         let (Some(i), Some(j)) = (at(reads, a), at(reads, b)) else { continue };
         let (x, y) = (&reads[i], &reads[j]);
         let order = x.score.total_cmp(&y.score).then(x.deviation.total_cmp(&y.deviation));
