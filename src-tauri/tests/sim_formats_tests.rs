@@ -5,6 +5,11 @@
 //! and the `tournament_*` fixtures): format, variant, buy-in, level and seat
 //! bounties. The short-stack profile lands in the engine's push/fold context
 //! bucket and, in the `strategic-analysis` build, gets only push/fold reads.
+//! These corpora seat the baseline profiles only. On a corpus of the read
+//! profiles where the hero joins most of his MTTs at a late-stage table
+//! (`--late-share`), the ICM-insensitive and bounty-hunter profiles converge
+//! to their engine stat targets (`engineTargets.mtt`) and, in the
+//! `strategic-analysis` build, get their tournament reads.
 //!
 //! The generator runs through `node` into a temporary folder; the database
 //! is a temporary file. Nothing touches the app's own data folder.
@@ -38,14 +43,38 @@ fn profiles() -> Value {
     serde_json::from_str(&text).expect("profiles.json is JSON")
 }
 
-/// Runs the generator into `out` and returns its manifest.
+/// The ids of one corpus's villain profiles, comma-separated for
+/// `--profiles`: the baseline ones (`reads` false) or the ones built for a
+/// read with engine stat targets (`engineTargets`). Each set plays its own
+/// corpus, so adding a read profile leaves the baseline corpus unchanged.
+fn roster_ids(reads: bool) -> String {
+    let profiles = profiles();
+    let ids: Vec<&str> = profiles["profiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|p| p.get("engineTargets").is_some() == reads)
+        .map(|p| p["id"].as_str().unwrap())
+        .collect();
+    ids.join(",")
+}
+
+/// Runs the generator into `out` with the baseline profiles seated and
+/// returns its manifest.
 fn generate(out: &Path, format: &str, seed: &str, tables: u32, hands: u32) -> Value {
+    generate_with(out, format, seed, tables, hands, &["--profiles", &roster_ids(false)])
+}
+
+/// The generator with explicit options (such as `--late-share` and
+/// `--profiles`).
+fn generate_with(out: &Path, format: &str, seed: &str, tables: u32, hands: u32, extra: &[&str]) -> Value {
     let output = Command::new("node")
         .current_dir(repo_root())
         .arg("scripts/sim/generate.mjs")
         .args(["--out", out.to_str().expect("utf-8 path")])
         .args(["--format", format, "--seed", seed])
         .args(["--tables", &tables.to_string(), "--hands", &hands.to_string()])
+        .args(extra)
         .args(["--pace", "0", "--manifest"])
         .output()
         .expect("run node scripts/sim/generate.mjs (is node on PATH?)");
@@ -317,3 +346,133 @@ fn assert_push_fold_reads(conn: &Connection, name: &str, pid: i64, ctx: EngineCo
 
 #[cfg(not(feature = "strategic-analysis"))]
 fn assert_push_fold_reads(_conn: &Connection, _name: &str, _pid: i64, _ctx: EngineContext, _expected: &Value) {}
+
+// ------------------------------------------------------------ late stage and bounties
+
+/// Share of the hero's MTTs joined at a late-stage table: the default corpus
+/// rarely reaches the late stage (section 17.8), where the ICM reads live.
+const LATE_SHARE: &str = "0.8";
+/// Hands per tournament seat of that corpus.
+const LATE_HANDS: u32 = 500;
+/// Engine targets are held to their tolerance from this many opportunities.
+const MIN_ENGINE_OPPORTUNITIES: u32 = 15;
+
+/// A villain's tournament engine stat by its `profiles.json` name, over all
+/// his MTT hands: `(raw in percent, opportunities)`. `late_*` and `ko_*`
+/// are the replay's late-stage and knockout cover splits (rows T02, K02).
+fn engine_stat(conn: &Connection, pid: i64, key: &str) -> (Option<f64>, u32) {
+    use velora_poker_lib::engine::player_replay;
+    let replay = player_replay(conn, pid, Some(FormatKey::Mtt)).expect("engine replay");
+    let counts = match key {
+        "late_call_vs_shove" => replay.late_call_vs_shove,
+        "late_open_shove" => replay.late_open_shove,
+        "ko_covering" => replay.ko_covering,
+        "ko_covered" => replay.ko_covered,
+        other => panic!("profiles.json names an unknown tournament engine stat {other}"),
+    };
+    let raw = (counts.opportunities > 0).then(|| 100.0 * f64::from(counts.hits) / f64::from(counts.opportunities));
+    (raw, counts.opportunities)
+}
+
+/// The stated tolerance, widened to three standard errors of a rate of
+/// `target` over `n` opportunities (as in `sim_convergence_tests`).
+fn allowed_error(tol: f64, target: f64, n: u32) -> f64 {
+    let p = (target / 100.0).clamp(0.01, 0.99);
+    tol.max(300.0 * (p * (1.0 - p) / f64::from(n)).sqrt())
+}
+
+/// The contexts of every hand a player was dealt into, oldest first, as the
+/// overlay builds them from the latest completed hand at his table.
+fn contexts_of(conn: &Connection, pid: i64) -> Vec<EngineContext> {
+    let ids: Vec<i64> = conn
+        .prepare("SELECT h.id FROM hands h JOIN player_hands ph ON ph.hand_id = h.id WHERE ph.player_id = ?1 ORDER BY h.played_at, h.id")
+        .unwrap()
+        .query_map([pid], |row| row.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    ids.iter().filter_map(|id| villain_context(&load_hand(conn, *id).unwrap().unwrap(), pid)).collect()
+}
+
+#[test]
+fn late_stage_and_bounty_profiles_converge_to_their_engine_targets() {
+    use velora_poker_lib::engine::Stage;
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let out = tmp.path().join("HandHistory");
+    let reads = roster_ids(true);
+    let manifest = generate_with(&out, "mtt", "formats-late", MTT_TABLES, LATE_HANDS, &["--late-share", LATE_SHARE, "--profiles", &reads]);
+    assert_files_parse(&out, &manifest, GameVariant::Tournament, 9);
+    let mut conn = open_db(tmp.path());
+    assert_directory_import(&mut conn, &out, manifest["hands"].as_u64().unwrap());
+
+    let mut failures = Vec::new();
+    for profile in profiles()["profiles"].as_array().unwrap() {
+        let Some(targets) = profile["engineTargets"]["mtt"].as_object() else { continue };
+        let id = profile["id"].as_str().unwrap();
+        for name in profile["players"].as_array().unwrap() {
+            let name = name.as_str().unwrap();
+            let pid = player_id(&conn, name);
+            let contexts = contexts_of(&conn, pid);
+            let late = contexts.iter().filter(|c| c.stage == Some(Stage::Late)).count();
+            let mut row = format!("mtt engine {id:>8} {name:<16} hands {} (late {late})", contexts.len());
+            assert!(late * 5 >= contexts.len(), "{name}: late stage in only {late} of {} hands", contexts.len());
+            for (key, spec) in targets {
+                let target = spec["target"].as_f64().unwrap();
+                let tol = spec["tol"].as_f64().unwrap();
+                let (value, n) = engine_stat(&conn, pid, key);
+                row += &format!(" | {key} {} ({n}) ~{target}", value.map_or("-".into(), |v| format!("{v:.1}")));
+                if n < MIN_ENGINE_OPPORTUNITIES {
+                    failures.push(format!("{name} ({id}) {key}: only {n} opportunities"));
+                    continue;
+                }
+                let value = value.expect("a stat with opportunities has a value");
+                let allowed = allowed_error(tol, target, n);
+                if (value - target).abs() > allowed {
+                    failures.push(format!("{name} ({id}) engine {key} = {value:.1} over {n}, target {target} ± {allowed:.1}"));
+                }
+            }
+            eprintln!("{row}");
+            assert_tournament_reads(&conn, name, pid, &contexts, &profile["tournament"]["expected"]);
+        }
+    }
+    assert!(failures.is_empty(), "engine stats off target:\n{}", failures.join("\n"));
+}
+
+/// His top read past the facts (`ctx.*`, `ko.big_bounty`) in the context of
+/// his latest hand that matches the profile's `tournament.expected.context`
+/// (`late`: a late-stage hand; `knockout`: any knockout hand) is one of the
+/// profile's tournament reads.
+#[cfg(feature = "strategic-analysis")]
+fn assert_tournament_reads(conn: &Connection, name: &str, pid: i64, contexts: &[EngineContext], expected: &Value) {
+    use velora_poker_lib::engine::{EngineCache, Stage};
+    let wanted: Vec<(Option<String>, String)> = expected["reads"]
+        .as_array()
+        .expect("tournament.expected.reads")
+        .iter()
+        .map(|r| (r["tag"].as_str().map(String::from), r["ruleId"].as_str().unwrap().to_string()))
+        .collect();
+    let context = expected["context"].as_str().expect("tournament.expected.context");
+    let ctx = contexts
+        .iter()
+        .rev()
+        .filter(|c| c.effective_stack_bb.is_some_and(|eff| eff > 0.0))
+        .find(|c| match context {
+            "late" => c.stage == Some(Stage::Late),
+            "knockout" => c.bounty.is_some(),
+            other => panic!("unknown tournament.expected.context {other}"),
+        })
+        .unwrap_or_else(|| panic!("{name}: no {context} hand"))
+        .clone();
+    let payload = EngineCache::new().payload(conn, pid, Some(ctx)).expect("engine payload");
+    let reads: Vec<String> = payload.reads.iter().map(|r| format!("{} {:.2}", r.rule_id, r.score)).collect();
+    eprintln!("{name} ({context}): tag {:?}, reads {reads:?}", payload.tag.as_ref().map(|t| &t.text));
+    let top = payload
+        .reads
+        .iter()
+        .find(|r| !r.rule_id.starts_with("ctx.") && r.rule_id != "ko.big_bounty")
+        .map(|r| (r.tag.clone(), r.rule_id.clone()));
+    assert!(top.as_ref().is_some_and(|t| wanted.contains(t)), "{name}: top read {top:?}, expected one of {wanted:?}");
+}
+
+#[cfg(not(feature = "strategic-analysis"))]
+fn assert_tournament_reads(_conn: &Connection, _name: &str, _pid: i64, _contexts: &[EngineContext], _expected: &Value) {}

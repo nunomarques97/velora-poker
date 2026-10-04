@@ -12,6 +12,13 @@ const STREET_FOLD = ["before Flop", "on the Flop", "on the Turn", "on the River"
 const STRONG_SHARE = [0, 0.35, 0.45, 0.5];
 /** Weight of that guess, in observed decisions. */
 const SHARE_PRIOR_WEIGHT = 10;
+/**
+ * Facing an unraised river bet under 40% of the pot, the chance to raise
+ * it by hand class (nothing, marginal, good, strong): a small bet is cheap
+ * to raise for value and as a bluff. Only the `riverSizing` profiles bet
+ * that small, so no other spot changes.
+ */
+const SMALL_RIVER_RAISE = [0.1, 0, 0.3, 0.9];
 
 /** Position labels for an n-handed ring, index 0 = button (as `parser::position`). */
 export function positionLabels(n) {
@@ -97,6 +104,8 @@ export function playHand({ table, seats, button, header, heroName, rng, tail }) 
   const bbP = heads ? players[1] : players[2];
   const preflopOrder = heads ? [players[0], players[1]] : [...players.slice(3), players[0], players[1], players[2]];
   const postflopOrder = heads ? [players[1], players[0]] : [...players.slice(1), players[0]];
+  // A knockout hand: every seat line carries a bounty.
+  const knockout = ring.some((s) => s.bounty != null);
 
   const lines = [header];
   lines.push(`Table '${table.name}' ${table.maxSeats}-max Seat #${button} is the button`);
@@ -243,7 +252,7 @@ export function playHand({ table, seats, button, header, heroName, rng, tail }) 
 
   // ------------------------------------------------------------ preflop
 
-  bettingRound(preflopOrder, (p, facing) => decidePreflop(p, facing, st, { bb, rng, bbP, preflopOrder }));
+  bettingRound(preflopOrder, (p, facing) => decidePreflop(p, facing, st, { bb, rng, bbP, preflopOrder, knockout }));
   const preflopAggressor = st.raises.length ? st.raises[st.raises.length - 1].p : null;
   let lastAggressor = preflopAggressor;
 
@@ -270,11 +279,13 @@ export function playHand({ table, seats, button, header, heroName, rng, tail }) 
     for (const p of live()) p.strength = postflopStrength(p.cards, shown);
     const prev = lastAggressor;
     const order = postflopOrder;
+    const streetPot = potNow();
     bettingRound(order, (p, facing) => {
       const prevIndex = prev && !prev.folded ? order.indexOf(prev) : -1;
       return decidePostflop(p, facing, st, {
         street,
         pot: potNow(),
+        streetPot,
         rng,
         isPrevAggressor: p === prev,
         prevStillToAct: prevIndex > order.indexOf(p) && st.raisesThisStreet === 0,
@@ -424,18 +435,26 @@ const CALL = { type: "call" };
 const FOLD = { type: "fold" };
 const CHECK = { type: "check" };
 
-function decidePreflop(p, facing, st, { bb, rng, bbP }) {
+function decidePreflop(p, facing, st, { bb, rng, bbP, knockout }) {
   const b = p.b;
   const pct = p.pct;
   const raises = st.raises;
   const last = raises[raises.length - 1];
 
+  // A bounty hunter (`callShoveCovering`) calls a shove nobody has called
+  // yet with that share of hands whenever his starting stack covers the
+  // shover's in a knockout (the engine's cover split of row K02), whatever
+  // the depth and whether or not he opened.
+  const unanswered = last && last.allIn && last.p !== p && st.callers.length === 0;
+  if (unanswered && b.callShoveCovering != null && knockout && p.stack >= last.p.stack) {
+    return pct < b.callShoveCovering ? CALL : FOLD;
+  }
   // Our open shoved over: answered like any 3-bet (the profile's fold to 3-bet).
   if (raises.length === 2 && raises[0].p === p && last.allIn) {
     return pct < p.openThr * (1 - b.foldTo3bet) ? CALL : FOLD;
   }
   // An all-in nobody has called yet.
-  if (last && last.allIn && last.p !== p && st.callers.length === 0) {
+  if (unanswered) {
     const shoveBb = (last.to) / bb;
     const thr = shoveBb <= 25 ? Math.min(0.6, b.callShove * 1.6) : b.callShove;
     return pct < thr ? CALL : FOLD;
@@ -548,6 +567,20 @@ function mixFold(rng, f, strong, q) {
   return rng.chance(p);
 }
 
+/**
+ * Pot fraction of a river bet under `riverSizing`: an overbet
+ * (`polarSize`, 1.5 pot by default) with probability `polar`, a small bet
+ * (`smallSize`, a quarter pot) with probability `small`, else `betSize`.
+ * The buckets match the engine's (section 9): overbets from 110% of the
+ * pot, small bets under 40%.
+ */
+function riverSize({ polar = 0, small = 0, polarSize = 1.5, smallSize = 0.25 }, rng, betSize) {
+  const u = rng.next();
+  if (u < polar) return polarSize;
+  if (u < polar + small) return smallSize;
+  return betSize;
+}
+
 function decidePostflop(p, facing, st, ctx) {
   const b = p.b;
   const { street, pot, rng } = ctx;
@@ -563,9 +596,21 @@ function decidePostflop(p, facing, st, ctx) {
     else f = b.stab;
     const kind = ctx.isPrevAggressor ? (p.betLastStreet || street === 1 ? "barrel" : "stab") : ctx.prevStillToAct ? "donk" : "stab";
     const q = spotShare(p, `${kind}${street}`, street, strong);
-    return mixBet(rng, f, strong, q) ? raise(size(b.betSize)) : CHECK;
+    if (!mixBet(rng, f, strong, q)) return CHECK;
+    if (street === 3) p.betRiver = true;
+    return raise(size(street === 3 && b.riverSizing ? riverSize(b.riverSizing, rng, b.betSize) : b.betSize));
   }
 
+  const smallBet = street === 3 && st.raisesThisStreet === 1 && !st.aggressor.allIn && st.currentBet < 0.4 * ctx.streetPot;
+  if (smallBet && rng.chance(SMALL_RIVER_RAISE[s])) {
+    return raise(st.currentBet * 3);
+  }
+  // His own river bet raised (`foldToRiverRaise`): folds with that
+  // frequency, weak hands first (row F16 counts this decision).
+  if (street === 3 && p.betRiver && b.foldToRiverRaise != null) {
+    const q = spotShare(p, "riverRaised", street, strong);
+    return mixFold(rng, b.foldToRiverRaise, strong, q) ? FOLD : CALL;
+  }
   if (st.raisesThisStreet >= 2) {
     if (s === 3) return rng.chance(0.35) ? raise(0, true) : CALL;
     if (s === 2) return rng.chance(b.callRaise ?? 0.5) ? CALL : FOLD;
@@ -574,6 +619,13 @@ function decidePostflop(p, facing, st, ctx) {
   const f =
     street === 1 ? (ctx.bettorIsPrevAggressor ? b.foldToCbet : b.foldToBet ?? b.foldToCbet) : street === 2 ? b.foldToTurn : b.foldToRiver;
   if (s === 3 && rng.chance(Math.min(1, b.raiseVsBet / 0.12))) return raise(st.currentBet * 3 + Math.round(pot * 0.2));
+  // Fit or fold (`fitOrFold`): facing a flop bet he continues with top
+  // pair or better, with a marginal hand (a weaker pair or a draw) at the
+  // `marginal` rate, and folds everything that missed.
+  if (street === 1 && b.fitOrFold) {
+    if (s >= 2) return CALL;
+    return s === 1 && rng.chance(b.fitOrFold.marginal ?? 0) ? CALL : FOLD;
+  }
   const q = spotShare(p, `face${street}${street === 1 && ctx.bettorIsPrevAggressor ? "c" : ""}`, street, strong);
   if (mixFold(rng, f, strong, q)) return FOLD;
   return CALL;

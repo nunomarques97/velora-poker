@@ -1,10 +1,14 @@
 //! The hand-history simulator (`scripts/sim`) against the real import
 //! pipeline: generated cash and Zoom sessions must parse with zero errors,
 //! re-import as pure duplicates, and converge to each villain profile's
-//! target stats (`scripts/sim/profiles.json`). In the `strategic-analysis`
-//! build each villain's top read and chip tag must be the profile's
-//! expected one, and the tilting player must show `TILT` inside his tilt
-//! episodes and (all but rarely) not before them.
+//! target stats (`scripts/sim/profiles.json`). The baseline profiles and
+//! the read profiles (those with engine stat targets, `engineTargets.cash`)
+//! play separate corpora, and the read profiles must also converge to their
+//! engine stat targets. In the `strategic-analysis` build each villain's
+//! top read and chip tag must be the profile's expected one (none for a
+//! profile whose leak exists only in tournaments), and the tilting player
+//! must show `TILT` inside his tilt episodes and (all but rarely) not
+//! before them.
 //!
 //! The generator runs through `node` into a temporary folder; the database
 //! is a temporary file. Nothing touches the app's own data folder.
@@ -15,18 +19,24 @@ use std::process::Command;
 use rusqlite::Connection;
 use serde_json::Value;
 use velora_poker_lib::db;
+use velora_poker_lib::engine::{player_replay, stat_spec, FormatKey, StatKey, View};
 use velora_poker_lib::import::{import_directory, import_text};
 use velora_poker_lib::parser::{split_hands, HandHistoryParser, PokerStarsParser};
 use velora_poker_lib::stats::{compute_player_stats_with_opportunities, PlayerStats, PlayerStatsOpportunities};
 
-/// Hands per cash table and cash tables: every villain sits at two or
-/// three tables, so each one plays about 3,000 hands.
+/// Hands per cash table and cash tables: in the baseline corpus every
+/// villain sits at two or three tables (about 3,000 hands), in the read
+/// profiles' corpus at three (3,600 hands).
 const CASH_TABLES: u32 = 6;
 const CASH_HANDS_PER_TABLE: u32 = 1200;
 const ZOOM_HANDS: u32 = 3000;
 /// A stat is held to its tolerance only with at least this many
 /// opportunities; below it the sampling error alone exceeds the tolerance.
 const MIN_OPPORTUNITIES: i64 = 40;
+/// The same floor for engine stat targets: river sizes and raised river
+/// bets are rare spots, so the floor is lower and the three-standard-error
+/// widening of [`allowed_error`] does the rest.
+const MIN_ENGINE_OPPORTUNITIES: i64 = 15;
 
 fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("repo root").to_path_buf()
@@ -37,14 +47,31 @@ fn profiles() -> Value {
     serde_json::from_str(&text).expect("profiles.json is JSON")
 }
 
-/// Runs the generator into `out` and returns its manifest.
-fn generate(out: &Path, format: &str, seed: &str, tables: u32, hands: u32) -> Value {
+/// The villain profiles of one corpus: the baseline ones (`reads` false)
+/// or the ones built for a read with engine stat targets (`engineTargets`).
+/// Each set plays its own corpus, so adding a read profile leaves the
+/// baseline corpus byte-identical (`generate.test.mjs` pins it).
+fn roster(reads: bool) -> Vec<Value> {
+    profiles()["profiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|p| p.get("engineTargets").is_some() == reads)
+        .cloned()
+        .collect()
+}
+
+/// Runs the generator into `out` with only `roster`'s profiles seated and
+/// returns its manifest.
+fn generate(out: &Path, format: &str, seed: &str, tables: u32, hands: u32, roster: &[Value]) -> Value {
+    let ids: Vec<&str> = roster.iter().map(|p| p["id"].as_str().unwrap()).collect();
     let output = Command::new("node")
         .current_dir(repo_root())
         .arg("scripts/sim/generate.mjs")
         .args(["--out", out.to_str().expect("utf-8 path")])
         .args(["--format", format, "--seed", seed])
         .args(["--tables", &tables.to_string(), "--hands", &hands.to_string()])
+        .args(["--profiles", &ids.join(",")])
         .args(["--pace", "0", "--manifest"])
         .output()
         .expect("run node scripts/sim/generate.mjs (is node on PATH?)");
@@ -144,9 +171,9 @@ fn allowed_error(tol: f64, target: f64, n: i64) -> f64 {
 
 /// Every villain's imported stats within the profile tolerances. Returns
 /// the failures (asserted by the caller) after printing the full table.
-fn stat_failures(conn: &Connection, label: &str) -> Vec<String> {
+fn stat_failures(conn: &Connection, label: &str, roster: &[Value]) -> Vec<String> {
     let mut failures = Vec::new();
-    for profile in profiles()["profiles"].as_array().unwrap() {
+    for profile in roster {
         let id = profile["id"].as_str().unwrap();
         for name in profile["players"].as_array().unwrap() {
             let name = name.as_str().unwrap();
@@ -173,11 +200,64 @@ fn stat_failures(conn: &Connection, label: &str) -> Vec<String> {
     failures
 }
 
+/// A villain's engine stat by its `profiles.json` name (a `StatKey` such as
+/// `river_bet_polar`), over all his hands of the corpus: `(raw,
+/// opportunities, what the rules see)`, the last being the recency-weighted
+/// value shrunk toward the built-in prior, and that prior, in percent.
+fn engine_stat(conn: &Connection, pid: i64, format: FormatKey, key: &str) -> (Option<f64>, i64, String) {
+    let stat = *StatKey::PREFLOP
+        .iter()
+        .chain(StatKey::POSTFLOP.iter())
+        .find(|k| k.as_str() == key)
+        .unwrap_or_else(|| panic!("profiles.json names an unknown engine stat {key}"));
+    let replay = player_replay(conn, pid, Some(format)).expect("engine replay");
+    let counts = replay.agg.counts(View::AllTime, stat);
+    let raw = (counts.opportunities > 0).then(|| 100.0 * f64::from(counts.hits) / f64::from(counts.opportunities));
+    let input = replay.rule_input(&|k| stat_spec(k).builtin_prior(format), None);
+    let seen = input
+        .stat(stat)
+        .map_or("-".into(), |s| format!("shrunk {:.1} prior {:.0}", 100.0 * s.shrunk, 100.0 * s.prior));
+    (raw, i64::from(counts.opportunities), seen)
+}
+
+/// Every villain's engine stats within the profile's `engineTargets` for
+/// `label`. Returns the failures after printing what was measured.
+fn engine_failures(conn: &Connection, label: &str, format: FormatKey, roster: &[Value]) -> Vec<String> {
+    let mut failures = Vec::new();
+    for profile in roster {
+        let Some(targets) = profile["engineTargets"][label].as_object() else { continue };
+        let id = profile["id"].as_str().unwrap();
+        for name in profile["players"].as_array().unwrap() {
+            let name = name.as_str().unwrap();
+            let pid = player_id(conn, name);
+            let mut row = format!("{label} engine {id:>10} {name:<16}");
+            for (key, spec) in targets {
+                let target = spec["target"].as_f64().unwrap();
+                let tol = spec["tol"].as_f64().unwrap();
+                let (value, n, seen) = engine_stat(conn, pid, format, key);
+                row += &format!(" | {key} {} ({n}, {seen}) ~{target}", value.map_or("-".into(), |v| format!("{v:.1}")));
+                if n < MIN_ENGINE_OPPORTUNITIES {
+                    failures.push(format!("{label} {name} ({id}) {key}: only {n} opportunities"));
+                    continue;
+                }
+                let value = value.expect("a stat with opportunities has a value");
+                let allowed = allowed_error(tol, target, n);
+                if (value - target).abs() > allowed {
+                    failures.push(format!("{label} {name} ({id}) engine {key} = {value:.1} over {n}, target {target} ± {allowed:.1}"));
+                }
+            }
+            eprintln!("{row}");
+        }
+    }
+    failures
+}
+
 #[test]
 fn generated_cash_session_imports_cleanly_and_converges_to_the_profiles() {
     let tmp = tempfile::tempdir().expect("temp dir");
     let out = tmp.path().join("HandHistory");
-    let manifest = generate(&out, "cash", "convergence", CASH_TABLES, CASH_HANDS_PER_TABLE);
+    let roster = roster(false);
+    let manifest = generate(&out, "cash", "convergence", CASH_TABLES, CASH_HANDS_PER_TABLE, &roster);
     assert_eq!(manifest["hands"].as_u64(), Some((CASH_TABLES * CASH_HANDS_PER_TABLE) as u64));
     let blocks = assert_files_parse(&out, &manifest);
     let mut conn = open_db(tmp.path());
@@ -200,19 +280,49 @@ fn generated_cash_session_imports_cleanly_and_converges_to_the_profiles() {
 
     assert_directory_import(&mut conn, &out, manifest["hands"].as_u64().unwrap(), imported as i64);
 
-    let failures = stat_failures(&conn, "cash");
+    let failures = stat_failures(&conn, "cash", &roster);
     if cfg!(feature = "strategic-analysis") {
         assert_tilt_checks(&tilt_results);
-        assert_top_reads(&conn);
+        assert_top_reads(&conn, &roster);
+    }
+    assert!(failures.is_empty(), "stats off target:\n{}", failures.join("\n"));
+}
+
+/// The read profiles (river sizing, fold to river raise, fit-or-fold, and
+/// the tournament-only leaks playing cash as regulars) on their own cash
+/// corpus: imported stats and engine stats on target and, in the
+/// `strategic-analysis` build, each one's top read an expected one.
+#[test]
+fn read_profiles_converge_to_their_engine_targets_in_cash() {
+    let roster = roster(true);
+    let tmp = tempfile::tempdir().expect("temp dir");
+    let out = tmp.path().join("HandHistory");
+    let manifest = generate(&out, "cash", "convergence-reads", CASH_TABLES, CASH_HANDS_PER_TABLE, &roster);
+    assert_files_parse(&out, &manifest);
+    let mut conn = open_db(tmp.path());
+    assert_directory_import(&mut conn, &out, manifest["hands"].as_u64().unwrap(), 0);
+
+    let mut failures = stat_failures(&conn, "cash", &roster);
+    failures.extend(engine_failures(&conn, "cash", FormatKey::Cash, &roster));
+    if cfg!(feature = "strategic-analysis") {
+        assert_top_reads(&conn, &roster);
     }
     assert!(failures.is_empty(), "stats off target:\n{}", failures.join("\n"));
 }
 
 #[test]
 fn generated_zoom_session_imports_cleanly_and_converges_to_the_profiles() {
+    for reads in [false, true] {
+        assert_zoom_converges(&roster(reads));
+    }
+}
+
+/// One Zoom pool of `roster`'s profiles: one file of the Zoom variant whose
+/// imported stats are on target.
+fn assert_zoom_converges(roster: &[Value]) {
     let tmp = tempfile::tempdir().expect("temp dir");
     let out = tmp.path().join("HandHistory");
-    let manifest = generate(&out, "zoom", "convergence", 1, ZOOM_HANDS);
+    let manifest = generate(&out, "zoom", "convergence", 1, ZOOM_HANDS, roster);
     assert_eq!(manifest["files"].as_array().map(Vec::len), Some(1), "one Zoom pool file");
     assert_files_parse(&out, &manifest);
     let mut conn = open_db(tmp.path());
@@ -225,15 +335,15 @@ fn generated_zoom_session_imports_cleanly_and_converges_to_the_profiles() {
         .collect::<Result<_, _>>()
         .unwrap();
     assert_eq!(variants, ["zoom_cash"]);
-    let failures = stat_failures(&conn, "zoom");
+    let failures = stat_failures(&conn, "zoom", roster);
     assert!(failures.is_empty(), "stats off target:\n{}", failures.join("\n"));
 }
 
 #[test]
 fn the_same_seed_writes_the_same_hands() {
     let tmp = tempfile::tempdir().expect("temp dir");
-    let a = generate(&tmp.path().join("a"), "cash", "same-seed", 2, 40);
-    let b = generate(&tmp.path().join("b"), "cash", "same-seed", 2, 40);
+    let a = generate(&tmp.path().join("a"), "cash", "same-seed", 2, 40, &roster(false));
+    let b = generate(&tmp.path().join("b"), "cash", "same-seed", 2, 40, &roster(false));
     for (ta, tb) in a["tables"].as_array().unwrap().iter().zip(b["tables"].as_array().unwrap()) {
         let file = ta["file"].as_str().unwrap();
         assert_eq!(file, tb["file"].as_str().unwrap());
@@ -323,11 +433,24 @@ fn assert_tilt_checks(results: &[(&u64, String, bool, Option<Seen>)]) {
 }
 
 /// Each villain's top read (context facts aside) is one of his profile's
-/// expected reads, with its chip tag.
+/// expected reads, with its chip tag. An empty list (the oracle's `(none)`:
+/// a profile whose leak exists only in tournaments plays cash as a regular
+/// at the baseline) expects no tendency read from at least one of its
+/// players: the rules read a recency-weighted sample (half-life 150 cash hands,
+/// section 6), where a baseline regular can still clear one threshold
+/// by chance, but the profile itself must not produce a read.
 #[allow(dead_code)]
-fn assert_top_reads(conn: &Connection) {
+fn assert_top_reads(conn: &Connection, roster: &[Value]) {
     let mut wrong = Vec::new();
-    for profile in profiles()["profiles"].as_array().unwrap() {
+    for profile in roster {
+        if profile["expected"]["reads"].as_array().is_some_and(Vec::is_empty) {
+            let names: Vec<&str> = profile["players"].as_array().unwrap().iter().map(|n| n.as_str().unwrap()).collect();
+            let seen: Vec<_> = names.iter().map(|name| engine_tag(conn, name).expect("engine payload").read).collect();
+            if seen.iter().all(Option::is_some) {
+                wrong.push(format!("{names:?}: expected no read from at least one, got {seen:?}"));
+            }
+            continue;
+        }
         let expected = &profile["expected"];
         if expected["during"].is_string() {
             continue; // Checked during his episodes.
@@ -341,7 +464,11 @@ fn assert_top_reads(conn: &Connection) {
         for name in profile["players"].as_array().unwrap() {
             let name = name.as_str().unwrap();
             let seen = engine_tag(conn, name).expect("engine payload");
-            if !seen.read.as_ref().is_some_and(|read| reads.contains(read)) {
+            let ok = match &seen.read {
+                None => reads.is_empty(),
+                Some(read) => reads.contains(read),
+            };
+            if !ok {
                 wrong.push(format!("{name}: expected one of {reads:?}, got {:?}", seen.read));
             }
         }

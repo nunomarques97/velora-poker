@@ -7,14 +7,20 @@
 // Usage:
 //   node scripts/sim/generate.mjs --out <folder> [--format cash|zoom|mtt|spin]
 //     [--seed s] [--tables 6] [--hands 200] [--pace 0] [--clock sim|live]
-//     [--start 2026-09-12T20:00:00] [--manifest]
+//     [--start 2026-09-12T20:00:00] [--late-share 0] [--profiles id,id]
+//     [--manifest]
 //
 // --hands is per cash table, in total for Zoom, or per tournament seat for
 // mtt (9-max progressive knockouts) and spin (3-max hyper Spin & Go), where
 // --tables is the number of tournaments played at once and a new one
 // starts when the hero's ends. --pace is real seconds per simulated hand at
-// one table (0 = as fast as possible). --manifest prints the session
-// manifest (files, seating, tournaments, tilt episodes) as JSON.
+// one table (0 = as fast as possible). --late-share (mtt only, 0 to 1) is
+// the share of the hero's tournaments he joins at a late-stage table
+// (average stack under 20bb), so late-stage play shows up in a short run;
+// 0 by default. --profiles seats only the villain profiles with these ids
+// (comma-separated, from profiles.json); all of them by default. --manifest
+// prints the session manifest (files, seating, tournaments, tilt episodes)
+// as JSON.
 
 import { pathToFileURL } from "node:url";
 import { runSession } from "./lib/session.mjs";
@@ -28,8 +34,13 @@ const FLAGS = {
   pace: "number",
   clock: "string",
   start: "string",
+  "late-share": "number",
+  profiles: "list",
   manifest: "bool",
 };
+
+/** `late-share` -> `lateShare`. */
+const optionName = (flag) => flag.replace(/-(\w)/g, (_, c) => c.toUpperCase());
 
 export function parseArgs(argv) {
   const options = {};
@@ -40,7 +51,7 @@ export function parseArgs(argv) {
     const kind = FLAGS[name];
     if (!kind) throw new Error(`unknown option ${flag}`);
     if (kind === "bool") {
-      options[name] = true;
+      options[optionName(name)] = true;
       continue;
     }
     const value = argv[++i];
@@ -48,8 +59,12 @@ export function parseArgs(argv) {
     if (kind === "int" || kind === "number") {
       const n = Number(value);
       if (!Number.isFinite(n) || (kind === "int" && !Number.isInteger(n))) throw new Error(`${flag} needs a number`);
-      options[name] = n;
-    } else options[name] = value;
+      options[optionName(name)] = n;
+    } else if (kind === "list") {
+      const ids = value.split(",").map((id) => id.trim()).filter(Boolean);
+      if (ids.length === 0) throw new Error(`${flag} needs at least one id`);
+      options.profileIds = ids;
+    } else options[optionName(name)] = value;
   }
   if (!options.out) throw new Error("--out <folder> is required");
   if (options.clock && !["sim", "live"].includes(options.clock)) throw new Error("--clock is sim or live");

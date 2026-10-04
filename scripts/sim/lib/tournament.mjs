@@ -19,11 +19,36 @@ const BOM = String.fromCharCode(0xfeff);
 const BETWEEN_TOURNAMENTS = 60;
 /** Hands before a villain knocked out of a table can be seated there again. */
 const REENTRY_HANDS = 20;
+/**
+ * The late stage of an MTT hand: its seats' average starting stack under
+ * this many big blinds, rounded to a tenth as the engine rounds it
+ * (`engine::context`, section 5 of docs/specs/opponent-engine.md).
+ */
+export const LATE_STAGE_BB = 20;
 
-/** `[sb, bb, ante]` of a structure's level index (the last one repeats). */
-export function levelAt(structure, index) {
-  const [sb, bb, ante = 0] = structure.levels[Math.min(index, structure.levels.length - 1)];
-  return { sb, bb, ante, number: index + 1 };
+/** Whether an MTT hand with these seats is at the late stage. */
+export function isLateStage(seats, bb) {
+  const average = seats.reduce((sum, s) => sum + s.stack, 0) / seats.length / bb;
+  return Math.round(average * 10) / 10 < LATE_STAGE_BB;
+}
+
+/** Blind growth per level past the structure's last one, when escalating. */
+const LATE_ESCALATION = 1.5;
+
+/**
+ * `[sb, bb, ante]` of a structure's level index. Past the last level the
+ * last one repeats or, with `escalate` (a late-joined MTT table), keeps
+ * rising by LATE_ESCALATION per level: without it a late table's average
+ * stack climbs back over LATE_STAGE_BB as busted seats refill with fresh
+ * chips at frozen blinds.
+ */
+export function levelAt(structure, index, escalate = false) {
+  const last = structure.levels.length - 1;
+  const [sb, bb, ante = 0] = structure.levels[Math.min(index, last)];
+  if (!escalate || index <= last) return { sb, bb, ante, number: index + 1 };
+  const factor = LATE_ESCALATION ** (index - last);
+  const sbUp = Math.round((sb * factor) / 100) * 100;
+  return { sb: sbUp, bb: 2 * sbUp, ante: Math.round((ante * factor) / 25) * 25, number: index + 1 };
 }
 
 /**
@@ -31,7 +56,7 @@ export function levelAt(structure, index) {
  * in the manifest lists one entry per tournament (its file and table), as
  * the cash manifest lists one per cash table.
  */
-export async function runTournaments({ format, seed, dir, tableCount, hands, pace, clock, start, profiles, sleep, now }) {
+export async function runTournaments({ format, seed, dir, tableCount, hands, pace, clock, start, profiles, sleep, now, lateShare = 0 }) {
   const structure = profiles.stakes[format];
   const rng = new Rng(`${seed}:${format}`);
   const heroName = profiles.hero.name;
@@ -46,16 +71,23 @@ export async function runTournaments({ format, seed, dir, tableCount, hands, pac
   let handId = 262_000_000_000 + (hash32(`${seed}:${format}`) % 4_000_000) * 1000;
   let tournamentId = (format === "spin" ? 3_950_000_000 : 4_100_000_000) + (hash32(`${seed}:${format}:id`) % 40_000_000);
 
-  /** His tournament behaviour (the profile's `tournament.behaviour` over his own), or his tilt. */
-  const behaviourOf = (who) => {
+  /**
+   * His tournament behaviour (the profile's `tournament.behaviour` over his
+   * own, then `tournament.late` at an MTT's late stage), or his tilt.
+   */
+  const behaviourOf = (who, late) => {
     const state = tilt.get(who.name);
-    const base = { ...who.profile.behaviour, ...who.profile.tournament?.behaviour };
+    const lateBehaviour = late ? who.profile.tournament?.late : null;
+    const base = { ...who.profile.behaviour, ...who.profile.tournament?.behaviour, ...lateBehaviour };
     return state && state.left > 0 ? { ...base, ...who.profile.tilt.behaviour } : base;
   };
 
-  /** Chips of a villain sitting down at level `index` mid-tournament. */
-  const arrivingStack = (who, index) => {
-    const { bb } = levelAt(structure, index);
+  /** A late-joined table starts at the structure's last level, the deepest field average. */
+  const lateLevel = structure.levels.length - 1;
+
+  /** Chips of a player sitting down at level `index` mid-tournament. */
+  const arrivingStack = (who, index, escalate = false) => {
+    const { bb } = levelAt(structure, index, escalate);
     const range = who.profile.tournament?.stackBb;
     if (range) return Math.round(bb * (range[0] + rng.next() * (range[1] - range[0])));
     if (index === 0) return structure.startingStack;
@@ -72,15 +104,20 @@ export async function runTournaments({ format, seed, dir, tableCount, hands, pac
   const newTournament = (slot, time) => {
     tournamentId += 1 + rng.int(4000);
     const max = structure.maxSeats;
-    // MTT: the hero late-registers into a running tournament; a Spin
-    // starts with its three players.
-    const index = format === "mtt" ? rng.int(structure.lateRegLevels) : 0;
+    // MTT: the hero late-registers into a running tournament or, in a
+    // `lateShare` of them, is moved to a table at the late stage (the
+    // structure's last level or one of the two escalated levels past it,
+    // a field average well under LATE_STAGE_BB); a Spin starts with its
+    // three players.
+    const lateJoin = format === "mtt" && lateShare > 0 && rng.chance(lateShare);
+    const index = format !== "mtt" ? 0 : lateJoin ? lateLevel + rng.int(3) : rng.int(structure.lateRegLevels);
     const t0 = time - index * structure.levelSeconds - (index > 0 ? rng.next() * structure.levelSeconds : 0);
     const numbers = Array.from({ length: max }, (_, i) => i + 1);
     const pool = rng.shuffle(roster.slice()).slice(0, max - 1);
     const seats = rng.shuffle(numbers.slice()).map((seat, i) => {
       const who = i === 0 ? hero : pool[i - 1];
-      const stack = who === hero || format === "spin" ? structure.startingStack : arrivingStack(who, index);
+      const fresh = (who === hero && !lateJoin) || format === "spin";
+      const stack = fresh ? structure.startingStack : arrivingStack(who, index, lateJoin);
       return { seat, who, stack, bounty: structure.knockout ? (who === hero ? structure.buyIn[1] : arrivingBounty(index)) : null };
     });
     const multiplier = format === "spin" ? weighted(rng, structure.multipliers) : null;
@@ -97,7 +134,7 @@ export async function runTournaments({ format, seed, dir, tableCount, hands, pac
       eliminations: [],
     };
     tournaments.push(record);
-    Object.assign(slot, { record, t0, seats, button: rng.pick(seats).seat, first: true, busted: new Map() });
+    Object.assign(slot, { record, t0, seats, lateJoin, button: rng.pick(seats).seat, first: true, busted: new Map() });
   };
 
   const slots = [];
@@ -128,7 +165,7 @@ export async function runTournaments({ format, seed, dir, tableCount, hands, pac
     const date = clock === "live" ? new Date(now()) : new Date(start.getTime() + Math.round(simTime * 1000));
     const record = slot.record;
     const index = Math.max(0, Math.floor((simTime - slot.t0) / structure.levelSeconds));
-    const level = levelAt(structure, index);
+    const level = levelAt(structure, index, slot.lateJoin);
 
     // MTT table balancing: empty seats are mostly refilled before the
     // hand, never with somebody already at this table or knocked out of it
@@ -141,7 +178,7 @@ export async function runTournaments({ format, seed, dir, tableCount, hands, pac
         if (slot.seats.some((s) => s.seat === seat) || free.length === 0) continue;
         if (slot.seats.length > 2 && !rng.chance(structure.refill)) continue;
         const who = free.pop();
-        slot.seats.push({ seat, who, stack: arrivingStack(who, index), bounty: arrivingBounty(index) });
+        slot.seats.push({ seat, who, stack: arrivingStack(who, index, slot.lateJoin), bounty: arrivingBounty(index) });
       }
     }
     // The button moves to the next occupied seat clockwise.
@@ -163,6 +200,7 @@ export async function runTournaments({ format, seed, dir, tableCount, hands, pac
     const bounties = new Map(seats.map((s) => [s.who.name, s.bounty]));
     const tilted = seats.filter((s) => tilt.get(s.who.name)?.left > 0).map((s) => s.who.name);
     const remaining = seats.length;
+    const late = format === "mtt" && isLateStage(seats, level.bb);
     const tail = (busted) => {
       const lines = [];
       for (const [i, out] of busted.entries()) {
@@ -202,7 +240,7 @@ export async function runTournaments({ format, seed, dir, tableCount, hands, pac
         name: s.who.name,
         stack: s.stack,
         bounty: s.bounty,
-        behaviour: behaviourOf(s.who),
+        behaviour: behaviourOf(s.who, late),
         memory: memory.get(s.who.name),
       })),
       button: slot.button,

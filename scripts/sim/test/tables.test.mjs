@@ -97,7 +97,8 @@ test("scanning reads kind, size, blinds and hand count, and sees the hero's tour
     assert.equal(t.heroOut, false);
   }
   for (const format of ["mtt", "spin"]) {
-    const { out, manifest } = await session(format, format === "mtt" ? 3 : 2, format === "mtt" ? 80 : 60);
+    // 120 MTT hands: with the larger roster no tournament of this seed ends by 80.
+    const { out, manifest } = await session(format, format === "mtt" ? 3 : 2, format === "mtt" ? 120 : 60);
     const scanned = new Map(scanTables(out, HERO).map((t) => [t.name, t]));
     const finished = manifest.tournaments.filter((t) => t.file);
     assert.ok(finished.some((t) => t.heroFinish !== "running"), `${format}: some tournament ended`);

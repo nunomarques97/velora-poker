@@ -3,6 +3,7 @@
 // Run with `npm run test:sim`.
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,7 +11,7 @@ import { test } from "node:test";
 import { parseArgs } from "../generate.mjs";
 import { evaluate } from "../lib/cards.mjs";
 import { loadProfiles, runSession } from "../lib/session.mjs";
-import { checkHand, splitHands } from "./helpers/hand-check.mjs";
+import { cents, checkHand, splitHands } from "./helpers/hand-check.mjs";
 
 const profiles = loadProfiles();
 const scratch = (label) => mkdtempSync(join(tmpdir(), `velora-sim-${label}-`));
@@ -288,8 +289,12 @@ test("the command line: required --out, typed options, unknown flags refused", (
   assert.throws(() => parseArgs(["--out", "x", "--bogus", "1"]), /unknown option/);
   assert.throws(() => parseArgs(["--out", "x", "--clock", "wall"]), /--clock/);
   assert.throws(() => parseArgs(["--out", "x", "--start", "not a date"]), /--start/);
+  assert.throws(() => parseArgs(["--out", "x", "--late-share", "half"]), /number/);
+  assert.throws(() => parseArgs(["--out", "x", "--profiles", " , "]), /at least one id/);
   const options = parseArgs(["--out", "x", "--format", "zoom", "--pace", "0.5", "--manifest"]);
   assert.deepEqual(options, { out: "x", format: "zoom", pace: 0.5, manifest: true });
+  const mtt = parseArgs(["--out", "x", "--format", "mtt", "--late-share", "0.8", "--profiles", "icm, hunter"]);
+  assert.deepEqual(mtt, { out: "x", format: "mtt", lateShare: 0.8, profileIds: ["icm", "hunter"] });
 });
 
 test("bad session options are refused before anything is written", async () => {
@@ -298,5 +303,194 @@ test("bad session options are refused before anything is written", async () => {
   await assert.rejects(runSession({ out, pace: -1 }), /pace/);
   await assert.rejects(runSession({ out, hands: 0 }), /hands/);
   await assert.rejects(runSession({ out, tables: 99 }), /tables/);
+  await assert.rejects(runSession({ out, profileIds: ["fish", "whale"] }), /unknown profile whale/);
+  await assert.rejects(runSession({ out, format: "cash", lateShare: 0.5 }), /mtt only/);
+  await assert.rejects(runSession({ out, format: "mtt", lateShare: 2 }), /late share/);
   assert.equal(existsSync(out), false);
+});
+
+// ------------------------------------------------------------ behaviours of the new reads
+
+/** The profiles that existed before the river, fit-or-fold and tournament behaviours. */
+const BASELINE_PROFILES = ["fish", "nit", "tag", "lag", "short", "tilter"];
+/**
+ * sha256 over the sorted file names and bytes of one session per format
+ * (seed `baseline-identity`, the six baseline profiles only), recorded with
+ * the generator of commit 507cabf, before the new behaviours existed.
+ */
+const BASELINE_DIGESTS = {
+  cash: ["84aad4ad287af9a7fd66c396af8fd9e53975ad86e194b78f8807bbbd379cb869", { tables: 3, hands: 150 }],
+  zoom: ["6025603866d110162b46847a851305f8209a37c1f44c07175aa034001e32d792", { hands: 400 }],
+  mtt: ["24a36d67a58ede4718ca972428f34c7e9af185ca731b22bd746a453b3acceb75", { tables: 2, hands: 300 }],
+  spin: ["813cc7f04f0e98b8472e7d47c4052e7f2d87a0bcbbc5352c519a255b83203c38", { tables: 2, hands: 300 }],
+};
+
+function digest(dir) {
+  const hash = createHash("sha256");
+  for (const name of readdirSync(dir).sort()) {
+    hash.update(name);
+    hash.update(readFileSync(join(dir, name)));
+  }
+  return hash.digest("hex");
+}
+
+test("the new behaviours default off: the existing profiles write byte-identical hands for their seed", async () => {
+  const baseline = { ...profiles, profiles: profiles.profiles.filter((p) => BASELINE_PROFILES.includes(p.id)) };
+  assert.equal(baseline.profiles.length, BASELINE_PROFILES.length);
+  for (const [format, [expected, options]] of Object.entries(BASELINE_DIGESTS)) {
+    const out = scratch(`identity-${format}`);
+    await runSession({ format, seed: "baseline-identity", out, pace: 0, profiles: baseline, ...options });
+    assert.equal(digest(out), expected, `${format}: the baseline profiles' hands changed`);
+  }
+  // `--profiles` (the Rust convergence tests' baseline corpus) seats the
+  // same villains in the same order, so it writes the same bytes.
+  const viaIds = scratch("identity-ids");
+  await runSession({ format: "cash", seed: "baseline-identity", out: viaIds, pace: 0, profileIds: BASELINE_PROFILES, ...BASELINE_DIGESTS.cash[1] });
+  assert.equal(digest(viaIds), BASELINE_DIGESTS.cash[0], "profileIds: the baseline profiles' hands changed");
+  // None of them sets a new behaviour, so the defaults are what kept them.
+  const NEW_KEYS = ["riverSizing", "foldToRiverRaise", "fitOrFold", "callShoveCovering"];
+  for (const p of baseline.profiles) {
+    const behaviours = [p.behaviour, p.tournament?.behaviour, p.tilt?.behaviour].filter(Boolean);
+    for (const key of NEW_KEYS) assert.ok(behaviours.every((b) => !(key in b)), `${p.id} sets ${key}`);
+    assert.equal(p.tournament?.late, undefined, `${p.id} sets tournament.late`);
+  }
+});
+
+/**
+ * Street by street, one cash hand: the pot when the street was dealt and
+ * its actions in order (`{ name, verb, amount, allIn }`, amounts in cents;
+ * a raise's amount is its total).
+ */
+function streetsOf(block) {
+  const streets = [{ pot: 0, actions: [] }];
+  let pot = 0;
+  let put = new Map();
+  for (const line of block.split(/\r?\n/)) {
+    const marker = /^\*\*\* (FLOP|TURN|RIVER|SHOW DOWN|SUMMARY) \*\*\*/.exec(line);
+    if (marker) {
+      if (marker[1] === "SHOW DOWN" || marker[1] === "SUMMARY") break;
+      put = new Map();
+      streets.push({ pot, actions: [] });
+      continue;
+    }
+    const post = /^(.+): posts (?:small blind|big blind) (\S+)/.exec(line);
+    if (post) {
+      pot += cents(post[2]);
+      put.set(post[1], (put.get(post[1]) || 0) + cents(post[2]));
+      continue;
+    }
+    const back = /^Uncalled bet \((\S+)\) returned to (.+)$/.exec(line);
+    if (back) {
+      pot -= cents(back[1]);
+      continue;
+    }
+    const m = /^(.+): (folds|checks|calls|bets|raises)(?: (\S+))?(?: to (\S+))?( and is all-in)?$/.exec(line);
+    if (!m) continue;
+    const [, name, verb, first, to, allIn] = m;
+    const amount = verb === "raises" ? cents(to) : verb === "calls" || verb === "bets" ? cents(first) : 0;
+    const added = verb === "raises" ? amount - (put.get(name) || 0) : amount;
+    put.set(name, (put.get(name) || 0) + added);
+    pot += added;
+    streets[streets.length - 1].actions.push({ name, verb, amount, allIn: Boolean(allIn) });
+  }
+  return streets;
+}
+
+/**
+ * One cash session shared by the behaviour tests below: the new profiles
+ * with the fish and the LAG as callers and bettors, so the rare river
+ * spots come up often enough to count.
+ */
+const BEHAVIOUR_ROSTER = ["overbettor", "blocker", "fitfold", "icm", "fish", "lag"];
+let behaviourSession;
+function behaviourHands() {
+  behaviourSession ??= (async () => {
+    const out = scratch("behaviours");
+    const roster = { ...profiles, profiles: profiles.profiles.filter((p) => BEHAVIOUR_ROSTER.includes(p.id)) };
+    const manifest = await runSession({ format: "cash", seed: "behaviours", out, tables: 6, hands: 1500, pace: 0, profiles: roster });
+    return manifest.files.flatMap((file) => splitHands(readFileSync(join(out, file), "utf8")));
+  })();
+  return behaviourSession;
+}
+const playersOf = (id) => profiles.profiles.find((p) => p.id === id).players;
+
+/**
+ * The river bets of a profile's players (the first bet of a river is
+ * always the bettor's first unopened river action): their size shares in
+ * the engine's buckets (section 9: small under 40% of the pot, an overbet
+ * from 110%, an all-in whatever its size), and how they answered a raise.
+ */
+async function riverBets(id) {
+  const names = playersOf(id);
+  const bets = [];
+  const raised = { n: 0, folds: 0 };
+  for (const block of await behaviourHands()) {
+    const river = streetsOf(block)[3];
+    const at = river ? river.actions.findIndex((a) => a.verb === "bets") : -1;
+    if (at < 0 || !names.includes(river.actions[at].name)) continue;
+    const bet = river.actions[at];
+    bets.push({ fraction: bet.amount / river.pot, allIn: bet.allIn });
+    const raise = river.actions.findIndex((a, i) => i > at && a.verb === "raises");
+    const answer = river.actions.findIndex((a, i) => i > raise && a.name === bet.name);
+    if (raise > at && answer > raise) {
+      raised.n += 1;
+      raised.folds += river.actions[answer].verb === "folds" ? 1 : 0;
+    }
+  }
+  const share = (test) => bets.filter(test).length / bets.length;
+  return {
+    n: bets.length,
+    polar: share((b) => b.allIn || b.fraction >= 1.1),
+    small: share((b) => !b.allIn && b.fraction < 0.4),
+    raised,
+  };
+}
+
+test("riverSizing: the overbettor sizes his river bets polar, the blocker small; the same reg base does neither", async () => {
+  const overbettor = await riverBets("overbettor");
+  const blocker = await riverBets("blocker");
+  const reg = await riverBets("icm"); // The shared reg base, without river sizing.
+  for (const [id, r] of Object.entries({ overbettor, blocker, reg })) assert.ok(r.n > 60, `${id}: ${r.n} river bets`);
+  // profiles.json: 60% polar and 5% small; 85% small and none polar.
+  assert.ok(Math.abs(overbettor.polar - 0.6) < 0.1, `overbettor polar share ${overbettor.polar.toFixed(2)}`);
+  assert.ok(overbettor.small < 0.12, `overbettor small share ${overbettor.small.toFixed(2)}`);
+  assert.ok(Math.abs(blocker.small - 0.85) < 0.1, `blocker small share ${blocker.small.toFixed(2)}`);
+  assert.ok(blocker.polar < 0.06, `blocker polar share ${blocker.polar.toFixed(2)}`);
+  assert.ok(reg.polar < 0.1 && reg.small < 0.1, `reg shares ${reg.polar.toFixed(2)} / ${reg.small.toFixed(2)}`);
+});
+
+test("foldToRiverRaise: the blocker folds most of his raised river bets, the reg base far fewer", async () => {
+  const blocker = (await riverBets("blocker")).raised;
+  const reg = (await riverBets("overbettor")).raised;
+  assert.ok(blocker.n >= 15, `raised river bets: ${blocker.n}`);
+  // Target .85, weak hands first.
+  assert.ok(blocker.folds / blocker.n > 0.7, `blocker folds ${blocker.folds} of ${blocker.n}`);
+  assert.ok(reg.n === 0 || reg.folds / reg.n < 0.6, `reg folds ${reg.folds} of ${reg.n}`);
+});
+
+test("fitOrFold: the fit-or-fold reg folds far more flops to a bet than the same reg base", async () => {
+  const foldRate = async (id) => {
+    const names = playersOf(id);
+    let n = 0;
+    let folds = 0;
+    for (const block of await behaviourHands()) {
+      const flop = streetsOf(block)[1];
+      const bet = flop ? flop.actions.findIndex((a) => a.verb === "bets") : -1;
+      if (bet < 0) continue;
+      // His first answer to the flop bet, before any raise.
+      for (const a of flop.actions.slice(bet + 1)) {
+        if (a.verb === "raises" && !names.includes(a.name)) break;
+        if (!names.includes(a.name)) continue;
+        n += 1;
+        folds += a.verb === "folds" ? 1 : 0;
+        break;
+      }
+    }
+    return { n, rate: folds / n };
+  };
+  const fitfold = await foldRate("fitfold");
+  const reg = await foldRate("icm");
+  assert.ok(fitfold.n > 100 && reg.n > 100, `samples ${fitfold.n} / ${reg.n}`);
+  assert.ok(fitfold.rate > 0.58, `fit-or-fold folds ${fitfold.rate.toFixed(2)} of flop bets`);
+  assert.ok(fitfold.rate > reg.rate + 0.12, `fit-or-fold ${fitfold.rate.toFixed(2)} vs reg ${reg.rate.toFixed(2)}`);
 });

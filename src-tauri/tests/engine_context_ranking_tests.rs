@@ -43,6 +43,22 @@ fn profiles() -> Value {
     serde_json::from_str(&text).expect("profiles.json is JSON")
 }
 
+/// The baseline profiles (those without engine stat targets), comma-separated
+/// for `--profiles`: the read profiles play their own corpora
+/// (`sim_convergence_tests`, `sim_formats_tests`), so these corpora stay the
+/// ones the expectations below were written on.
+fn baseline_ids() -> String {
+    let profiles = profiles();
+    let ids: Vec<&str> = profiles["profiles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|p| p.get("engineTargets").is_none())
+        .map(|p| p["id"].as_str().unwrap())
+        .collect();
+    ids.join(",")
+}
+
 /// `path` resolves inside `root`.
 fn inside(root: &Path, path: &Path) -> bool {
     let root = std::fs::canonicalize(root).expect("canonical temp root");
@@ -67,6 +83,7 @@ fn corpus(root: &Path, format: &str) -> Connection {
         .arg("scripts/sim/generate.mjs")
         .args(["--out", out.to_str().expect("utf-8 path"), "--format", format, "--seed", seed])
         .args(["--tables", &tables.to_string(), "--hands", &hands.to_string(), "--pace", "0", "--manifest"])
+        .args(["--profiles", &baseline_ids()])
         .output()
         .expect("run node scripts/sim/generate.mjs (is node on PATH?)");
     assert!(output.status.success(), "generator failed: {}", String::from_utf8_lossy(&output.stderr));

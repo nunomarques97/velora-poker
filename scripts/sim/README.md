@@ -22,6 +22,20 @@ node scripts/sim/generate.mjs --out <folder> --format cash|zoom|mtt|spin --table
 - `--pace` sets real seconds per hand at one table. `0` writes everything at once.
 - `--clock live` stamps each hand with the wall clock. The HUD only treats a hand as "live" at a table if it was played after that table window opened.
 - `--manifest` prints the tables, seating and tournaments as JSON.
+- `--profiles fish,nit` seats only those villain profiles (ids from `profiles.json`). The Rust tests seat the baseline profiles and the read profiles (those with `engineTargets`) in separate corpora, so adding a profile leaves the baseline corpora byte-identical.
+- `--late-share 0.8` (`mtt` only) joins that share of the hero's tournaments at a late-stage table: it starts at the structure's last level, and its blinds keep rising 1.5x per level past it, so the table average stays under 20bb (the engine's late stage). `0` by default.
+
+Behaviour keys for the read profiles. Each defaults off, so a profile that does not set one writes the same hands for its seed (`generate.test.mjs` pins the baseline profiles' bytes):
+
+| Key | Where | What it does |
+|---|---|---|
+| `riverSizing: { polar, small }` | `behaviour` | Share of his river bets sized 1.5x pot (`polar`) or a quarter pot (`small`); the rest use `betSize`. Anyone facing an unraised river bet under 40% of the pot may raise it. |
+| `foldToRiverRaise` | `behaviour` | How often he folds when his own river bet is raised, weak hands first. |
+| `fitOrFold: { marginal }` | `behaviour` | Facing a flop bet he continues with top pair or better, with a weaker pair or a draw at the `marginal` rate, and folds the rest. |
+| `late` | `tournament` | Behaviour overrides (`callShove`, `shove`) at an MTT table whose average stack is under 20bb. |
+| `callShoveCovering` | `tournament.behaviour` | In a knockout, how often he calls a shove nobody has called when his stack covers the shover's. |
+
+Engine stat targets (`engineTargets.<format>`) are what `sim_convergence_tests` (cash) and `sim_formats_tests` (MTT, late share 0.8) hold each read profile to. The engine reads a recency-weighted sample (half-life 150 cash hands), so these profiles' leaks are deliberately strong: a rare river or flop spot otherwise stays under the read threshold.
 
 The generator refuses to write into a PokerStars folder, the Velora data folder, a drive root, or a folder holding another player's hand histories.
 

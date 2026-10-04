@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { roman, tournamentHeader } from "../lib/format.mjs";
 import { loadProfiles, runSession } from "../lib/session.mjs";
+import { levelAt } from "../lib/tournament.mjs";
 import { checkHand, splitHands } from "./helpers/hand-check.mjs";
 
 const profiles = loadProfiles();
@@ -182,7 +183,9 @@ test("mtt: villains bust, are paid for, leave the table and are replaced; bounti
 });
 
 test("mtt: the short-stack profile sits down with a push/fold stack (15bb or less) and shoves", async () => {
-  const { out, manifest } = await mtt("mtt-short");
+  // Four tournaments at once: with eleven profiles in the roster, three
+  // seat the two short stacks too rarely for the shove count below.
+  const { out, manifest } = await mtt("mtt-short", { tables: 4 });
   let hands = 0;
   let pushFold = 0;
   let arrivals = 0;
@@ -270,4 +273,120 @@ test("tournaments: the same seed writes the same bytes; pace waits between hands
     assert.equal(waits.length, manifest.hands - 1);
     assert.ok(waits.every((ms) => ms >= 0));
   }
+});
+
+// ------------------------------------------------------------ late stage and bounties
+
+/**
+ * The preflop spots of one tournament hand, read from its text: whether it
+ * is at the late stage (the seats' average starting stack under 20bb,
+ * rounded to a tenth as the engine rounds it), every answer to an all-in
+ * raise nobody has called yet (`{ name, call, covers }`, `covers`: his
+ * starting stack is at least the shover's), and every folded-to decision
+ * at 15bb or less (`{ name, shove }`).
+ */
+function preflopSpots(block) {
+  const bb = Number(/- Level [IVXLC]+ \(\d+\/(\d+)\) -/.exec(block)[1]);
+  const stacks = new Map([...block.matchAll(/^Seat \d+: (.+) \((\d+) in chips/gm)].map((m) => [m[1], Number(m[2])]));
+  const average = [...stacks.values()].reduce((a, b) => a + b, 0) / stacks.size / bb;
+  const late = Math.round(average * 10) / 10 < 20;
+  const bigBlind = /^(.+): posts big blind/m.exec(block)?.[1];
+  const preflop = block.split("*** HOLE CARDS ***")[1].split(/\*\*\* (?:FLOP|SHOW DOWN|SUMMARY)/)[0];
+  const shoves = [];
+  const opens = [];
+  let shover = null;
+  let calledSince = false;
+  let opened = false;
+  for (const line of preflop.split(/\r?\n/)) {
+    const m = /^(.+): (folds|checks|calls|raises)\b.*?( and is all-in)?$/.exec(line);
+    if (!m) continue;
+    const [, name, verb, allIn] = m;
+    if (shover && shover !== name && !calledSince) {
+      shoves.push({ name, call: verb === "calls", covers: stacks.get(name) >= stacks.get(shover) });
+    }
+    if (!opened && name !== bigBlind && stacks.get(name) / bb <= 15) opens.push({ name, shove: verb === "raises" && Boolean(allIn) });
+    if (verb === "calls" || verb === "raises") opened = true;
+    if (verb === "raises") {
+      shover = allIn ? name : null;
+      calledSince = false;
+    } else if (verb === "calls") calledSince = true;
+  }
+  return { late, shoves, opens };
+}
+
+/**
+ * One MTT session shared by the tests below: the two tournament profiles
+ * with the short stacks and the LAG, who shove often.
+ */
+const TOURNAMENT_ROSTER = ["icm", "hunter", "short", "lag", "fish", "tag"];
+let tournamentSession;
+function tournamentSpots() {
+  tournamentSession ??= (async () => {
+    const out = scratch("mtt-behaviours");
+    const roster = { ...profiles, profiles: profiles.profiles.filter((p) => TOURNAMENT_ROSTER.includes(p.id)) };
+    const manifest = await runSession({ format: "mtt", seed: "mtt-behaviours", out, tables: 6, hands: 500, pace: 0, profiles: roster, lateShare: 0.5 });
+    return manifest.tables.flatMap((t) => splitHands(readFileSync(join(out, t.file), "utf8")).map(preflopSpots));
+  })();
+  return tournamentSession;
+}
+const playersOf = (id) => profiles.profiles.find((p) => p.id === id).players;
+const rate = (list, test) => ({ n: list.length, rate: list.filter(test).length / list.length });
+
+test("tournament.late: the ICM-insensitive profile calls and shoves far wider at the late stage only", async () => {
+  const names = playersOf("icm");
+  const spots = await tournamentSpots();
+  const calls = (late) => rate(spots.filter((s) => s.late === late).flatMap((s) => s.shoves.filter((x) => names.includes(x.name))), (x) => x.call);
+  const shoves = (late) => rate(spots.filter((s) => s.late === late).flatMap((s) => s.opens.filter((x) => names.includes(x.name))), (x) => x.shove);
+  const [lateCalls, earlierCalls, lateShoves, earlierShoves] = [calls(true), calls(false), shoves(true), shoves(false)];
+  const shown = JSON.stringify({ lateCalls, earlierCalls, lateShoves, earlierShoves });
+  assert.ok(lateCalls.n >= 25 && earlierCalls.n >= 25 && lateShoves.n >= 25 && earlierShoves.n >= 25, `samples: ${shown}`);
+  // profiles.json: late callShove .4 (the generator calls 60% of hands
+  // against shoves of 25bb or less) against the reg base's .16 (26%).
+  assert.ok(lateCalls.rate > 0.45, `late calls: ${shown}`);
+  assert.ok(lateCalls.rate > earlierCalls.rate + 0.2, `late vs earlier calls: ${shown}`);
+  assert.ok(lateShoves.rate > earlierShoves.rate + 0.15, `late vs earlier shoves: ${shown}`);
+});
+
+test("callShoveCovering: the bounty hunter calls shoves wide only when he covers the shover", async () => {
+  const names = playersOf("hunter");
+  const answers = (await tournamentSpots()).flatMap((s) => s.shoves.filter((x) => names.includes(x.name)));
+  const covering = rate(answers.filter((x) => x.covers), (x) => x.call);
+  const covered = rate(answers.filter((x) => !x.covers), (x) => x.call);
+  const shown = JSON.stringify({ covering, covered });
+  assert.ok(covering.n >= 25 && covered.n >= 25, `samples: ${shown}`);
+  // profiles.json: callShoveCovering .6 against the reg base's .16.
+  assert.ok(Math.abs(covering.rate - 0.6) < 0.12, `covering: ${shown}`);
+  assert.ok(covering.rate > covered.rate + 0.2, `covering vs covered: ${shown}`);
+});
+
+test("lateShare: a late-joined table starts at the last level and stays at the late stage as its blinds keep rising", async () => {
+  const structure = profiles.stakes.mtt;
+  const last = structure.levels.length - 1;
+  // Past the last level the blinds repeat, or escalate for a late-joined table.
+  assert.deepEqual(levelAt(structure, last + 2), { ...levelAt(structure, last), number: last + 3 });
+  const [sb, bb] = structure.levels[last];
+  const up = levelAt(structure, last + 2, true);
+  assert.equal(up.bb, 2 * up.sb);
+  assert.ok(up.sb > sb * 2 && up.bb > bb * 2, JSON.stringify(up));
+  assert.deepEqual(levelAt(structure, 3, true), levelAt(structure, 3));
+
+  const out = scratch("mtt-late-join");
+  const manifest = await runSession({ format: "mtt", seed: "late-join", out, tables: 3, hands: 120, pace: 0, lateShare: 1 });
+  assert.ok(manifest.tournaments.every((t) => t.startLevel > last), JSON.stringify(manifest.tournaments.map((t) => t.startLevel)));
+  let hands = 0;
+  let late = 0;
+  let escalated = 0;
+  for (const t of manifest.tables) {
+    let previous = 0;
+    for (const block of splitHands(readFileSync(join(out, t.file), "utf8"))) {
+      const level = levelOf(block);
+      assert.ok(level.bb >= previous, `${t.file}: blinds fell from ${previous} to ${level.bb}`);
+      previous = level.bb;
+      hands += 1;
+      if (preflopSpots(block).late) late += 1;
+      if (level.bb > bb) escalated += 1;
+    }
+  }
+  assert.ok(late >= hands * 0.6, `late stage in ${late} of ${hands} hands`);
+  assert.ok(escalated > 0, "no hand past the last level");
 });

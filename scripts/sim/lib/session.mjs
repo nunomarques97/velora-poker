@@ -25,6 +25,18 @@ export function loadProfiles(path = PROFILES_PATH) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
+/**
+ * `profiles` with only the villain profiles whose ids are listed (in their
+ * file order); every profile when `ids` is absent. An unknown id throws.
+ */
+export function selectProfiles(profiles, ids) {
+  if (!ids) return profiles;
+  const known = new Set(profiles.profiles.map((p) => p.id));
+  const unknown = ids.filter((id) => !known.has(id));
+  if (unknown.length) throw new Error(`unknown profile ${unknown.join(", ")} (expected ${[...known].join(", ")})`);
+  return { ...profiles, profiles: profiles.profiles.filter((p) => ids.includes(p.id)) };
+}
+
 export const defaultSleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
 /**
@@ -36,7 +48,10 @@ export const defaultSleep = (ms) => new Promise((done) => setTimeout(done, ms));
  * seconds per simulated hand at one table; 0 writes as fast as possible),
  * `start` (Date), `clock` (`sim`: timestamps from simulated time; `live`:
  * the wall clock when each hand is written), `profiles` (parsed JSON),
- * `sleep(ms)` and `now()` (injectable for tests).
+ * `sleep(ms)` and `now()` (injectable for tests), `lateShare` (mtt: the
+ * share of the hero's tournaments joined at a late-stage table; 0 by
+ * default), `profileIds` (seat only these villain profiles; all by
+ * default).
  */
 export async function runSession(options) {
   const {
@@ -47,21 +62,26 @@ export async function runSession(options) {
     hands = 200,
     pace = 0,
     clock = "sim",
-    profiles = loadProfiles(),
+    profiles: allProfiles = loadProfiles(),
     sleep = defaultSleep,
     now = () => Date.now(),
+    lateShare = 0,
+    profileIds,
   } = options;
+  const profiles = selectProfiles(allProfiles, profileIds);
   if (!FORMATS.includes(format)) throw new Error(`unknown format ${format} (expected ${FORMATS.join(", ")})`);
   if (!(pace >= 0)) throw new Error("pace must be a number of seconds, 0 or more");
   if (!Number.isInteger(hands) || hands < 1) throw new Error("hands must be a positive integer");
   if (!Number.isInteger(tableCount) || tableCount < 1 || tableCount > 24) throw new Error("tables must be 1 to 24");
+  if (!(lateShare >= 0 && lateShare <= 1)) throw new Error("late share must be 0 to 1");
+  if (lateShare > 0 && format !== "mtt") throw new Error("late share applies to mtt only");
   const heroName = profiles.hero.name;
   const dir = assertSafeOutputDir(out, { hero: heroName });
   mkdirSync(dir, { recursive: true });
 
   const start = options.start ?? (clock === "live" ? new Date(now()) : DEFAULT_START());
   if (TOURNAMENT_FORMATS.includes(format)) {
-    return runTournaments({ format, seed, dir, tableCount, hands, pace, clock, start, profiles, sleep, now });
+    return runTournaments({ format, seed, dir, tableCount, hands, pace, clock, start, profiles, sleep, now, lateShare });
   }
   const rng = new Rng(`${seed}:${format}`);
   const stakes = profiles.stakes[format];
