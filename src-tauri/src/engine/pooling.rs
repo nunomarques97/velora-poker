@@ -160,6 +160,13 @@ pub fn stat_spec(key: StatKey) -> StatSpec {
         FloatFlop => (10.0, 6, 0.12, [0.40, 0.42, 0.45, 0.45]),
         RiverBet => (15.0, 8, 0.10, [0.30, 0.32, 0.32, 0.32]),
         RiverRaise => (15.0, 8, 0.04, [0.07, 0.07, 0.07, 0.08]),
+        // Rows F15, F16 (section 17.9): shares of his river bets by size, and
+        // his folds when a river bet of his is raised. Shallower tournament
+        // stacks put more river bets all-in, so the polar share sits higher
+        // and the small share lower there.
+        RiverBetPolar => (10.0, 8, 0.10, [0.20, 0.12, 0.12, 0.35]),
+        RiverBetSmall => (10.0, 8, 0.10, [0.22, 0.20, 0.20, 0.15]),
+        FoldToRiverRaise => (8.0, 5, 0.15, [0.45, 0.45, 0.48, 0.40]),
         Wtsd => (20.0, 10, 0.06, [0.28, 0.27, 0.26, 0.30]),
         Wsd => (15.0, 8, 0.08, [0.50, 0.50, 0.50, 0.50]),
         Wwsf => (20.0, 10, 0.06, [0.45, 0.46, 0.45, 0.47]),

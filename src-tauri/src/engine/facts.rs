@@ -288,6 +288,9 @@ pub enum StatKey {
     FloatFlop,
     RiverBet,
     RiverRaise,
+    RiverBetPolar,
+    RiverBetSmall,
+    FoldToRiverRaise,
     Wtsd,
     Wsd,
     Wwsf,
@@ -325,8 +328,8 @@ impl StatKey {
         StatKey::Reshove,
     ];
 
-    /// Every postflop key (catalogue rows F01–F12).
-    pub const POSTFLOP: [StatKey; 16] = [
+    /// Every postflop key (catalogue rows F01–F12, F15, F16).
+    pub const POSTFLOP: [StatKey; 19] = [
         StatKey::CbetFlop,
         StatKey::CbetTurn,
         StatKey::CbetRiver,
@@ -340,6 +343,9 @@ impl StatKey {
         StatKey::FloatFlop,
         StatKey::RiverBet,
         StatKey::RiverRaise,
+        StatKey::RiverBetPolar,
+        StatKey::RiverBetSmall,
+        StatKey::FoldToRiverRaise,
         StatKey::Wtsd,
         StatKey::Wsd,
         StatKey::Wwsf,
@@ -388,6 +394,9 @@ impl StatKey {
             StatKey::FloatFlop => "float_flop",
             StatKey::RiverBet => "river_bet",
             StatKey::RiverRaise => "river_raise",
+            StatKey::RiverBetPolar => "river_bet_polar",
+            StatKey::RiverBetSmall => "river_bet_small",
+            StatKey::FoldToRiverRaise => "fold_to_river_raise",
             StatKey::Wtsd => "wtsd",
             StatKey::Wsd => "wsd",
             StatKey::Wwsf => "wwsf",
@@ -418,7 +427,8 @@ pub struct Counterparty {
     /// Postflop: the c-bettor or barreller faced (fold to c-bet, float), the
     /// bettor faced (check-raise, river raise), the preflop raiser bet into
     /// (donk) or who checked back (probe). `None` for the player's own
-    /// c-bets, delayed c-bets and river bets, and for WTSD, W$SD and WWSF.
+    /// c-bets, delayed c-bets and river bets (and their sizes), and for WTSD,
+    /// W$SD and WWSF. Fold to a river raise: the raiser faced.
     pub creator: Option<i64>,
     /// The hero opened, raised or otherwise created the spot (`creator` is
     /// the hero).

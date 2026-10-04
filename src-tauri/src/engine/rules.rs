@@ -450,7 +450,7 @@ pub const RULES: &[RuleDef] = &[
             (Variant::HeroCovered, "While he covers you, shove into him only with 77+, AT+ and KQ."),
         ],
     ),
-    // ---- postflop (F01–F12, F14). Audit 2026-10 (section 17.6): every
+    // ---- postflop (F01–F12, F14–F17). Audit 2026-10 (section 17.6): every
     // postflop advice names its street and a size or hand class, and reads
     // that can fire on the same villain add a lever instead of repeating one.
     rule("post.cbet_flop.high", "F01", F::Postflop, X, Some("CB+"),
@@ -529,6 +529,23 @@ pub const RULES: &[RuleDef] = &[
     rule("post.wwsf_high", "F12", F::Postflop, T, Some("WWS"),
         "Wins {raw}% of pots after seeing the flop.",
         "Bluff him less on turns and rivers; call his flop bets with any pair."),
+    // River sizing (F15): shares of his river bets by size bucket. They
+    // count sizes only, never what he holds (section 8.1); the advice is
+    // the price the size gives the hero's bluff-catchers and raises.
+    rule("post.river_sizing.polar", "F15", F::Postflop, X, Some("OVB"),
+        "Sizes {raw}% of his river bets as overbets or all-ins.",
+        "Call his river overbets with top pair+ and fold second pair; raise only with sets+."),
+    rule("post.river_sizing.small", "F15", F::Postflop, X, Some("SRB"),
+        "Sizes {raw}% of his river bets under 40% of the pot.",
+        "Raise his small river bets to 3x with two pair+ and some missed draws; call any pair."),
+    // Fold to a river raise (F16): his river bet raised, he acts again.
+    rule("post.fold_river_raise.high", "F16", F::Postflop, X, Some("FRR"),
+        "Folds {raw}% of his river bets when raised.",
+        "Raise his river bets 2.5x with missed draws; call, never raise, with one pair."),
+    // Fit-or-fold (F17): folds flops to c-bets and rarely reaches showdown.
+    rule("post.fit_or_fold", "F17", F::Postflop, X, Some("FOF"),
+        "Folds to {raw}% of flop c-bets and reaches showdown only {wtsd}%.",
+        "C-bet any two at 1/3 pot on the flop; barrel the turn only with draws or top pair+."),
     // ---- head-to-head (H01–H03). Audit 2026-10 (section 17.7): each
     // note names the hand classes or size for the hero's own spots against
     // him, adds a lever to the general read on the same leak, and reshoves
@@ -1602,6 +1619,16 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
         out.stat("post.wwsf_low", single(one(input, Wwsf, Dir::Below(0.08))).map(|h| h.and(wtsd)));
     }
     out.stat("post.wwsf_high", single(one(input, Wwsf, Dir::Above(0.08))));
+    // ---- river sizing and raised river bets (F15, F16)
+    out.stat("post.river_sizing.polar", single(one(input, RiverBetPolar, Dir::Above(0.12))));
+    out.stat("post.river_sizing.small", single(one(input, RiverBetSmall, Dir::Above(0.15))));
+    out.stat("post.fold_river_raise.high", single(one(input, FoldToRiverRaise, Dir::Above(0.15))));
+    // ---- fit-or-fold (F17): a flop overfold confirmed by a low showdown
+    // frequency; as sure as the weaker leg.
+    if let (Some(fcb), Some(wtsd)) = (one(input, FoldToCbetFlop, Dir::Above(0.10)), one(input, Wtsd, Dir::Below(0.05))) {
+        let wtsd_raw = whole_pct(wtsd.raw.unwrap_or_default());
+        out.stat_with("post.fit_or_fold", single(Some(fcb)).map(|h| h.and(wtsd)), vec![("wtsd", wtsd_raw)]);
+    }
 
     // ---- head-to-head (H01–H03): shrunk toward the villain's own overall
     // value, n ≥ 10.
@@ -1710,12 +1737,26 @@ pub const PREFLOP_OPPOSITES: [(&str, &str); 5] = [
 /// 17.6). They rest on different stats that one villain can show together,
 /// e.g. "Bluff him less on turns and rivers" (high WWSF) next to "Barrel the
 /// turn" (turn overfold); only the read with the higher score stays.
-pub const POSTFLOP_OPPOSITES: [(&str, &str); 5] = [
+pub const POSTFLOP_OPPOSITES: [(&str, &str); 6] = [
     ("post.wwsf_high", "post.fold_cbet_turn.high"),
     ("post.wwsf_high", "post.fold_cbet_river.high"),
     ("post.river_bet.low", "post.cbet_river.high"),
     ("post.river_bet.high", "post.cbet_river.low"),
     ("post.station", "post.river_raise.high"),
+    ("post.fit_or_fold", "post.fold_cbet_turn.high"),
+];
+
+/// A postflop read and the more general read it refines (rows F15, F17):
+/// the size of his river bets decides what calls them, so "call his river
+/// bets with second pair+" yields to "fold second pair to his overbets",
+/// and the fit-or-fold read is the flop overfold confirmed at showdown.
+/// The first read of each pair always stays.
+pub const REFINED_OPPOSITES: [(&str, &str); 5] = [
+    ("post.river_sizing.polar", "post.river_bet.high"),
+    ("post.river_sizing.polar", "post.cbet_river.high"),
+    ("post.river_sizing.small", "post.river_bet.low"),
+    ("post.river_sizing.small", "post.cbet_river.low"),
+    ("post.fit_or_fold", "post.fold_cbet_flop.high"),
 ];
 
 /// A head-to-head read and a general read on another stat whose advice
@@ -1736,10 +1777,15 @@ pub const H2H_OPPOSITES: [(&str, &str); 5] = [
 /// Shown river bluffs against a river read inferred from frequency (audit
 /// 2026-10, section 17.7): a low betting frequency only proves a narrow
 /// range (section 8.1), while the showdown read counts what he bet. The
-/// first read of each pair always stays.
-pub const SHOWDOWN_OPPOSITES: [(&str, &str); 2] = [
+/// same holds for the sizing shares of row F15 against the showdown tells
+/// of the same sizes. The first read of each pair always stays.
+pub const SHOWDOWN_OPPOSITES: [(&str, &str); 6] = [
     ("sd.shows_bluffs", "post.river_bet.low"),
     ("sd.shows_bluffs", "post.cbet_river.low"),
+    ("sd.shows_bluffs", "post.river_sizing.polar"),
+    ("sd.tell.big_is_value", "post.river_sizing.polar"),
+    ("sd.tell.big_is_bluff", "post.river_sizing.polar"),
+    ("sd.tell.small_is_value", "post.river_sizing.small"),
 ];
 
 /// Tournament reads and the more general read they refine (row T02, K02).
@@ -1761,8 +1807,8 @@ pub const TOURNAMENT_OPPOSITES: [(&str, &str); 6] = [
 /// Removes the weaker read of every [`PREFLOP_OPPOSITES`] and
 /// [`POSTFLOP_OPPOSITES`] pair that fired together: the lower score goes,
 /// then the lower deviation; a tie keeps the pair's first read. Of every
-/// [`H2H_OPPOSITES`], [`SHOWDOWN_OPPOSITES`] and [`TOURNAMENT_OPPOSITES`]
-/// pair, the general read goes, whatever the scores.
+/// [`H2H_OPPOSITES`], [`SHOWDOWN_OPPOSITES`], [`TOURNAMENT_OPPOSITES`] and
+/// [`REFINED_OPPOSITES`] pair, the general read goes, whatever the scores.
 fn drop_opposites(reads: &mut Vec<EngineRuleResult>) {
     let at = |reads: &[EngineRuleResult], id: &str| reads.iter().position(|r| r.rule_id == id);
     for (a, b) in PREFLOP_OPPOSITES.into_iter().chain(POSTFLOP_OPPOSITES) {
@@ -1771,7 +1817,9 @@ fn drop_opposites(reads: &mut Vec<EngineRuleResult>) {
         let order = x.score.total_cmp(&y.score).then(x.deviation.total_cmp(&y.deviation));
         reads.remove(if order.is_lt() { i } else { j });
     }
-    for (specific, general) in H2H_OPPOSITES.into_iter().chain(SHOWDOWN_OPPOSITES).chain(TOURNAMENT_OPPOSITES) {
+    let specific_first =
+        H2H_OPPOSITES.into_iter().chain(SHOWDOWN_OPPOSITES).chain(TOURNAMENT_OPPOSITES).chain(REFINED_OPPOSITES);
+    for (specific, general) in specific_first {
         if let (Some(_), Some(j)) = (at(reads, specific), at(reads, general)) {
             reads.remove(j);
         }

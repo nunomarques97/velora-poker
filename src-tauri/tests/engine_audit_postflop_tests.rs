@@ -64,6 +64,7 @@ const CBET_SPOTS: &str = include_str!("fixtures/audit/postflop_cbet_spots.txt");
 const POSTFLOP_ALLIN: &str = include_str!("fixtures/audit/postflop_allin.txt");
 const POSTFLOP_TRUNCATED: &str = include_str!("fixtures/audit/postflop_truncated.txt");
 const SPOTS: &str = include_str!("fixtures/audit/engine_postflop_spots.txt");
+const RIVER: &str = include_str!("fixtures/engine_postflop_river.txt");
 
 // ---------------------------------------------------------------- expectations
 
@@ -88,7 +89,7 @@ const CBET_SPOTS_COUNTS: &[(&str, &str)] = &[
     (
         "Dov",
         "fold_to_cbet_flop 0/1 fold_to_cbet_flop.mw 0/1 donk_flop 1/2 donk_flop.mw 1/1 probe_turn 1/1 \
-         river_bet 1/1 wtsd 0/3 wtsd.mw 0/2 wwsf 2/3 wwsf.mw 1/2",
+         river_bet 1/1 river_bet_polar 0/1 river_bet_small 0/1 wtsd 0/3 wtsd.mw 0/2 wwsf 2/3 wwsf.mw 1/2",
     ),
     (
         "Eli",
@@ -110,10 +111,56 @@ const POSTFLOP_ALLIN_COUNTS: &[(&str, &str)] = &[
     ("Jem", "fold_to_cbet_flop 0/1 check_raise_flop 0/1 donk_flop 0/1 wtsd 1/1 wsd 0/1 wwsf 0/1"),
     (
         "Kye",
-        "check_raise_flop 0/1 check_raise_flop.mw 0/1 river_bet 1/1 river_bet.mw 1/1 wtsd 1/1 wtsd.mw 1/1 \
-         wsd 1/1 wsd.mw 1/1 wwsf 1/1 wwsf.mw 1/1",
+        "check_raise_flop 0/1 check_raise_flop.mw 0/1 river_bet 1/1 river_bet.mw 1/1 river_bet_polar 0/1 \
+         river_bet_polar.mw 0/1 river_bet_small 1/1 river_bet_small.mw 1/1 wtsd 1/1 wtsd.mw 1/1 wsd 1/1 \
+         wsd.mw 1/1 wwsf 1/1 wwsf.mw 1/1",
     ),
     ("Lars", ""),
+];
+
+/// River sizing and raised river bets (rows F15, F16). Hand 401: Bob's small
+/// river bet is raised by Ugo and folded. 402: Hal's three-way medium bet is
+/// raised by Cole, Bob (who checked) and Hal fold. 403: Sam's short all-in
+/// bet (7% of the pot) is called by the hero. 404: Sam's three-way all-in
+/// bet is raised by Bob; Sam has no decision left. 405: Cole's small bet is
+/// raised by the hero and re-raised all in. 406: Bob's overbet is raised all
+/// in by the hero and called all in.
+const RIVER_COUNTS: &[(&str, &str)] = &[
+    (
+        "Hero",
+        "cbet_flop 3/3 cbet_flop.mw 1/1 cbet_turn 1/3 cbet_turn.mw 0/1 fold_to_cbet_flop 0/1 \
+         fold_to_cbet_turn 0/1 fold_to_cbet_river 0/1 river_raise 2/4 river_raise.mw 0/1 wtsd 3/4 \
+         wtsd.mw 0/1 wsd 1/3 wwsf 1/4 wwsf.mw 0/1",
+    ),
+    (
+        "Sam",
+        "fold_to_cbet_flop 0/2 fold_to_cbet_flop.mw 0/1 fold_to_cbet_turn 0/1 check_raise_flop 0/2 \
+         check_raise_flop.mw 0/1 donk_flop 0/2 donk_flop.mw 0/1 river_bet 2/2 river_bet.mw 1/1 \
+         river_bet_polar 2/2 river_bet_polar.mw 1/1 river_bet_small 0/2 river_bet_small.mw 0/1 wtsd 2/2 \
+         wtsd.mw 1/1 wsd 0/2 wsd.mw 0/1 wwsf 0/2 wwsf.mw 0/1 h2h.three_bet_vs_hero_open 0/2 \
+         h2h.fold_to_hero_cbet 0/2 h2h.defend_vs_hero_steal 1/2",
+    ),
+    (
+        "Bob",
+        "fold_to_cbet_flop 0/2 fold_to_cbet_flop.mw 0/1 check_raise_flop 0/2 check_raise_flop.mw 0/1 \
+         donk_flop 0/4 donk_flop.mw 0/2 probe_turn 0/2 probe_turn.mw 0/1 river_bet 2/3 river_bet.mw 0/1 \
+         river_raise 1/2 river_raise.mw 1/2 river_bet_polar 1/2 river_bet_small 1/2 fold_to_river_raise 1/2 \
+         wtsd 2/4 wtsd.mw 1/2 wsd 2/2 wsd.mw 1/1 wwsf 2/4 wwsf.mw 1/2 h2h.three_bet_vs_hero_open 0/1 \
+         h2h.fold_to_hero_cbet 0/2 h2h.defend_vs_hero_steal 1/1",
+    ),
+    ("Ugo", "cbet_flop 0/1 delayed_cbet 0/1 river_raise 1/1 wtsd 0/1 wwsf 1/1"),
+    (
+        "Hal",
+        "cbet_flop 0/1 cbet_flop.mw 0/1 delayed_cbet 0/1 delayed_cbet.mw 0/1 river_bet 1/1 river_bet.mw 1/1 \
+         river_bet_polar 0/1 river_bet_polar.mw 0/1 river_bet_small 0/1 river_bet_small.mw 0/1 \
+         fold_to_river_raise 1/1 fold_to_river_raise.mw 1/1 wtsd 0/1 wtsd.mw 0/1 wwsf 0/1 wwsf.mw 0/1",
+    ),
+    (
+        "Cole",
+        "cbet_flop 1/1 cbet_turn 1/1 cbet_river 1/1 river_bet 1/1 river_raise 1/1 river_raise.mw 1/1 \
+         river_bet_polar 0/1 river_bet_small 1/1 fold_to_river_raise 0/1 wtsd 1/2 wtsd.mw 0/1 wsd 1/1 \
+         wwsf 2/2 wwsf.mw 1/1",
+    ),
 ];
 
 /// The hero (`Hero`) plays against five villains. Hand 101: Hero's CO steal,
@@ -130,13 +177,14 @@ const SPOTS_COUNTS: &[(&str, &str)] = &[
     (
         "Hero",
         "cbet_flop 3/3 cbet_flop.mw 2/2 cbet_turn 1/2 cbet_turn.mw 1/2 cbet_river 1/1 cbet_river.mw 1/1 \
-         check_raise_flop 0/1 check_raise_flop.mw 0/1 river_bet 1/1 river_bet.mw 1/1 wtsd 1/5 wtsd.mw 1/3 \
-         wsd 0/1 wsd.mw 0/1 wwsf 2/5 wwsf.mw 1/3",
+         check_raise_flop 0/1 check_raise_flop.mw 0/1 river_bet 1/1 river_bet.mw 1/1 river_bet_polar 0/1 \
+         river_bet_polar.mw 0/1 river_bet_small 0/1 river_bet_small.mw 0/1 wtsd 1/5 wtsd.mw 1/3 wsd 0/1 wsd.mw 0/1 wwsf 2/5 wwsf.mw 1/3",
     ),
     (
         "Pax",
         "fold_to_cbet_flop 0/1 fold_to_cbet_flop.mw 0/1 donk_flop 0/1 probe_turn 0/1 float_flop 1/1 \
-         float_flop.mw 1/1 river_bet 1/1 wtsd 1/2 wtsd.mw 0/1 wsd 0/1 wwsf 0/2 wwsf.mw 0/1 \
+         float_flop.mw 1/1 river_bet 1/1 river_bet_polar 0/1 river_bet_small 0/1 fold_to_river_raise 0/1 \
+         wtsd 1/2 wtsd.mw 0/1 wsd 0/1 wwsf 0/2 wwsf.mw 0/1 \
          h2h.three_bet_vs_hero_open 1/3 h2h.fold_to_hero_cbet 0/1",
     ),
     (
@@ -204,7 +252,11 @@ const PLAYERS_COUNTS: &[(&str, &str)] = &[
     ("Liam", ""),
     ("Mia", ""),
     ("Ned", ""),
-    ("Olga", "cbet_flop 1/1 cbet_turn 0/1 river_bet 1/1 wtsd 1/1 wsd 1/1 wwsf 1/1"),
+    (
+        "Olga",
+        "cbet_flop 1/1 cbet_turn 0/1 river_bet 1/1 river_bet_polar 0/1 river_bet_small 0/1 wtsd 1/1 wsd 1/1 \
+         wwsf 1/1",
+    ),
     ("Pjotr", ""),
 ];
 
@@ -222,6 +274,7 @@ const POTS_COUNTS: &[(&str, &str)] = &[
     (
         "Rosa",
         "cbet_flop 1/1 cbet_flop.mw 1/1 cbet_turn 0/1 cbet_turn.mw 0/1 river_bet 1/1 river_bet.mw 1/1 \
+         river_bet_polar 0/1 river_bet_polar.mw 0/1 river_bet_small 1/1 river_bet_small.mw 1/1 \
          wtsd 1/1 wtsd.mw 1/1 wsd 1/1 wsd.mw 1/1 wwsf 1/1 wwsf.mw 1/1",
     ),
     (
@@ -377,6 +430,7 @@ const FIXTURES: &[Fixture] = &[
     ("postflop_cbet_spots", CBET_SPOTS, 5, CBET_SPOTS_COUNTS),
     ("postflop_allin", POSTFLOP_ALLIN, 4, POSTFLOP_ALLIN_COUNTS),
     ("engine_postflop_spots", SPOTS, 10, SPOTS_COUNTS),
+    ("engine_postflop_river", RIVER, 6, RIVER_COUNTS),
     ("cash_6max_usd_chat", CHAT, 2, CHAT_COUNTS),
     ("cash_9max_eur_players", PLAYERS, 2, PLAYERS_COUNTS),
     ("cash_pots_usd", POTS, 2, POTS_COUNTS),
@@ -605,6 +659,11 @@ fn barrels_delayed_cbet_float_probe_check_raise_and_hero_spots() {
 }
 
 #[test]
+fn river_sizing_all_in_bets_and_raised_river_bets() {
+    check_fixture(fixture("engine_postflop_river"));
+}
+
+#[test]
 fn split_pot_muck_and_three_way_showdowns() {
     check_fixture(fixture("cash_pots_usd"));
     check_fixture(fixture("cash_6max_usd_chat"));
@@ -653,7 +712,7 @@ fn every_postflop_and_head_to_head_key_is_pinned_with_hits_and_misses() {
             }
         }
     }
-    assert_eq!(StatKey::POSTFLOP.len(), 16);
+    assert_eq!(StatKey::POSTFLOP.len(), 19);
     assert_eq!(H2hKey::ALL.len(), 5);
     let keys = StatKey::POSTFLOP
         .iter()
@@ -664,9 +723,18 @@ fn every_postflop_and_head_to_head_key_is_pinned_with_hits_and_misses() {
         assert!(hits > 0, "no fixture pins a hit of {token}");
         assert!(hits < opportunities, "no fixture pins a miss of {token}");
     }
-    // Both sides of the multiway flag are pinned on the c-bet chain and the
-    // showdown keys.
-    for key in [StatKey::CbetFlop, StatKey::FoldToCbetFlop, StatKey::CbetTurn, StatKey::Wtsd, StatKey::Wsd] {
+    // Both sides of the multiway flag are pinned on the c-bet chain, the
+    // showdown keys, the river sizing shares and the fold to a river raise.
+    for key in [
+        StatKey::CbetFlop,
+        StatKey::FoldToCbetFlop,
+        StatKey::CbetTurn,
+        StatKey::Wtsd,
+        StatKey::Wsd,
+        StatKey::RiverBetPolar,
+        StatKey::RiverBetSmall,
+        StatKey::FoldToRiverRaise,
+    ] {
         let all = totals[key.as_str()].1;
         let mw = totals.get(&format!("{}.mw", key.as_str())).map_or(0, |c| c.1);
         assert!(mw > 0 && mw < all, "{}: {mw} multiway of {all} pins no heads-up and multiway side", key.as_str());
@@ -1236,7 +1304,7 @@ fn pot_reconstruction_matches_every_audit_fixture_but_the_dead_blind_gap() {
             checked += 1;
         }
     }
-    assert_eq!(checked, 54, "audit hands checked");
+    assert_eq!(checked, 60, "audit hands checked");
 }
 
 #[test]

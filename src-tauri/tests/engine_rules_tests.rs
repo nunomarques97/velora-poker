@@ -17,8 +17,8 @@ use velora_poker_lib::engine::pooling::shrink;
 use velora_poker_lib::engine::rules::{
     observation_template, Variant, BB_VS_SB_OVERDEFEND, FOLD_TO_STEAL_LOW, FOLD_TO_STEAL_SB_HIGH,
     H2H_OPPOSITES, HOVER_CARD_ADVICE_BUDGET, JAM_DEPTH_MAX_BB, KO_COVERING_HIGH, KO_COVER_GAP, LATE_CALLS_SHOVES,
-    LATE_SHOVES_WIDE, LIMP_HIGH, POSTFLOP_OPPOSITES, PREFLOP_OPPOSITES, SEAT_SUFFIX, SHOWDOWN_OPPOSITES, STAGE_EARLY_LIMP,
-    TOURNAMENT_OPPOSITES,
+    LATE_SHOVES_WIDE, LIMP_HIGH, POSTFLOP_OPPOSITES, PREFLOP_OPPOSITES, REFINED_OPPOSITES, SEAT_SUFFIX, SHOWDOWN_OPPOSITES,
+    STAGE_EARLY_LIMP, TOURNAMENT_OPPOSITES,
 };
 use velora_poker_lib::engine::{
     evaluate_rules, latest_table_hand, player_rule_input, rule_def, stat_spec, templates,
@@ -1610,13 +1610,20 @@ fn postflop_firing(id: &str) -> Vec<(StatKey, u32, u32)> {
         // WWSF (15 + 9.2)/80 = .30 ≤ .38; WTSD (12 + 5.4)/80 = .22 ≤ .27
         "post.wwsf_low" => vec![(Wwsf, 15, 60), (Wtsd, 12, 60)],
         "post.wwsf_high" => vec![(Wwsf, 45, 60)],
+        // (10 + 1.2)/30 = .37 ≥ .24; (12 + 2)/30 = .47 ≥ .35
+        "post.river_sizing.polar" => vec![(RiverBetPolar, 10, 20)],
+        "post.river_sizing.small" => vec![(RiverBetSmall, 12, 20)],
+        // (12 + 3.6)/23 = .68 ≥ .60
+        "post.fold_river_raise.high" => vec![(FoldToRiverRaise, 12, 15)],
+        // FCB (30 + 6.75)/55 = .67 ≥ .55; WTSD (10 + 5.4)/80 = .19 ≤ .22
+        "post.fit_or_fold" => vec![(FoldToCbetFlop, 30, 40), (Wtsd, 10, 60)],
         other => panic!("no postflop firing input for {other}"),
     }
 }
 
 /// Every postflop advice after the 2026-10 audit (section 17.6): street,
 /// sizing or hand classes, and never the same note as another read.
-const POSTFLOP_ADVICE: [(&str, &str); 24] = [
+const POSTFLOP_ADVICE: [(&str, &str); 28] = [
     ("post.cbet_flop.high", "Raise his flop c-bets with draws and gutshots; call them with any pair."),
     ("post.cbet_flop.low", "Fold bottom pair to his flop c-bets; bet 1/2 pot when he checks the flop."),
     ("post.fold_cbet_flop.high", "C-bet him at 1/3 pot with your whole range on dry flops."),
@@ -1641,6 +1648,10 @@ const POSTFLOP_ADVICE: [(&str, &str); 24] = [
     ("post.wsd_strong", "Value bet top pair on flop and turn only; bet rivers with two pair or better."),
     ("post.wwsf_low", "Stab 1/2 pot on flops and turns he checks; barrel draws twice."),
     ("post.wwsf_high", "Bluff him less on turns and rivers; call his flop bets with any pair."),
+    ("post.river_sizing.polar", "Call his river overbets with top pair+ and fold second pair; raise only with sets+."),
+    ("post.river_sizing.small", "Raise his small river bets to 3x with two pair+ and some missed draws; call any pair."),
+    ("post.fold_river_raise.high", "Raise his river bets 2.5x with missed draws; call, never raise, with one pair."),
+    ("post.fit_or_fold", "C-bet any two at 1/3 pot on the flop; barrel the turn only with draws or top pair+."),
 ];
 
 #[test]
@@ -1665,7 +1676,7 @@ fn postflop_advice_texts_are_pinned() {
 fn postflop_thresholds_hold_in_every_format() {
     // Section 17.4 states each postflop threshold in absolute terms per
     // format; the deltas are the same in every format and the priors differ.
-    let single: [(&str, StatKey, bool, f64, u32); 20] = [
+    let single: [(&str, StatKey, bool, f64, u32); 23] = [
         ("post.cbet_flop.high", CbetFlop, true, 0.15, 40),
         ("post.cbet_flop.low", CbetFlop, false, 0.15, 40),
         ("post.fold_cbet_flop.high", FoldToCbetFlop, true, 0.12, 40),
@@ -1686,6 +1697,9 @@ fn postflop_thresholds_hold_in_every_format() {
         ("post.river_bet.low", RiverBet, false, 0.12, 40),
         ("post.river_raise.high", RiverRaise, true, 0.06, 60),
         ("post.wwsf_high", Wwsf, true, 0.08, 60),
+        ("post.river_sizing.polar", RiverBetPolar, true, 0.12, 40),
+        ("post.river_sizing.small", RiverBetSmall, true, 0.15, 40),
+        ("post.fold_river_raise.high", FoldToRiverRaise, true, 0.15, 30),
     ];
     for format in [FormatKey::Mtt, FormatKey::Cash, FormatKey::Zoom, FormatKey::Spin] {
         for (id, key, above, delta, n) in single {
@@ -1700,6 +1714,11 @@ fn postflop_thresholds_hold_in_every_format() {
         let wtsd_low = last_below(format, Wtsd, 60, 0.0);
         assert_above(format, "post.wsd_strong", Wsd, 40, 0.08, &[(Wtsd, wtsd_low, 60)]);
         assert_below(format, "post.wwsf_low", Wwsf, 60, 0.08, &[(Wtsd, wtsd_low, 60)]);
+        // Fit-or-fold: FCB ≥ prior + .10 with WTSD ≤ prior − .05, each
+        // boundary checked with the other leg just passing.
+        let wtsd_fof = last_below(format, Wtsd, 60, 0.05);
+        let fcb_fof = assert_above(format, "post.fit_or_fold", FoldToCbetFlop, 40, 0.10, &[(Wtsd, wtsd_fof, 60)]);
+        assert_below(format, "post.fit_or_fold", Wtsd, 60, 0.05, &[(FoldToCbetFlop, fcb_fof, 40)]);
     }
 }
 
@@ -1722,12 +1741,13 @@ fn wwsf_low_needs_showdown_frequency_at_or_under_prior() {
 }
 
 /// Postflop reads whose advice points opposite ways (section 17.6).
-const POSTFLOP_PAIRS: [(&str, &str); 5] = [
+const POSTFLOP_PAIRS: [(&str, &str); 6] = [
     ("post.wwsf_high", "post.fold_cbet_turn.high"),
     ("post.wwsf_high", "post.fold_cbet_river.high"),
     ("post.river_bet.low", "post.cbet_river.high"),
     ("post.river_bet.high", "post.cbet_river.low"),
     ("post.station", "post.river_raise.high"),
+    ("post.fit_or_fold", "post.fold_cbet_turn.high"),
 ];
 
 #[test]
@@ -1801,6 +1821,128 @@ fn postflop_advice_names_street_and_lever() {
             assert!(street.is_match(text), "{} names no street: {text}", def.id);
             assert!(!concrete_levers(text).is_empty(), "{} names no size or hand class: {text}", def.id);
         }
+    }
+}
+
+// ------------------------------------- postflop gaps (F15–F17, section 17.9)
+
+#[test]
+fn river_sizing_rules_fire_at_threshold_and_not_below() {
+    // Shares of his river bets by size (section 9.2). Cash: polar prior .12,
+    // k 10: (h + 1.2)/40 ≥ .24 → 9 of 30; small prior .20: (h + 2)/40 ≥ .35
+    // → 12 of 30. Every format: postflop_thresholds_hold_in_every_format.
+    let c = FormatKey::Cash;
+    assert_eq!(assert_above(c, "post.river_sizing.polar", RiverBetPolar, 30, 0.12, &[]), 9);
+    assert_eq!(assert_above(c, "post.river_sizing.small", RiverBetSmall, 30, 0.15, &[]), 12);
+    let reads = evaluate_rules(&cash(&[(RiverBetPolar, 9, 30)]));
+    let r = read(&reads, "post.river_sizing.polar").unwrap();
+    assert_eq!(r.observation, "Sizes 30% (9/30) of his river bets as overbets or all-ins.");
+    assert_eq!((r.tag.as_deref(), r.scenario_id.as_str(), r.family), (Some("OVB"), "F15", Family::Postflop));
+    let reads = evaluate_rules(&cash(&[(RiverBetSmall, 13, 30)]));
+    let r = read(&reads, "post.river_sizing.small").unwrap();
+    assert_eq!(r.observation, "Sizes 43% (13/30) of his river bets under 40% of the pot.");
+    assert_eq!((r.tag.as_deref(), r.scenario_id.as_str()), (Some("SRB"), "F15"));
+    // A villain who mixes both sizes gets both notes: they price different
+    // bets, so neither drops the other.
+    let both = evaluate_rules(&cash(&[(RiverBetPolar, 12, 30), (RiverBetSmall, 15, 30)]));
+    assert!(read(&both, "post.river_sizing.polar").is_some() && read(&both, "post.river_sizing.small").is_some());
+    // Small-sample extreme: 7 of 7 is under the 8-bet floor; 8 of 8 fires.
+    assert_eq!(stat_spec(RiverBetPolar).n_min, 8);
+    assert!(evaluate_rules(&cash(&[(RiverBetPolar, 7, 7), (RiverBetSmall, 7, 7)])).is_empty());
+    assert!(fires(&cash(&[(RiverBetPolar, 8, 8)]), "post.river_sizing.polar"));
+}
+
+#[test]
+fn fold_to_river_raise_rule_fires_at_threshold_and_not_below() {
+    // Prior .45, k 8: (h + 3.6)/28 ≥ .60 → 14 of 20.
+    let c = FormatKey::Cash;
+    assert_eq!(assert_above(c, "post.fold_river_raise.high", FoldToRiverRaise, 20, 0.15, &[]), 14);
+    let reads = evaluate_rules(&cash(&[(FoldToRiverRaise, 14, 20)]));
+    let r = read(&reads, "post.fold_river_raise.high").unwrap();
+    assert_eq!(r.observation, "Folds 70% (14/20) of his river bets when raised.");
+    assert_eq!((r.tag.as_deref(), r.scenario_id.as_str()), (Some("FRR"), "F16"));
+    // Floor 5: 4 of 4 never fires; 5 of 5 is (5 + 3.6)/13 = .66 and fires.
+    assert_eq!(stat_spec(FoldToRiverRaise).n_min, 5);
+    assert!(!fires(&cash(&[(FoldToRiverRaise, 4, 4)]), "post.fold_river_raise.high"));
+    assert!(fires(&cash(&[(FoldToRiverRaise, 5, 5)]), "post.fold_river_raise.high"));
+}
+
+#[test]
+fn fit_or_fold_needs_both_legs_and_replaces_the_flop_overfold_read() {
+    let reads = evaluate_rules(&cash(&postflop_firing("post.fit_or_fold")));
+    let r = read(&reads, "post.fit_or_fold").unwrap();
+    assert_eq!(r.observation, "Folds to 75% (30/40) of flop c-bets and reaches showdown only 17%.");
+    assert_eq!((r.tag.as_deref(), r.scenario_id.as_str()), (Some("FOF"), "F17"));
+    // As sure as the weaker leg: 40 c-bets faced (k 15) against 60 flops
+    // seen (k 20).
+    let fcb = stat(FormatKey::Cash, FoldToCbetFlop, 30, 40);
+    let wtsd = stat(FormatKey::Cash, Wtsd, 10, 60);
+    assert!(fcb.confidence < wtsd.confidence);
+    assert_eq!(r.confidence, fcb.confidence);
+    assert_eq!(r.evidence.len(), 2);
+    // The general flop overfold read on the same stat yields to it.
+    assert!(read(&reads, "post.fold_cbet_flop.high").is_none(), "{:?}", ids(&reads));
+    // Either leg alone is no fit-or-fold: a flop overfolder who reaches
+    // showdown at the prior keeps the general read; a low WTSD alone fires
+    // nothing about the flop.
+    let at_prior = cash(&[(FoldToCbetFlop, 30, 40), (Wtsd, 16, 60)]);
+    assert!(!fires(&at_prior, "post.fit_or_fold"));
+    assert!(fires(&at_prior, "post.fold_cbet_flop.high"));
+    assert!(!fires(&cash(&[(FoldToCbetFlop, 30, 40)]), "post.fit_or_fold"));
+    assert!(!fires(&cash(&[(Wtsd, 10, 60)]), "post.fit_or_fold"));
+    // WTSD under its 10-hand floor is no leg.
+    assert!(!fires(&cash(&[(FoldToCbetFlop, 30, 40), (Wtsd, 0, 9)]), "post.fit_or_fold"));
+}
+
+#[test]
+fn new_postflop_reads_are_suppressed_at_push_fold() {
+    // Rows F15–F17 are postflop reads: at 15bb or less in a tournament only
+    // push/fold reads show (section 5).
+    let ids_new = ["post.river_sizing.polar", "post.river_sizing.small", "post.fold_river_raise.high", "post.fit_or_fold"];
+    let stats = [
+        (RiverBetPolar, 16, 30),
+        (RiverBetSmall, 14, 30),
+        (FoldToRiverRaise, 14, 20),
+        (FoldToCbetFlop, 30, 40),
+        (Wtsd, 10, 60),
+    ];
+    for format in [FormatKey::Mtt, FormatKey::Spin] {
+        let mut deep = input(format, &stats);
+        deep.context = Some(context(format, 40.0));
+        let reads = evaluate_rules(&deep);
+        for id in ids_new {
+            assert!(read(&reads, id).is_some(), "{format:?}: {id} fires at 40bb: {:?}", ids(&reads));
+        }
+        let mut short = input(format, &stats);
+        short.context = Some(context(format, 12.0));
+        let reads = evaluate_rules(&short);
+        assert!(reads.iter().all(|r| r.family != Family::Postflop), "{format:?} at 12bb: {:?}", ids(&reads));
+    }
+}
+
+/// A postflop read and the general read it refines (rows F15, F17). The
+/// refining read always stays.
+const REFINED_PAIRS: [(&str, &str); 5] = [
+    ("post.river_sizing.polar", "post.river_bet.high"),
+    ("post.river_sizing.polar", "post.cbet_river.high"),
+    ("post.river_sizing.small", "post.river_bet.low"),
+    ("post.river_sizing.small", "post.cbet_river.low"),
+    ("post.fit_or_fold", "post.fold_cbet_flop.high"),
+];
+
+#[test]
+fn sizing_and_fit_or_fold_reads_replace_the_general_read() {
+    // "Call his river bets with second pair+" next to "fold second pair to
+    // his overbets"; "Fold one pair to his river bets" next to "call any
+    // pair" against his small ones. The size decides the price, so the
+    // sizing read wins whatever the scores.
+    assert_eq!(REFINED_OPPOSITES, REFINED_PAIRS);
+    for (specific, general) in REFINED_PAIRS {
+        assert!(fires(&cash(&postflop_firing(general)), general), "{general} fires alone");
+        let stats: Vec<_> = postflop_firing(specific).into_iter().chain(postflop_firing(general)).collect();
+        let reads = evaluate_rules(&cash(&stats));
+        assert!(read(&reads, specific).is_some(), "{specific} stays: {:?}", ids(&reads));
+        assert!(read(&reads, general).is_none(), "{general} fired next to {specific}: {:?}", ids(&reads));
     }
 }
 
@@ -2166,9 +2308,13 @@ fn opposite_h2h_reads_keep_the_head_to_head_read() {
 
 /// Showdown reads and the frequency read that points the opposite way
 /// (section 17.7). The showdown read always stays.
-const SHOWDOWN_PAIRS: [(&str, &str); 2] = [
+const SHOWDOWN_PAIRS: [(&str, &str); 6] = [
     ("sd.shows_bluffs", "post.river_bet.low"),
     ("sd.shows_bluffs", "post.cbet_river.low"),
+    ("sd.shows_bluffs", "post.river_sizing.polar"),
+    ("sd.tell.big_is_value", "post.river_sizing.polar"),
+    ("sd.tell.big_is_bluff", "post.river_sizing.polar"),
+    ("sd.tell.small_is_value", "post.river_sizing.small"),
 ];
 
 #[test]
@@ -2781,7 +2927,7 @@ fn every_rule_has_a_unique_id_known_tag_and_catalogue_row() {
         "F3B", "C3B", "4B+", "F4B", "SQZ", "LMP", "ISO", "LRR", "LF", "CC+", "SHV", "NSV", "CLS",
         "TCS", "RSV", "RS-", "DEEP", "KO", "HNT", "CB+", "CB-", "FCB", "NFC", "BRL", "GIV", "TRB",
         "RV-", "DLY", "XR+", "XR-", "DNK", "FLT", "PRB", "RV+", "RR+", "WSD", "WWS", "H2H", "SDV",
-        "SDB", "SVB", "LSE", "TGT", "SB+", "LPC", "RVF", "ICM-", "KO+",
+        "SDB", "SVB", "LSE", "TGT", "SB+", "LPC", "RVF", "ICM-", "KO+", "OVB", "SRB", "FRR", "FOF",
     ];
     // docs/ is local-only (git-excluded), so the spec is read at runtime and the
     // spec-membership checks are skipped on a checkout without it;

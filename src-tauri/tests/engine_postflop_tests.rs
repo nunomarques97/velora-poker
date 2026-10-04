@@ -1,10 +1,13 @@
 //! Opponent engine, task T4: pot reconstruction, bet sizing and postflop
-//! scenario stats (catalogue rows F01–F13 of `docs/specs/opponent-engine.md`).
+//! scenario stats (catalogue rows F01–F13, F15 and F16 of `docs/specs/opponent-engine.md`).
 //!
 //! Fixture: `engine_postflop_cash.txt` is a 6-max $0.25/$0.50 cash table with
 //! 100bb stacks, seating Hero (seat 1, button), Sam (SB), Bob (BB), Ugo
 //! (UTG), Hal (HJ) and Cole (CO). Pot reconstruction is also checked against
 //! the tournament (antes), Spin & Go, Zoom and real hand-history fixtures.
+//! `engine_postflop_river.txt` (same table) holds the river sizing and
+//! fold-to-river-raise edge cases of rows F15 and F16: multiway, all-in bets
+//! and raised bets he folds, calls all in or re-raises.
 
 use std::collections::HashSet;
 
@@ -16,6 +19,7 @@ use velora_poker_lib::parser::{ActionType, Street};
 use velora_poker_lib::{db, import};
 
 const CASH: &str = include_str!("fixtures/engine_postflop_cash.txt");
+const RIVER: &str = include_str!("fixtures/engine_postflop_river.txt");
 
 fn import_db(text: &str) -> rusqlite::Connection {
     let mut conn = db::open(std::path::Path::new(":memory:")).expect("open db");
@@ -89,6 +93,14 @@ const RIVER_BARREL_GIVEN_UP: &str = "300000000314";
 const FOLD_TO_TURN_BARREL: &str = "300000000315";
 const RIVER_BARREL_CALLED: &str = "300000000316";
 
+// Hand refs of the river fixture, in fixture order.
+const SMALL_BET_RAISED_FOLDS: &str = "300000000401";
+const MW_BET_RAISED_FOLDS: &str = "300000000402";
+const SHORT_ALL_IN_BET_CALLED: &str = "300000000403";
+const MW_ALL_IN_BET_RAISED: &str = "300000000404";
+const BET_RAISED_RERAISES: &str = "300000000405";
+const OVERBET_RAISED_CALLS_ALL_IN: &str = "300000000406";
+
 // ---- F13: pot reconstruction and sizing
 
 /// Every distinct hand in a database, with its raw text.
@@ -135,6 +147,7 @@ fn uncalled_lines(raw: &str) -> Vec<f64> {
 fn pot_reconstruction_matches_total_pot_line() {
     let fixtures = [
         ("engine_postflop_cash", CASH),
+        ("engine_postflop_river", RIVER),
         ("engine_preflop_cash", include_str!("fixtures/engine_preflop_cash.txt")),
         ("engine_preflop_tournament", include_str!("fixtures/engine_preflop_tournament.txt")),
         ("real_bounty_tournament", include_str!("fixtures/real_bounty_tournament.txt")),
@@ -463,6 +476,105 @@ fn river_bet_and_raise_count_correctly() {
     assert_no_spot(&ugo, StatKey::RiverRaise);
 }
 
+// ---- F15: river sizing shares
+
+#[test]
+fn river_sizing_counts_each_river_bet_by_its_bucket() {
+    let conn = setup();
+    // Overbet (6 into 5.25): polar, not small.
+    let bob = events(&conn, "Bob", RIVER_OVERBET_RAISED);
+    assert_spot(&bob, StatKey::RiverBetPolar, true);
+    assert_spot(&bob, StatKey::RiverBetSmall, false);
+    // Small (1 into 2.75): small, not polar.
+    let bob = events(&conn, "Bob", HERO_CHECKS_TWICE);
+    assert_spot(&bob, StatKey::RiverBetPolar, false);
+    assert_spot(&bob, StatKey::RiverBetSmall, true);
+    // Medium (5 into 7.75): in neither share, but still an opportunity.
+    let cole = events(&conn, "Cole", FLOAT_CHECKED_BEHIND);
+    assert_spot(&cole, StatKey::RiverBetPolar, false);
+    assert_spot(&cole, StatKey::RiverBetSmall, false);
+    // A river raise or a river check is not a river bet.
+    let hal = events(&conn, "Hal", RIVER_OVERBET_RAISED);
+    assert_no_spot(&hal, StatKey::RiverBetPolar);
+    assert_no_spot(&hal, StatKey::RiverBetSmall);
+    let hero = events(&conn, "Hero", HERO_CHECKS_TWICE);
+    assert_no_spot(&hero, StatKey::RiverBetPolar);
+    assert_no_spot(&hero, StatKey::RiverBetSmall);
+
+    let conn = import_db(RIVER);
+    // An all-in bet is `allin` (polar) even at 7% of the pot.
+    let sam = events(&conn, "Sam", SHORT_ALL_IN_BET_CALLED);
+    assert_eq!(assert_spot(&sam, StatKey::RiverBetPolar, true).multiway, Some(false));
+    assert_spot(&sam, StatKey::RiverBetSmall, false);
+    // Multiway all-in bet.
+    let sam = events(&conn, "Sam", MW_ALL_IN_BET_RAISED);
+    assert_eq!(assert_spot(&sam, StatKey::RiverBetPolar, true).multiway, Some(true));
+    assert_spot(&sam, StatKey::RiverBetSmall, false);
+    // Multiway medium bet after a check.
+    let hal = events(&conn, "Hal", MW_BET_RAISED_FOLDS);
+    assert_eq!(assert_spot(&hal, StatKey::RiverBetPolar, false).multiway, Some(true));
+    assert_spot(&hal, StatKey::RiverBetSmall, false);
+    assert_spot(&events(&conn, "Bob", SMALL_BET_RAISED_FOLDS), StatKey::RiverBetSmall, true);
+    assert_spot(&events(&conn, "Bob", OVERBET_RAISED_CALLS_ALL_IN), StatKey::RiverBetPolar, true);
+    // The player who checked and folded to the raise bet nothing.
+    assert_no_spot(&events(&conn, "Bob", MW_BET_RAISED_FOLDS), StatKey::RiverBetPolar);
+
+    // Both shares count exactly his river bets, with no counterparty.
+    for (fixture, conn) in [("cash", setup()), ("river", import_db(RIVER))] {
+        for name in ["Hero", "Sam", "Bob", "Ugo", "Hal", "Cole"] {
+            let id = player_id(&conn, name);
+            for hand in load_player_hands(&conn, id).unwrap() {
+                let found = extract_postflop(&hand, id);
+                let bets = found.iter().filter(|e| e.key == StatKey::RiverBet && e.success).count();
+                for key in [StatKey::RiverBetPolar, StatKey::RiverBetSmall] {
+                    let spots: Vec<_> = found.iter().filter(|e| e.key == key).collect();
+                    assert_eq!(spots.len(), bets, "{fixture} {name} {} {}", hand.hand_ref, key.as_str());
+                    assert!(spots.iter().all(|e| e.counterparty.creator.is_none()));
+                }
+            }
+        }
+    }
+}
+
+// ---- F16: fold to a river raise
+
+#[test]
+fn fold_to_river_raise_needs_his_raised_bet_and_a_decision() {
+    let conn = import_db(RIVER);
+    let hero = player_id(&conn, "Hero");
+    // Heads-up: small bet, raised, folds. The creator is the raiser.
+    let bob = events(&conn, "Bob", SMALL_BET_RAISED_FOLDS);
+    let spot = assert_spot(&bob, StatKey::FoldToRiverRaise, true);
+    assert_eq!(spot.counterparty.creator, Some(player_id(&conn, "Ugo")));
+    assert_eq!(spot.multiway, Some(false));
+    assert_no_spot(&events(&conn, "Ugo", SMALL_BET_RAISED_FOLDS), StatKey::FoldToRiverRaise);
+    // Multiway: bet, raised, folds; the checker who folds made no bet.
+    let hal = events(&conn, "Hal", MW_BET_RAISED_FOLDS);
+    let spot = assert_spot(&hal, StatKey::FoldToRiverRaise, true);
+    assert_eq!(spot.counterparty.creator, Some(player_id(&conn, "Cole")));
+    assert_eq!(spot.multiway, Some(true));
+    assert_no_spot(&events(&conn, "Bob", MW_BET_RAISED_FOLDS), StatKey::FoldToRiverRaise);
+    // Re-raising and calling all in are not folds; the hero raised both.
+    let cole = events(&conn, "Cole", BET_RAISED_RERAISES);
+    let spot = assert_spot(&cole, StatKey::FoldToRiverRaise, false);
+    assert_eq!(spot.counterparty.creator, Some(hero));
+    assert!(spot.counterparty.hero_created);
+    let bob = events(&conn, "Bob", OVERBET_RAISED_CALLS_ALL_IN);
+    assert_eq!(assert_spot(&bob, StatKey::FoldToRiverRaise, false).counterparty.creator, Some(hero));
+    // An all-in bet leaves no decision, raised or called.
+    assert_no_spot(&events(&conn, "Sam", MW_ALL_IN_BET_RAISED), StatKey::FoldToRiverRaise);
+    assert_no_spot(&events(&conn, "Sam", SHORT_ALL_IN_BET_CALLED), StatKey::FoldToRiverRaise);
+
+    let conn = setup();
+    // An unraised bet is no opportunity.
+    assert_no_spot(&events(&conn, "Bob", HERO_CHECKS_TWICE), StatKey::FoldToRiverRaise);
+    assert_no_spot(&events(&conn, "Hero", HERO_TRIPLE_BARREL), StatKey::FoldToRiverRaise);
+    // Overbet, raised, calls.
+    let bob = events(&conn, "Bob", RIVER_OVERBET_RAISED);
+    let spot = assert_spot(&bob, StatKey::FoldToRiverRaise, false);
+    assert_eq!(spot.counterparty.creator, Some(player_id(&conn, "Hal")));
+}
+
 // ---- F12: showdown tendencies
 
 #[test]
@@ -543,15 +655,16 @@ fn postflop_events_carry_hero_counterparty() {
 }
 
 #[test]
-fn every_postflop_key_is_exercised_by_the_fixture() {
-    let conn = setup();
+fn every_postflop_key_is_exercised_by_the_fixtures() {
     let mut seen = HashSet::new();
-    for name in ["Hero", "Sam", "Bob", "Ugo", "Hal", "Cole"] {
-        let id = player_id(&conn, name);
-        for hand in load_player_hands(&conn, id).unwrap() {
-            for event in extract_postflop(&hand, id) {
-                assert!(StatKey::POSTFLOP.contains(&event.key));
-                seen.insert((event.key, event.success));
+    for conn in [setup(), import_db(RIVER)] {
+        for name in ["Hero", "Sam", "Bob", "Ugo", "Hal", "Cole"] {
+            let id = player_id(&conn, name);
+            for hand in load_player_hands(&conn, id).unwrap() {
+                for event in extract_postflop(&hand, id) {
+                    assert!(StatKey::POSTFLOP.contains(&event.key));
+                    seen.insert((event.key, event.success));
+                }
             }
         }
     }

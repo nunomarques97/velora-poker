@@ -1,4 +1,4 @@
-//! Postflop stat extraction (catalogue rows F01–F12 of
+//! Postflop stat extraction (catalogue rows F01–F12, F15 and F16 of
 //! `docs/specs/opponent-engine.md`; definitions in section 9.2).
 //!
 //! The replay reads each postflop street's actions in order and emits, at
@@ -17,6 +17,7 @@ use std::collections::{HashMap, HashSet};
 use super::facts::{
     ActionFact, Counterparty, HandEvents, HandFacts, Relation, StatEvent, StatKey,
 };
+use super::pot::{replay_pot, SizeBucket};
 use super::preflop::{postflop_rank, relation};
 use crate::parser::{ActionType, Street};
 
@@ -318,7 +319,28 @@ pub fn extract_postflop(hand: &HandFacts, player_id: i64) -> Vec<StatEvent> {
     }
     if let Some(pos) = river.first_unopened(player_id) {
         let at = river.get(pos).index;
-        events.push(event(StatKey::RiverBet, is(&river, pos, ActionType::Bet), None, &river, at));
+        let bet = is(&river, pos, ActionType::Bet);
+        events.push(event(StatKey::RiverBet, bet, None, &river, at));
+        if bet {
+            // River sizing (row F15): every river bet he made, by the size
+            // bucket of section 9 (an all-in is `allin` whatever its
+            // fraction). A bet without a pot to size against counts in
+            // neither share.
+            let bucket = replay_pot(hand).action(at).and_then(|a| a.bucket);
+            if let Some(bucket) = bucket {
+                let polar = matches!(bucket, SizeBucket::Overbet | SizeBucket::AllIn);
+                events.push(event(StatKey::RiverBetPolar, polar, None, &river, at));
+                events.push(event(StatKey::RiverBetSmall, bucket == SizeBucket::Small, None, &river, at));
+            }
+            // Fold to a river raise (row F16): his bet was raised and he acts
+            // again (an all-in bet leaves him no decision). The creator is
+            // the last raise he faces.
+            if let Some(next) = river.next_of(player_id, pos).filter(|&n| river.aggression_between(pos, n)) {
+                let raiser = river.0[pos + 1..next].iter().rev().find(|a| is_aggression(a)).map(|a| a.player_id);
+                let at = river.get(next).index;
+                events.push(event(StatKey::FoldToRiverRaise, is(&river, next, ActionType::Fold), raiser, &river, at));
+            }
+        }
     }
     // River raise: the player's first river action taken while facing a
     // bet, before they bet or raised on the river themselves.
