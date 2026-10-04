@@ -1,0 +1,73 @@
+PokerStars Hand #270000000911:  Hold'em No Limit (₹5/₹10 INR) - 2026/09/27 22:00:00 ET
+Table 'Audit Zeta' 6-max Seat #2 is the button
+Seat 1: Hero (₹1000 in chips) 
+Seat 2: Villain (₹1000 in chips) 
+Villain: posts small blind ₹5
+Hero: posts big blind ₹10
+*** HOLE CARDS ***
+Dealt to Hero [Ah Kh]
+Villain: folds 
+Uncalled bet (₹5) returned to Hero
+Hero collected ₹10 from pot
+Hero: doesn't show hand 
+*** SUMMARY ***
+Total pot ₹10 | Rake ₹0 
+Seat 1: Hero (big blind) collected (₹10)
+Seat 2: Villain (button) (small blind) folded before Flop
+
+
+
+PokerStars Hand #270000000912:  Hold'em No Limit ($0.05/$0.10 CAD) - 2026/09/27 22:01:00 ET
+Table 'Audit Zeta' 6-max Seat #2 is the button
+Seat 1: Hero ($10 in chips) 
+Seat 2: Villain ($10 in chips) 
+Villain: posts small blind $0.05
+Hero: posts big blind $0.10
+*** HOLE CARDS ***
+Dealt to Hero [Ah Kh]
+Villain: folds 
+Uncalled bet ($0.05) returned to Hero
+Hero collected $0.10 from pot
+Hero: doesn't show hand 
+*** SUMMARY ***
+Total pot $0.10 | Rake $0 
+Seat 1: Hero (big blind) collected ($0.10)
+Seat 2: Villain (button) (small blind) folded before Flop
+
+
+
+PokerStars Hand #270000000913:  Hold'em No Limit (€0.05/€0.10 USD) - 2026/09/27 22:02:00 ET
+Table 'Audit Zeta' 6-max Seat #1 is the button
+Seat 1: Hero (€10 in chips) 
+Seat 2: Villain (€10 in chips) 
+Hero: posts small blind €0.05
+Villain: posts big blind €0.10
+*** HOLE CARDS ***
+Dealt to Hero [Ah Kh]
+Hero: folds 
+Uncalled bet (€0.05) returned to Villain
+Villain collected €0.10 from pot
+Villain: doesn't show hand 
+*** SUMMARY ***
+Total pot €0.10 | Rake €0 
+Seat 1: Hero (button) (small blind) folded before Flop
+Seat 2: Villain (big blind) collected (€0.10)
+
+
+
+PokerStars Hand #270000000914:  Hold'em No Limit ($0.05/$0.10 USD) - 2026/09/27 22:03:00 ET
+Table 'Audit Zeta' 6-max Seat #2 is the button
+Seat 1: Hero ($10 in chips) 
+Seat 2: Villain ($10 in chips) 
+Villain: posts small blind $0.05
+Hero: posts big blind $0.10
+*** HOLE CARDS ***
+Dealt to Hero [Ah Kh]
+Villain: folds 
+Uncalled bet ($0.05) returned to Hero
+Hero collected $0.10 from pot
+Hero: doesn't show hand 
+*** SUMMARY ***
+Total pot $0.10 | Rake $0 
+Seat 1: Hero (big blind) collected ($0.10)
+Seat 2: Villain (button) (small blind) folded before Flop

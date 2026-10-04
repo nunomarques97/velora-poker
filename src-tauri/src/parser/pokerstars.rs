@@ -155,17 +155,33 @@ fn summary_seat_regex() -> &'static Regex {
     RE.get_or_init(|| Regex::new(r"^Seat (\d+): (.+)$").expect("valid summary seat regex"))
 }
 
-fn currency_from_symbol(symbol: &str, code: Option<&str>) -> String {
-    if let Some(code) = code {
-        return code.to_string();
+/// Currency of a cash header from its stake symbols and optional code.
+///
+/// Only USD, EUR, GBP and play money (no symbol, no code) are supported. Any
+/// other code (`CAD`), a code that contradicts the symbol (`€0.05/€0.10 USD`)
+/// or two different symbols is refused rather than stored: the amounts would
+/// be filed under the wrong currency.
+fn cash_currency(sb_symbol: &str, bb_symbol: &str, code: Option<&str>) -> Result<String, ParseError> {
+    let from_symbol = match (sb_symbol, bb_symbol) {
+        ("$", "$") => Some("USD"),
+        ("€", "€") => Some("EUR"),
+        ("£", "£") => Some("GBP"),
+        ("", "") => None,
+        _ => return Err(unsupported_currency(sb_symbol, code)),
+    };
+    match (from_symbol, code) {
+        (Some(currency), None) => Ok(currency.to_string()),
+        (Some(currency), Some(code)) if currency == code => Ok(currency.to_string()),
+        (None, None) => Ok("PLAY".to_string()),
+        _ => Err(unsupported_currency(sb_symbol, code)),
     }
-    match symbol {
-        "$" => "USD",
-        "€" => "EUR",
-        "£" => "GBP",
-        _ => "PLAY",
-    }
-    .to_string()
+}
+
+fn unsupported_currency(symbol: &str, code: Option<&str>) -> ParseError {
+    ParseError::UnsupportedFormat(format!(
+        "unsupported currency '{symbol}' {}",
+        code.unwrap_or_default()
+    ))
 }
 
 /// PokerStars doesn't always zero-pad a single-digit hour (e.g. `0:06:23`
@@ -239,10 +255,7 @@ fn parse_cash_header(line: &str) -> Result<HeaderInfo, ParseError> {
     let bb_symbol = &header[5];
     let big_blind = parse_money(&header[6]).unwrap_or(0.0);
     let currency_code = header.get(7).map(|m| m.as_str());
-    let currency = currency_from_symbol(
-        if !sb_symbol.is_empty() { sb_symbol } else { bb_symbol },
-        currency_code,
-    );
+    let currency = cash_currency(sb_symbol, bb_symbol, currency_code)?;
     let date = &header[8];
     let time = &header[9];
 
@@ -346,6 +359,39 @@ fn strip_known_name<'a>(rest: &'a str, known_names: &[String]) -> Option<(String
     best.map(|name| (name.clone(), rest[name.len()..].trim_start()))
 }
 
+/// Splits a `NAME: description` line into its player and description.
+///
+/// The player is the longest seated name followed by `": "`, so a name that
+/// itself holds `": "` keeps its lines, and `Bob` never takes a line of
+/// `Bob1`. Opponents control two texts here and neither may create, drop or
+/// alter an action:
+///
+/// - chat, `NAME said, "TEXT"`: the text can quote an action
+///   (`said, "Bob: calls $5"`). A line whose first `": "` comes after
+///   ` said, "` and that no seated name opens is chat, never an action;
+/// - names: matched whole against the seat lines, never cut at a colon.
+///
+/// A line no seated name opens is still split at its first `": "`, so a real
+/// action by a player whose seat line did not parse still reaches the
+/// integrity gate (`action_by_unseated_player`) instead of vanishing.
+fn split_action_line<'a>(line: &'a str, known_names: &[String]) -> Option<(String, &'a str)> {
+    let seated = known_names
+        .iter()
+        .filter(|name| {
+            line.strip_prefix(name.as_str())
+                .map_or(false, |rest| rest.starts_with(": "))
+        })
+        .max_by_key(|name| name.len());
+    if let Some(name) = seated {
+        return Some((name.clone(), &line[name.len() + 2..]));
+    }
+    let (name, desc) = line.split_once(": ")?;
+    if name.contains(" said, \"") {
+        return None;
+    }
+    Some((name.to_string(), desc))
+}
+
 /// Strips **every** leading position tag, not just the first.
 ///
 /// A heads-up summary line carries two, because the button also posts the small
@@ -399,10 +445,23 @@ fn round_cents(value: f64) -> f64 {
 /// street total after raising ("raises X to Y" — Y, not the increment), so
 /// raises are resolved against a running per-street commitment that resets at
 /// every street change instead of being summed directly.
-fn compute_contributed(actions: &[ParsedAction]) -> HashMap<String, f64> {
+///
+/// A dead blind (`posts small & big blinds`) is all contributed, but only its
+/// big-blind part is live: it is the poster's preflop commitment, and the
+/// small-blind part is dead money a later raise does not count.
+fn compute_contributed(
+    actions: &[ParsedAction],
+    dead_blinds: &[(String, f64)],
+    big_blind: f64,
+) -> HashMap<String, f64> {
     let mut contributed: HashMap<String, f64> = HashMap::new();
     let mut street_commitment: HashMap<String, f64> = HashMap::new();
-    let mut current_street: Option<Street> = None;
+    for (name, amount) in dead_blinds {
+        *contributed.entry(name.clone()).or_insert(0.0) += amount;
+        let live = if big_blind > 0.0 { amount.min(big_blind) } else { *amount };
+        street_commitment.insert(name.clone(), live);
+    }
+    let mut current_street: Option<Street> = Some(Street::Preflop);
 
     for action in actions {
         if current_street != Some(action.street) {
@@ -549,6 +608,8 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
     let mut results: HashMap<String, ParsedPlayerResult> = HashMap::new();
     let mut collected: HashMap<String, f64> = HashMap::new();
     let mut uncalled_returned: HashMap<String, f64> = HashMap::new();
+    let mut dead_blinds: Vec<(String, f64)> = Vec::new();
+    let mut unrecognized_actions: Vec<String> = Vec::new();
     // Trailing text after `in chips` per seat, and the set of players carrying a
     // real `*** SUMMARY ***` description. Both feed the dealt-in decision below.
     let mut seat_markers: HashMap<String, String> = HashMap::new();
@@ -557,6 +618,8 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
     // completeness check below wants one for each dealt-in seat.
     let mut summary_seats: std::collections::HashSet<(i64, String)> = std::collections::HashSet::new();
     let mut has_summary = false;
+    // Closed by the first line after the table line that is not a seat line.
+    let mut seat_block_closed = false;
     // First clean card set seen per player: `Dealt to`, `shows`, `showed` or
     // `mucked`. They agree on a well-formed hand; keeping the first makes the
     // result independent of which of them a malformed line spoiled.
@@ -568,14 +631,19 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
             continue;
         }
 
-        if let Some(caps) = table_regex().captures(line) {
-            table_name = caps[1].to_string();
-            max_seats = caps[2].parse().unwrap_or(0);
-            button_seat = caps[3].parse().unwrap_or(0);
-            continue;
+        if !seat_block_closed && seats.is_empty() {
+            if let Some(caps) = table_regex().captures(line) {
+                table_name = caps[1].to_string();
+                max_seats = caps[2].parse().unwrap_or(0);
+                button_seat = caps[3].parse().unwrap_or(0);
+                continue;
+            }
         }
 
-        if !in_summary {
+        // The table line and then the seat lines open the hand. Any later line
+        // shaped like one (a name or chat that quotes a seat or table line) is
+        // neither a seat nor a new button.
+        if !seat_block_closed {
             if let Some(caps) = seat_regex().captures(line) {
                 let name = caps[2].to_string();
                 seat_markers.insert(name.clone(), caps[4].to_string());
@@ -589,6 +657,7 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
                 });
                 continue;
             }
+            seat_block_closed = true;
         }
 
         if line == "*** HOLE CARDS ***" {
@@ -682,22 +751,27 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
                 *collected.entry(name).or_insert(0.0) += amount;
                 continue;
             }
-        }
 
-        if let Some(street) = current_street {
-            if let Some(idx) = line.find(": ") {
-                let name = &line[..idx];
-                let desc = &line[idx + 2..];
-                if let Some((action_type, amount, is_all_in)) = parse_action_desc(desc) {
-                    actions.push(ParsedAction {
-                        street,
-                        order,
-                        player_name: name.to_string(),
-                        action_type,
-                        amount,
-                        is_all_in,
-                    });
-                    order += 1;
+            if let Some(street) = current_street {
+                if let Some((name, desc)) = split_action_line(line, &known_names) {
+                    if let Some((action_type, amount, is_all_in)) = parse_action_desc(desc) {
+                        actions.push(ParsedAction {
+                            street,
+                            order,
+                            player_name: name,
+                            action_type,
+                            amount,
+                            is_all_in,
+                        });
+                        order += 1;
+                    } else if let Some(amount) = desc
+                        .strip_prefix("posts small & big blinds ")
+                        .and_then(parse_money)
+                    {
+                        dead_blinds.push((name, amount));
+                    } else if desc.starts_with("posts ") {
+                        unrecognized_actions.push(line.to_string());
+                    }
                 }
             }
         }
@@ -719,8 +793,11 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
     // the one being fixed. The union of the two signals is used rather than
     // either alone so that a hand where one signal is unexpectedly absent still
     // keeps the player.
-    let acted: std::collections::HashSet<&str> =
-        actions.iter().map(|a| a.player_name.as_str()).collect();
+    let acted: std::collections::HashSet<&str> = actions
+        .iter()
+        .map(|a| a.player_name.as_str())
+        .chain(dead_blinds.iter().map(|(name, _)| name.as_str()))
+        .collect();
     let mut skipped_seats: Vec<SkippedSeat> = Vec::new();
     seats.retain(|seat| {
         let dealt_in = acted.contains(seat.player_name.as_str())
@@ -764,9 +841,11 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
     // aren't money, and PokerStars hand-history text carries no buy-in/payout
     // to convert them with, so tournament hands never get a `net_result`
     // (see `ParsedPlayerResult::net_result` doc).
+    // Every dealt-in cash player gets one, 0 for a player who put nothing in.
     if header.format == HandFormat::Cash {
-        let contributed = compute_contributed(&actions);
+        let contributed = compute_contributed(&actions, &dead_blinds, header.big_blind);
         let mut names: std::collections::HashSet<String> = std::collections::HashSet::new();
+        names.extend(seats.iter().map(|s| s.player_name.clone()));
         names.extend(contributed.keys().cloned());
         names.extend(collected.keys().cloned());
         names.extend(uncalled_returned.keys().cloned());
@@ -805,6 +884,8 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
         seats,
         skipped_seats,
         actions,
+        dead_blinds,
+        unrecognized_actions,
         results,
         complete,
         raw_text: block.to_string(),

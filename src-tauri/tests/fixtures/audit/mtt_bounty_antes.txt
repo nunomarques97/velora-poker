@@ -1,0 +1,57 @@
+PokerStars Hand #270000000401: Tournament #4200000001, $10+$10+$2.20 USD Hold'em No Limit - Level IX (150/300) - 2026/09/23 22:00:00 WET [2026/09/23 17:00:00 ET]
+Table '4200000001 12' 9-max Seat #3 is the button
+Seat 1: Wade (8200 in chips, $10 bounty)
+Seat 2: Xena (15400 in chips, $15 bounty)
+Seat 3: Yuri (3100 in chips, $10 bounty)
+Seat 4: Zoe (12000 in chips, $10 bounty) is sitting out
+Seat 5: Abe (9850 in chips, $12.50 bounty)
+Seat 6: Bea (20500 in chips, $22.50 bounty)
+Seat 7: Cal (6000 in chips, $10 bounty)
+Seat 8: TourneyHero (11000 in chips, $10 bounty)
+Seat 9: Dot (2200 in chips, $10 bounty)
+Wade: posts the ante 40
+Xena: posts the ante 40
+Yuri: posts the ante 40
+Zoe: posts the ante 40
+Abe: posts the ante 40
+Bea: posts the ante 40
+Cal: posts the ante 40
+TourneyHero: posts the ante 40
+Dot: posts the ante 40
+Zoe: posts small blind 150
+Abe: posts big blind 300
+*** HOLE CARDS ***
+Dealt to TourneyHero [Ah Qh]
+Bea: folds
+Cal: folds
+TourneyHero: raises 360 to 660
+Dot: raises 1500 to 2160 and is all-in
+Wade: folds
+Xena: folds
+Yuri: raises 900 to 3060 and is all-in
+Zoe: folds
+Abe: folds
+TourneyHero: calls 2400
+Dot: shows [Kc Ks] (a pair of Kings)
+Yuri: shows [Jd Jh] (a pair of Jacks)
+TourneyHero: shows [Ah Qh] (high card Ace)
+*** FLOP *** [Qd 8c 4s]
+*** TURN *** [Qd 8c 4s] [2h]
+*** RIVER *** [Qd 8c 4s 2h] [9d]
+*** SHOW DOWN ***
+TourneyHero collected 1800 from side pot
+Dot collected 7290 from main pot
+TourneyHero wins $5 for eliminating Yuri and their own bounty increases by $5 to $15
+Yuri finished the tournament
+*** SUMMARY ***
+Total pot 9090 Main pot 7290. Side pot 1800. | Rake 0
+Board [Qd 8c 4s 2h 9d]
+Seat 1: Wade folded before Flop (didn't bet)
+Seat 2: Xena folded before Flop (didn't bet)
+Seat 3: Yuri (button) showed [Jd Jh] and lost with a pair of Jacks
+Seat 4: Zoe (small blind) folded before Flop
+Seat 5: Abe (big blind) folded before Flop
+Seat 6: Bea folded before Flop (didn't bet)
+Seat 7: Cal folded before Flop (didn't bet)
+Seat 8: TourneyHero showed [Ah Qh] and won (1800) with a pair of Queens
+Seat 9: Dot showed [Kc Ks] and won (7290) with a pair of Kings

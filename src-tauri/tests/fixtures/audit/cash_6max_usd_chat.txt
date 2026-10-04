@@ -1,0 +1,92 @@
+PokerStars Hand #270000000001:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/20 20:00:00 ET
+Table 'Audit Alpha' 6-max Seat #1 is the button
+Seat 1: Alice ($50 in chips) 
+Seat 2: Bob ($48.50 in chips) 
+Seat 3: Carol ($62.10 in chips) 
+Seat 4: Dave ($50 in chips) 
+Seat 5: Erin ($23.75 in chips) 
+Seat 6: Hero ($50 in chips) 
+Bob: posts small blind $0.25
+Carol: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [Ah Kd]
+Dave: folds 
+Erin said, "Bob: calls $5"
+Erin: folds 
+Hero: raises $1 to $1.50
+Alice said, "nh: raises $100 to $200 and is all-in"
+Alice: folds 
+Bob: folds 
+Carol: raises $3.50 to $5
+Dave said, "Hero: folds"
+Hero: calls $3.50
+*** FLOP *** [Ks 7h 2c]
+Carol: bets $4
+Bob said, "Carol: checks"
+Hero: raises $8 to $12
+Carol: folds 
+Uncalled bet ($8) returned to Hero
+Hero collected $17.75 from pot
+Hero: doesn't show hand 
+*** SUMMARY ***
+Total pot $18.25 | Rake $0.50 
+Board [Ks 7h 2c]
+Seat 1: Alice (button) folded before Flop (didn't bet)
+Seat 2: Bob (small blind) folded before Flop
+Seat 3: Carol (big blind) folded on the Flop
+Seat 4: Dave folded before Flop (didn't bet)
+Seat 5: Erin folded before Flop (didn't bet)
+Seat 6: Hero collected ($17.75)
+
+
+
+PokerStars Hand #270000000002:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/20 20:01:30 ET
+Table 'Audit Alpha' 6-max Seat #2 is the button
+Seat 1: Alice ($50 in chips) 
+Seat 2: Bob ($48.25 in chips) 
+Seat 3: Carol ($53.10 in chips) 
+Seat 4: Dave ($50 in chips) 
+Seat 5: Erin ($23.75 in chips) 
+Seat 6: Hero ($58.75 in chips) 
+Carol: posts small blind $0.25
+Dave: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [6s 6d]
+Erin: calls $0.50
+Hero: calls $0.50
+Alice: folds 
+Bob: calls $0.50
+Carol: calls $0.25
+Dave: checks 
+*** FLOP *** [Jh 6c 2d]
+Carol: checks 
+Dave: checks 
+Erin: checks 
+Hero: checks 
+Bob: checks 
+*** TURN *** [Jh 6c 2d] [9s]
+Carol: checks 
+Dave: bets $1.50
+Erin said, "Dave: folds lol"
+Erin: calls $1.50
+Hero: calls $1.50
+Bob: folds 
+Carol: folds 
+*** RIVER *** [Jh 6c 2d 9s] [Qd]
+Dave: checks 
+Erin: checks 
+Hero: checks 
+*** SHOW DOWN ***
+Dave: shows [Jd Tc] (a pair of Jacks)
+Erin: mucks hand 
+Hero: shows [6s 6d] (three of a kind, Sixes)
+Hero collected $6.75 from pot
+*** SUMMARY ***
+Total pot $7 | Rake $0.25 
+Board [Jh 6c 2d 9s Qd]
+Seat 1: Alice folded before Flop (didn't bet)
+Seat 2: Bob (button) folded on the Turn
+Seat 3: Carol (small blind) folded on the Turn
+Seat 4: Dave (big blind) showed [Jd Tc] and lost with a pair of Jacks
+Seat 5: Erin mucked [Ac 5c]
+Seat 6: Hero showed [6s 6d] and won ($6.75) with three of a kind, Sixes

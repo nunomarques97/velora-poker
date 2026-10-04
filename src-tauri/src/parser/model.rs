@@ -111,7 +111,8 @@ pub struct ParsedPlayerResult {
     pub won_at_showdown: bool,
     /// Net money result for this player in this hand (amount collected from
     /// the pot plus any uncalled bet returned, minus everything they put in).
-    /// Only ever populated for cash-game hands — tournament hand-history text
+    /// Populated for every dealt-in player of a cash-game hand (0 for one who
+    /// put nothing in) and only for those — tournament hand-history text
     /// has no real-money figures to compute this from (chips aren't money),
     /// so this stays `None` for every tournament hand rather than reporting a
     /// fabricated or chip-denominated value.
@@ -204,6 +205,15 @@ pub struct ParsedHand {
     /// import path can report them rather than discard them silently.
     pub skipped_seats: Vec<SkippedSeat>,
     pub actions: Vec<ParsedAction>,
+    /// `posts small & big blinds` (a cash dead blind), as `(player, amount)`.
+    /// Counted in the poster's `net_result` and dealt-in test, but not an
+    /// action row: no stored action type means "dead blind" yet, so the
+    /// engine's pot reconstruction still comes up short by it.
+    pub dead_blinds: Vec<(String, f64)>,
+    /// Lines `NAME: posts …` the parser cannot read (a straddle, a post type
+    /// it does not know). The money in them is missing from the hand, so the
+    /// integrity gate refuses it (`unrecognized_action`).
+    pub unrecognized_actions: Vec<String>,
     pub results: HashMap<String, ParsedPlayerResult>,
     /// True when the text reaches `*** SUMMARY ***` and the summary carries a
     /// seat line for every dealt-in player, i.e. PokerStars finished writing

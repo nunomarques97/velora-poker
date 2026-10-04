@@ -1,0 +1,22 @@
+PokerStars Hand #270000000804:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/26 20:03:00 ET
+Table 'Audit Delta' 6-max Seat #1 is the button
+Seat 1: Alice ($50 in chips) 
+Seat 3: Seat 1: Alice ($1 in chips) ($50 in chips) 
+Alice: posts small blind $0.25
+Seat 1: Alice ($1 in chips): posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Alice [Ah 2c]
+Seat 1: Alice ($1 in chips) said, "Seat 5: Alice ($9 in chips)"
+Alice: calls $0.25
+Seat 1: Alice ($1 in chips): checks 
+*** FLOP *** [Kd 9s 4c]
+Seat 1: Alice ($1 in chips): bets $1
+Alice: folds 
+Uncalled bet ($1) returned to Seat 1: Alice ($1 in chips)
+Seat 1: Alice ($1 in chips) collected $1 from pot
+Seat 1: Alice ($1 in chips): doesn't show hand 
+*** SUMMARY ***
+Total pot $1 | Rake $0 
+Board [Kd 9s 4c]
+Seat 1: Alice (button) (small blind) folded on the Flop
+Seat 3: Seat 1: Alice ($1 in chips) (big blind) collected ($1)

@@ -1,0 +1,29 @@
+PokerStars Hand #270000000501: Tournament #4300000001, $9.65+$0.35 USD Hold'em No Limit - Level II (15/30) - 2026/09/24 18:00:00 WET [2026/09/24 13:00:00 ET]
+Table '4300000001 1' 3-max Seat #2 is the button
+Seat 1: SpinA (480 in chips)
+Seat 2: Hero (530 in chips)
+Seat 3: SpinB (490 in chips)
+SpinB: posts small blind 15
+SpinA: posts big blind 30
+*** HOLE CARDS ***
+Dealt to Hero [Ac Jc]
+Hero: raises 30 to 60
+SpinB: calls 45
+SpinA: folds
+*** FLOP *** [Js 6h 6c]
+SpinB: checks
+Hero: bets 60
+SpinB: raises 370 to 430 and is all-in
+Hero: calls 370
+*** TURN *** [Js 6h 6c] [2d]
+*** RIVER *** [Js 6h 6c 2d] [Kd]
+*** SHOW DOWN ***
+SpinB: shows [6d 5d] (three of a kind, Sixes)
+Hero: shows [Ac Jc] (two pair, Jacks and Sixes)
+SpinB collected 1010 from pot
+*** SUMMARY ***
+Total pot 1010 | Rake 0
+Board [Js 6h 6c 2d Kd]
+Seat 1: SpinA (big blind) folded before Flop
+Seat 2: Hero (button) showed [Ac Jc] and lost with two pair, Jacks and Sixes
+Seat 3: SpinB (small blind) showed [6d 5d] and won (1010) with three of a kind, Sixes

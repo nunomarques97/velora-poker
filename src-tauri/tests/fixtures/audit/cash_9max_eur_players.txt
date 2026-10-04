@@ -1,0 +1,96 @@
+PokerStars Hand #270000000101:  Hold'em No Limit (€0.01/€0.02 EUR) - 2026/09/21 21:00:00 WET [2026/09/21 16:00:00 ET]
+Table 'Audit Beta' 9-max Seat #2 is the button
+Seat 1: Ivan (€2 in chips) 
+Seat 2: Judy (€1.84 in chips) 
+Seat 3: Ken (€2.37 in chips) 
+Seat 4: Liam (€2 in chips) is sitting out
+Seat 5: Mia (€2.10 in chips) 
+Seat 6: Ned (€0.96 in chips) 
+Seat 7: Olga (€3 in chips) is sitting out
+Seat 8: Hero (€2 in chips) 
+Olga has returned
+Ken: posts small blind €0.01
+Mia: posts big blind €0.02
+Olga: posts small & big blinds €0.03
+*** HOLE CARDS ***
+Dealt to Hero [Td Tc]
+Ned has timed out
+Ned: folds 
+Olga: checks 
+Hero: raises €0.06 to €0.08
+Ivan is disconnected 
+Ivan has timed out while disconnected
+Ivan: folds 
+Judy: calls €0.08
+Ken: folds 
+Mia: folds 
+Olga: raises €0.16 to €0.24
+Pjotr joins the table at seat #9 
+Hero: calls €0.16
+Judy: folds 
+*** FLOP *** [8h 3d 2s]
+Olga: bets €0.30
+Liam leaves the table
+Hero: calls €0.30
+Ivan is connected 
+*** TURN *** [8h 3d 2s] [Kc]
+Olga: checks 
+Hero: checks 
+*** RIVER *** [8h 3d 2s Kc] [5d]
+Olga: bets €0.50
+Hero: calls €0.50
+*** SHOW DOWN ***
+Olga: shows [Kd Qs] (a pair of Kings)
+Hero: mucks hand 
+Olga collected €2.10 from pot
+*** SUMMARY ***
+Total pot €2.20 | Rake €0.10 
+Board [8h 3d 2s Kc 5d]
+Seat 1: Ivan folded before Flop (didn't bet)
+Seat 2: Judy (button) folded before Flop
+Seat 3: Ken (small blind) folded before Flop
+Seat 4: Liam 
+Seat 5: Mia (big blind) folded before Flop
+Seat 6: Ned folded before Flop (didn't bet)
+Seat 7: Olga showed [Kd Qs] and won (€2.10) with a pair of Kings
+Seat 8: Hero mucked [Td Tc]
+
+
+
+PokerStars Hand #270000000102:  Hold'em No Limit (€0.01/€0.02 EUR) - 2026/09/21 21:01:10 WET [2026/09/21 16:01:10 ET]
+Table 'Audit Beta' 9-max Seat #3 is the button
+Seat 1: Ivan (€2 in chips) is sitting out
+Seat 2: Judy (€1.76 in chips) 
+Seat 3: Ken (€2.36 in chips) 
+Seat 5: Mia (€2.08 in chips) 
+Seat 6: Ned (€0.96 in chips) 
+Seat 7: Olga (€4.05 in chips) 
+Seat 8: Hero (€0.96 in chips) 
+Seat 9: Pjotr (€2 in chips) 
+Mia: posts small blind €0.01
+Ned: posts big blind €0.02
+Pjotr: posts big blind €0.02
+Ivan: sits out 
+*** HOLE CARDS ***
+Dealt to Hero [9c 8c]
+Olga: folds 
+Hero: folds 
+Pjotr: checks 
+Judy: raises €0.04 to €0.06
+Ken: folds 
+Mia: folds 
+Ned: folds 
+Pjotr: folds 
+Uncalled bet (€0.04) returned to Judy
+Judy collected €0.07 from pot
+Judy: doesn't show hand 
+*** SUMMARY ***
+Total pot €0.07 | Rake €0 
+Seat 1: Ivan 
+Seat 2: Judy collected (€0.07)
+Seat 3: Ken (button) folded before Flop (didn't bet)
+Seat 5: Mia (small blind) folded before Flop
+Seat 6: Ned (big blind) folded before Flop
+Seat 7: Olga folded before Flop (didn't bet)
+Seat 8: Hero folded before Flop (didn't bet)
+Seat 9: Pjotr folded before Flop

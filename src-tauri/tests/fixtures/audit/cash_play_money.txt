@@ -1,0 +1,26 @@
+PokerStars Hand #270000000701:  Hold'em No Limit (10/20) - 2026/09/25 21:00:00 WET [2026/09/25 16:00:00 ET]
+Table 'Audit Play' 6-max Seat #1 is the button
+Seat 1: PlayA (2000 in chips) 
+Seat 3: PlayB (1500 in chips) 
+Seat 5: Hero (2500 in chips) 
+PlayB: posts small blind 10
+Hero: posts big blind 20
+*** HOLE CARDS ***
+Dealt to Hero [8d 7d]
+PlayA: calls 20
+PlayB: calls 10
+Hero: checks 
+*** FLOP *** [9d 6s 2c]
+PlayB: checks 
+Hero: bets 40
+PlayA: folds 
+PlayB: folds 
+Uncalled bet (40) returned to Hero
+Hero collected 60 from pot
+Hero: doesn't show hand 
+*** SUMMARY ***
+Total pot 60 | Rake 0 
+Board [9d 6s 2c]
+Seat 1: PlayA (button) folded on the Flop
+Seat 3: PlayB (small blind) folded on the Flop
+Seat 5: Hero (big blind) collected (60)

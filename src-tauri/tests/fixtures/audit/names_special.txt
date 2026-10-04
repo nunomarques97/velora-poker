@@ -1,0 +1,90 @@
+PokerStars Hand #270000000801:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/26 20:00:00 ET
+Table 'Audit Delta' 6-max Seat #6 is the button
+Seat 1: Bob ($50 in chips) 
+Seat 2: Bob1 ($50 in chips) 
+Seat 3: Bob Jr ($50 in chips) 
+Seat 4: O'Brien ($50 in chips) 
+Seat 5: [Pro] Kai ($50 in chips) 
+Seat 6: Zoë ゆうき ($50 in chips) 
+Bob: posts small blind $0.25
+Bob1: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to [Pro] Kai [Qs Qd]
+Bob Jr: calls $0.50
+O'Brien: folds 
+Bob said, "Bob1: folds"
+[Pro] Kai: raises $2 to $2.50
+Zoë ゆうき: folds 
+Bob: folds 
+Bob1: calls $2
+Bob Jr: calls $2
+*** FLOP *** [Qh 8s 3c]
+Bob1: checks 
+Bob Jr: bets $4
+O'Brien said, "Bob Jr: raises $4 to $8"
+Zoë ゆうき said, "Bob: calls $4"
+[Pro] Kai: raises $8 to $12
+Bob1: folds 
+Bob Jr: calls $8
+*** TURN *** [Qh 8s 3c] [2d]
+Bob Jr: checks 
+[Pro] Kai: bets $20
+Bob Jr: folds 
+Uncalled bet ($20) returned to [Pro] Kai
+[Pro] Kai collected $30.75 from pot
+[Pro] Kai: doesn't show hand 
+*** SUMMARY ***
+Total pot $31.75 | Rake $1 
+Board [Qh 8s 3c 2d]
+Seat 1: Bob (small blind) folded before Flop
+Seat 2: Bob1 (big blind) folded on the Flop
+Seat 3: Bob Jr folded on the Turn
+Seat 4: O'Brien folded before Flop (didn't bet)
+Seat 5: [Pro] Kai collected ($30.75)
+Seat 6: Zoë ゆうき (button) folded before Flop (didn't bet)
+
+
+
+PokerStars Hand #270000000802:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/26 20:01:00 ET
+Table 'Audit Delta' 6-max Seat #1 is the button
+Seat 1: Mr (BR) ($50 in chips) 
+Seat 2: Bob ($49.75 in chips) 
+Mr (BR): posts small blind $0.25
+Bob: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Bob [7c 2d]
+Mr (BR): raises $1 to $1.50
+Bob said, "Mr (BR): folds"
+Bob: folds 
+Uncalled bet ($1) returned to Mr (BR)
+Mr (BR) collected $1 from pot
+Mr (BR): doesn't show hand 
+*** SUMMARY ***
+Total pot $1 | Rake $0 
+Seat 1: Mr (BR) (button) (small blind) collected ($1)
+Seat 2: Bob (big blind) folded before Flop
+
+
+
+PokerStars Hand #270000000803:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/26 20:02:00 ET
+Table 'Audit Delta' 6-max Seat #2 is the button
+Seat 1: Ann: X ($50 in chips) 
+Seat 2: Bob ($49.25 in chips) 
+Bob: posts small blind $0.25
+Ann: X: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Bob [Ac Ah]
+Bob: raises $1 to $1.50
+Ann: X: calls $1
+*** FLOP *** [Td 4c 4h]
+Ann: X: checks 
+Bob: bets $2
+Ann: X: folds 
+Uncalled bet ($2) returned to Bob
+Bob collected $3 from pot
+Bob: doesn't show hand 
+*** SUMMARY ***
+Total pot $3 | Rake $0 
+Board [Td 4c 4h]
+Seat 1: Ann: X (big blind) folded on the Flop
+Seat 2: Bob (button) (small blind) collected ($3)

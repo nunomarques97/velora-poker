@@ -199,6 +199,44 @@ pub fn check(hand: &ParsedHand) -> Vec<Problem> {
         ));
     }
 
+    // Every dealt-in player posts or acts at least once in an English hand
+    // history, so a dealt-in seat with no action means its lines were not
+    // read: a non-English client, or a line format the parser does not know.
+    // Stored, the hand would count for that player with nothing to count.
+    let acted: std::collections::HashSet<&str> = hand
+        .actions
+        .iter()
+        .map(|a| a.player_name.as_str())
+        .chain(hand.dead_blinds.iter().map(|(name, _)| name.as_str()))
+        .collect();
+    let silent = hand
+        .seats
+        .iter()
+        .filter(|s| !acted.contains(s.player_name.as_str()))
+        .count();
+    if silent > 0 {
+        problems.push(Problem::reject(
+            "dealt_in_without_action",
+            format!(
+                "hand {} has {silent} dealt-in player(s) with no readable action",
+                hand.hand_id
+            ),
+        ));
+    }
+
+    // A post the parser could not read (e.g. a straddle) is money missing
+    // from the hand: its pot, net results and preflop order would be wrong.
+    if !hand.unrecognized_actions.is_empty() {
+        problems.push(Problem::reject(
+            "unrecognized_action",
+            format!(
+                "hand {} has {} post line(s) the parser cannot read",
+                hand.hand_id,
+                hand.unrecognized_actions.len()
+            ),
+        ));
+    }
+
     // Action ordering must never contradict street ordering.
     let mut last_rank = 0u8;
     let mut last_order = i64::MIN;

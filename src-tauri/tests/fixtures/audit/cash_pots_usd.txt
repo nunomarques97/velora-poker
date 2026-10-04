@@ -1,0 +1,76 @@
+PokerStars Hand #270000000301:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/22 19:00:00 ET
+Table 'Audit Gamma' 6-max Seat #4 is the button
+Seat 1: Quinn ($50 in chips) 
+Seat 2: Rosa ($50 in chips) 
+Seat 4: Tara ($50 in chips) 
+Seat 5: Uma ($50 in chips) 
+Uma: posts small blind $0.25
+Quinn: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Rosa [Ah Td]
+Rosa: raises $1 to $1.50
+Tara: calls $1.50
+Uma: folds 
+Quinn: calls $1
+*** FLOP *** [Ac Tc 5d]
+Quinn: checks 
+Rosa: bets $2
+Tara: calls $2
+Quinn: calls $2
+*** TURN *** [Ac Tc 5d] [9h]
+Quinn: checks 
+Rosa: checks 
+Tara: checks 
+*** RIVER *** [Ac Tc 5d 9h] [5s]
+Quinn: checks 
+Rosa: bets $3
+Tara: calls $3
+Quinn: calls $3
+*** SHOW DOWN ***
+Rosa: shows [Ah Td] (two pair, Aces and Tens)
+Tara: shows [As Th] (two pair, Aces and Tens)
+Quinn: mucks hand 
+Rosa collected $9.88 from pot
+Tara collected $9.87 from pot
+*** SUMMARY ***
+Total pot $19.75 | Rake $0 
+Board [Ac Tc 5d 9h 5s]
+Seat 1: Quinn (big blind) mucked [Kc Qc]
+Seat 2: Rosa showed [Ah Td] and won ($9.88) with two pair, Aces and Tens
+Seat 4: Tara (button) showed [As Th] and won ($9.87) with two pair, Aces and Tens
+Seat 5: Uma (small blind) folded before Flop
+
+
+
+PokerStars Hand #270000000302:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/22 19:02:00 ET
+Table 'Audit Gamma' 6-max Seat #1 is the button
+Seat 1: Quinn ($10 in chips) 
+Seat 2: Rosa ($50 in chips) 
+Seat 4: Tara ($30 in chips) 
+Seat 5: Uma ($50 in chips) 
+Rosa: posts small blind $0.25
+Tara: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Rosa [Kh Kd]
+Uma: raises $1 to $1.50
+Quinn: raises $8.50 to $10 and is all-in
+Rosa: raises $40 to $50 and is all-in
+Tara: calls $29.50 and is all-in
+Uma: folds 
+Uncalled bet ($20) returned to Rosa
+*** FLOP *** [2c 7d 9s]
+*** TURN *** [2c 7d 9s] [3h]
+*** RIVER *** [2c 7d 9s 3h] [Jc]
+*** SHOW DOWN ***
+Quinn: shows [Ac Ad] (a pair of Aces)
+Rosa: shows [Kh Kd] (a pair of Kings)
+Tara: shows [Qs Qh] (a pair of Queens)
+Rosa collected $40 from side pot
+Quinn collected $31.50 from main pot
+*** SUMMARY ***
+Total pot $71.50 Main pot $31.50. Side pot $40. | Rake $0 
+Board [2c 7d 9s 3h Jc]
+Seat 1: Quinn (button) showed [Ac Ad] and won ($31.50) with a pair of Aces
+Seat 2: Rosa (small blind) showed [Kh Kd] and won ($40) with a pair of Kings
+Seat 4: Tara (big blind) showed [Qs Qh] and lost with a pair of Queens
+Seat 5: Uma folded before Flop

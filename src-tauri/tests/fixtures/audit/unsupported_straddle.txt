@@ -1,0 +1,49 @@
+PokerStars Hand #270000000921:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/27 23:00:00 ET
+Table 'Audit Eta' 6-max Seat #1 is the button
+Seat 1: Hero ($50 in chips) 
+Seat 2: Villain ($50 in chips) 
+Seat 3: Robot ($50 in chips) 
+Seat 4: Carl ($50 in chips) 
+Villain: posts small blind $0.25
+Robot: posts big blind $0.50
+Carl: posts straddle $1
+*** HOLE CARDS ***
+Dealt to Hero [Ah Kh]
+Hero: raises $2 to $3
+Villain: folds 
+Robot: folds 
+Carl: folds 
+Uncalled bet ($2) returned to Hero
+Hero collected $2.75 from pot
+Hero: doesn't show hand 
+*** SUMMARY ***
+Total pot $2.75 | Rake $0 
+Seat 1: Hero (button) collected ($2.75)
+Seat 2: Villain (small blind) folded before Flop
+Seat 3: Robot (big blind) folded before Flop
+Seat 4: Carl folded before Flop
+
+
+
+PokerStars Hand #270000000922:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/09/27 23:01:00 ET
+Table 'Audit Eta' 6-max Seat #2 is the button
+Seat 1: Hero ($51.75 in chips) 
+Seat 2: Villain ($49.75 in chips) 
+Seat 3: Robot ($49.50 in chips) 
+Seat 4: Carl ($49 in chips) 
+Robot: posts small blind $0.25
+Carl: posts big blind $0.50
+*** HOLE CARDS ***
+Dealt to Hero [7h 2c]
+Hero: folds 
+Villain: folds 
+Robot: folds 
+Uncalled bet ($0.25) returned to Carl
+Carl collected $0.50 from pot
+Carl: doesn't show hand 
+*** SUMMARY ***
+Total pot $0.50 | Rake $0 
+Seat 1: Hero folded before Flop (didn't bet)
+Seat 2: Villain (button) folded before Flop (didn't bet)
+Seat 3: Robot (small blind) folded before Flop
+Seat 4: Carl (big blind) collected ($0.50)

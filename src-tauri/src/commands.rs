@@ -1989,6 +1989,15 @@ fn problem_explanation(code: &str) -> &'static str {
             "A hand was read before it was fully written: it was left out until its complete \
              copy arrives, so its result is never counted from half a hand."
         }
+        "dealt_in_without_action" => {
+            "A hand had a player whose actions couldn't be read, usually because the \
+             PokerStars client writes hand histories in a language other than English: it \
+             was left out rather than counted with nothing in it."
+        }
+        "unrecognized_action" => {
+            "A hand had a blind or post this version can't read (such as a straddle): it was \
+             left out because its pot and results would be wrong."
+        }
         "undecodable_text" => {
             "A hand had a player or table name with unreadable characters: it was left out \
              rather than filed under a player who doesn't exist."
