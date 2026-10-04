@@ -529,6 +529,74 @@ fn reshove_at_20bb_over_open_counts() {
     assert_no_spot(&events(&conn, "Cole", C_UTG_OPEN_CO_3BET), StatKey::Reshove);
 }
 
+// ------------------------------------------- stage and knockout samples (T02, K02)
+
+/// `engine_preflop_stage_ko.txt`: four MTT hands at 200/400 whose average
+/// stack is under 20bb (late), one MTT hand at 100/200 (middle, 36bb), one
+/// late Spin & Go hand (3-max, 5bb average), and four knockout hands (one
+/// late, three middle). Vil is the scored villain; Sho is a short stack who
+/// shoves, Big the big stack.
+const STAGE_KO: &str = include_str!("fixtures/engine_preflop_stage_ko.txt");
+
+fn counts(agg: engine::StatAgg) -> (u32, u32) {
+    (agg.hits, agg.opportunities)
+}
+
+#[test]
+fn late_stage_and_knockout_shove_samples_are_counted_per_replay() {
+    let mut conn = db::open(std::path::Path::new(":memory:")).expect("open db");
+    let summary = import::import_text(&mut conn, STAGE_KO).expect("import stage/KO fixture");
+    assert_eq!(summary.hands_imported, 10);
+    let replay = |name: &str| engine::player_replay(&conn, player_id(&conn, name), None).expect("replay");
+
+    // Vil calls late shoves in 301 and 307 (knockout) and folds in 302: 2 of
+    // 3. His call in the middle-stage hand 305 and in the late Spin hand 306
+    // count only in the all-stage stat (a Spin has no ICM).
+    let vil = replay("Vil");
+    assert_eq!(vil.format, engine::FormatKey::Mtt);
+    assert_eq!(counts(vil.late_call_vs_shove), (2, 3));
+    // Folded to at 12.5bb late: shoves in 303, folds in 304.
+    assert_eq!(counts(vil.late_open_shove), (1, 2));
+    // Knockout hands 307–310: calls in 307 and 310 of four shoves faced.
+    assert_eq!(vil.ko_hands, 4);
+    assert_eq!(counts(vil.ko), (2, 4));
+    // He covers Sho (7000 v 3000, 9000 v 2000): calls in 307, folds in 308.
+    assert_eq!(counts(vil.ko_covering), (1, 2));
+    // Big covers him (10000 v 9000): folds in 309, calls in 310.
+    assert_eq!(counts(vil.ko_covered), (1, 2));
+    // The all-in opens he faced are no steals: no late-stage blind sample.
+    assert_eq!(counts(vil.late), (0, 0));
+    // Every shove he faced, in every format and stage: 301, 302, 305–310.
+    let all = vil.agg.stat(engine::View::AllTime, StatKey::CallVsShove, 0.25);
+    assert_eq!((all.hits, all.opportunities), (5, 8));
+
+    // Sho open-shoves late in 301, 302 and 307 and folds the button in 304:
+    // 3 of 4. His shoves at the middle stage (305, 308; folds 309, 310) and
+    // in the late Spin hand 306 stay out.
+    let sho = replay("Sho");
+    assert_eq!(counts(sho.late_open_shove), (3, 4));
+    // He faced Vil's late shove in 303 and folded.
+    assert_eq!(counts(sho.late_call_vs_shove), (0, 1));
+    // He never faced a knockout shove.
+    assert_eq!(counts(sho.ko), (0, 0));
+
+    // Hero folds every knockout shove: Sho's (he covers him) in 307 and 308,
+    // Big's (Big covers him) in 309 and 310.
+    let hero = replay("Hero");
+    assert_eq!(counts(hero.ko_covering), (0, 2));
+    assert_eq!(counts(hero.ko_covered), (0, 2));
+
+    // The rule input shrinks each sample toward the call_vs_shove and
+    // open_shove priors of the replay's format.
+    let input = vil.rule_input(&|key| engine::stat_spec(key).builtin_prior(engine::FormatKey::Mtt), None);
+    let covering = input.ko_call_covering.expect("covering leg");
+    assert_eq!((covering.key, covering.hits, covering.opportunities), (StatKey::CallVsShove, 1, 2));
+    let late = input.late_open_shove.expect("late open-shove sample");
+    assert_eq!((late.key, late.hits, late.opportunities), (StatKey::OpenShove, 1, 2));
+    assert!(input.late_call_vs_shove.is_some() && input.ko_call_covered.is_some());
+    assert!(replay("Sho").rule_input(&|_| 0.25, None).ko_call_covering.is_none(), "no sample, no stat");
+}
+
 // ---------------------------------------------------------------- catalogue coverage
 
 #[test]

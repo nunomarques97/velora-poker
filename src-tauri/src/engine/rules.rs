@@ -86,6 +86,18 @@ pub const LIMP_HIGH: [f64; 4] = [0.08, 0.08, 0.08, 0.12];
 /// takes the + .12 of [`LIMP_HIGH`] (its small blind limps by design); cash
 /// and Zoom have no stage.
 pub const STAGE_EARLY_LIMP: [f64; 4] = [0.06, 0.06, 0.06, 0.12];
+/// `stage.late.calls_shoves` (row T02): late-stage MTT `call_vs_shove` at
+/// least prior plus this. Pay jumps make correct late calls tighter than
+/// the all-stage prior, so the bar sits under the general + .12.
+pub const LATE_CALLS_SHOVES: f64 = 0.10;
+/// `stage.late.shoves_wide` (row T02): late-stage MTT `open_shove` at least
+/// prior plus this, the general `stk.open_shove.wide` delta.
+pub const LATE_SHOVES_WIDE: f64 = 0.15;
+/// `ko.calls_when_covering` (row K02): knockout calls of shoves he covers
+/// at least prior plus [`KO_COVERING_HIGH`], and at least [`KO_COVER_GAP`]
+/// above his calls of shoves that cover him.
+pub const KO_COVERING_HIGH: f64 = 0.15;
+pub const KO_COVER_GAP: f64 = 0.15;
 
 /// Upper bound of the 3-bet-jam depth (section 5): above push/fold and up
 /// to this effective stack, preflop re-raises are all-ins, so the
@@ -408,6 +420,14 @@ pub const RULES: &[RuleDef] = &[
     rule("stage.early.passive", "T01", F::Stage, X, Some("LMP"),
         "Open-limps {raw}% in the early levels.",
         "Isolate his limps to 4x with pairs, suited aces and broadways."),
+    // ---- late-stage push/fold (T02): ICM-insensitive calls and shoves,
+    // MTT only (a Spin & Go pays the winner, so it has no ICM).
+    rule("stage.late.calls_shoves", "T02", F::Stage, X, Some("ICM-"),
+        "Calls {raw}% of all-in shoves late in the tournament.",
+        "Late, shove into him for value only: 55+, A8+, KJ+; no K5o or 65s-type shoves."),
+    rule("stage.late.shoves_wide", "T02", F::Stage, X, Some("SHV"),
+        "Open-shoves {raw}% when folded to late in the tournament.",
+        "Call his late shoves with 22+, A2+, K9s+ if you cover him; 66+, A9+, KQ if not."),
     with(
         rule("ko.big_bounty", "K01", F::Bounty, T, Some("KO"),
             "Carries a {ratio}× bounty ({amount}).",
@@ -419,6 +439,16 @@ pub const RULES: &[RuleDef] = &[
             "Calls {raw}% of shoves in bounty games.",
             "When he covers you, shove into him only with 77+, AT+ and KQ."),
         &[(Variant::HeroCovers, "While you cover him, shove pairs, aces and broadways into him.")],
+    ),
+    // ---- bounty-driven calling (K02): his knockout calls split by cover.
+    with(
+        rule("ko.calls_when_covering", "K02", F::Bounty, X, Some("KO+"),
+            "Calls {raw}% of shoves he covers in bounty games, {lowRaw}% ({lowHits}/{lowN}) when covered.",
+            "When he covers you, shove only 77+, AT+ and KQ; when you cover him, any pair or ace."),
+        &[
+            (Variant::HeroCovers, "While you cover him, shove any pair, any ace and broadways into him."),
+            (Variant::HeroCovered, "While he covers you, shove into him only with 77+, AT+ and KQ."),
+        ],
     ),
     // ---- postflop (F01–F12, F14). Audit 2026-10 (section 17.6): every
     // postflop advice names its street and a size or hand class, and reads
@@ -749,6 +779,13 @@ pub struct RuleInput {
     pub late_fold_to_steal_bb: Option<ShrunkStat>,
     /// `limp` over early-stage tournament hands (row T01).
     pub early_limp: Option<ShrunkStat>,
+    /// `call_vs_shove` and `open_shove` over late-stage MTT hands (row T02).
+    pub late_call_vs_shove: Option<ShrunkStat>,
+    pub late_open_shove: Option<ShrunkStat>,
+    /// `call_vs_shove` over knockout hands, split by whether he covered the
+    /// shover (his starting stack at least the shover's) or not (row K02).
+    pub ko_call_covering: Option<ShrunkStat>,
+    pub ko_call_covered: Option<ShrunkStat>,
 }
 
 impl RuleInput {
@@ -770,6 +807,15 @@ fn tournament(hand: &HandFacts) -> bool {
     matches!(FormatKey::of_hand(hand), FormatKey::Mtt | FormatKey::Spin)
 }
 
+/// Whether `player_id` covered the shover he faced (row K02): his starting
+/// stack is at least the shover's, so a call could win the shover's bounty.
+/// `None` when the shover or a stack is unknown.
+fn covers_shover(hand: &HandFacts, player_id: i64, shover: Option<i64>) -> Option<bool> {
+    let own = hand.seat_of(player_id)?.starting_stack?;
+    let theirs = hand.seat_of(shover?)?.starting_stack?;
+    Some(own >= theirs)
+}
+
 /// The prior-free part of one villain's rule input: everything a replay of
 /// his hands yields. Building it is the expensive step (every hand is
 /// replayed); [`PlayerReplay::rule_input`] then only shrinks counts toward
@@ -789,6 +835,17 @@ pub struct PlayerReplay {
     /// tournament hands (row T01).
     pub late: StatAgg,
     pub early: StatAgg,
+    /// `call_vs_shove` and `open_shove` over late-stage MTT hands (row T02).
+    /// Spin & Go hands are left out: a Spin pays the winner, so its late
+    /// stage carries no ICM pressure to be insensitive to.
+    pub late_call_vs_shove: StatAgg,
+    pub late_open_shove: StatAgg,
+    /// Knockout `call_vs_shove` split by cover (row K02): `ko_covering` when
+    /// his starting stack was at least the shover's (a call could win the
+    /// shover's bounty), `ko_covered` otherwise. A shove whose stacks are
+    /// unknown counts in neither.
+    pub ko_covering: StatAgg,
+    pub ko_covered: StatAgg,
     /// Every showdown record, oldest first.
     pub showdowns: Vec<ShowdownRecord>,
     pub form: Option<FormCounts>,
@@ -806,6 +863,10 @@ impl PlayerReplay {
         let mut ko = StatAgg::default();
         let mut late = StatAgg::default();
         let mut early = StatAgg::default();
+        let mut late_call_vs_shove = StatAgg::default();
+        let mut late_open_shove = StatAgg::default();
+        let mut ko_covering = StatAgg::default();
+        let mut ko_covered = StatAgg::default();
         let mut ko_hands = 0;
         for hand in hands.iter().filter(|h| h.seat_of(player_id).is_some()) {
             let knockout = hand.seats.iter().any(|s| s.bounty.is_some());
@@ -816,15 +877,32 @@ impl PlayerReplay {
                 continue;
             }
             ko_hands += u32::from(knockout);
+            let late_mtt = stage == Some(Stage::Late) && FormatKey::of_hand(hand) == FormatKey::Mtt;
             for event in extract_preflop(hand, player_id).iter().filter(|e| e.opportunity) {
-                let target = match (event.key, stage) {
-                    (StatKey::CallVsShove, _) if knockout => &mut ko,
-                    (StatKey::FoldToStealBb, Some(Stage::Late)) => &mut late,
-                    (StatKey::Limp, Some(Stage::Early)) => &mut early,
-                    _ => continue,
-                };
-                target.opportunities += 1;
-                target.hits += u32::from(event.success);
+                let mut targets: Vec<&mut StatAgg> = Vec::new();
+                match (event.key, stage) {
+                    (StatKey::CallVsShove, _) => {
+                        if knockout {
+                            targets.push(&mut ko);
+                            match covers_shover(hand, player_id, event.counterparty.creator) {
+                                Some(true) => targets.push(&mut ko_covering),
+                                Some(false) => targets.push(&mut ko_covered),
+                                None => {}
+                            }
+                        }
+                        if late_mtt {
+                            targets.push(&mut late_call_vs_shove);
+                        }
+                    }
+                    (StatKey::OpenShove, _) if late_mtt => targets.push(&mut late_open_shove),
+                    (StatKey::FoldToStealBb, Some(Stage::Late)) => targets.push(&mut late),
+                    (StatKey::Limp, Some(Stage::Early)) => targets.push(&mut early),
+                    _ => {}
+                }
+                for target in targets {
+                    target.opportunities += 1;
+                    target.hits += u32::from(event.success);
+                }
             }
         }
         PlayerReplay {
@@ -835,6 +913,10 @@ impl PlayerReplay {
             ko_hands,
             late,
             early,
+            late_call_vs_shove,
+            late_open_shove,
+            ko_covering,
+            ko_covered,
             showdowns,
             form: form_counts(hands, player_id),
         }
@@ -878,6 +960,14 @@ impl PlayerReplay {
                 .then(|| shrunk_of(self.late, StatKey::FoldToStealBb, prior(StatKey::FoldToStealBb))),
             early_limp: (self.early.opportunities > 0)
                 .then(|| shrunk_of(self.early, StatKey::Limp, prior(StatKey::Limp))),
+            late_call_vs_shove: (self.late_call_vs_shove.opportunities > 0)
+                .then(|| shrunk_of(self.late_call_vs_shove, StatKey::CallVsShove, prior(StatKey::CallVsShove))),
+            late_open_shove: (self.late_open_shove.opportunities > 0)
+                .then(|| shrunk_of(self.late_open_shove, StatKey::OpenShove, prior(StatKey::OpenShove))),
+            ko_call_covering: (self.ko_covering.opportunities > 0)
+                .then(|| shrunk_of(self.ko_covering, StatKey::CallVsShove, prior(StatKey::CallVsShove))),
+            ko_call_covered: (self.ko_covered.opportunities > 0)
+                .then(|| shrunk_of(self.ko_covered, StatKey::CallVsShove, prior(StatKey::CallVsShove))),
         }
     }
 }
@@ -1130,8 +1220,9 @@ impl Adapt<'_> {
     }
 
     /// Section 5: at `push_fold` only stack, short-stack, bounty, recency
-    /// and showdown reads apply, plus the late-stage blind read: late-stage
-    /// blind battles are played at that depth (audit 2026-10).
+    /// and showdown reads apply, plus the late-stage reads: late-stage blind
+    /// battles (audit 2026-10) and the late shoves and calls of row T02 are
+    /// played at that depth.
     fn eligible(&self, def: &RuleDef) -> bool {
         if self.bucket() != Some(StackBucket::PushFold) {
             return true;
@@ -1139,7 +1230,7 @@ impl Adapt<'_> {
         match def.family {
             Family::Stack | Family::Bounty | Family::Recency | Family::Showdown => true,
             Family::Context => def.id == "ctx.short_stack",
-            Family::Stage => def.id == "stage.late.overfolds_blinds",
+            Family::Stage => def.id.starts_with("stage.late."),
             Family::Preflop | Family::Postflop | Family::H2h => false,
         }
     }
@@ -1152,8 +1243,11 @@ impl Adapt<'_> {
     }
 
     fn multiplier(&self, def: &RuleDef) -> f64 {
-        let reshove_family =
-            def.id.starts_with("stk.reshove.") || def.id.starts_with("stk.call_shove.");
+        // The late-stage call read is `stk.call_shove.*` over late hands and
+        // replaces it at the late stage (row T02), so it ranks like it.
+        let reshove_family = def.id.starts_with("stk.reshove.")
+            || def.id.starts_with("stk.call_shove.")
+            || def.id == "stage.late.calls_shoves";
         if reshove_family && self.bucket() == Some(StackBucket::Reshove) {
             RESHOVE_PRIORITY
         } else if def.family == Family::H2h {
@@ -1416,6 +1510,13 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
                 })),
             );
         }
+        // ---- late-stage push/fold (T02): MTT only; a Spin & Go pays the
+        // winner, so wide late calls and shoves there ignore no ICM.
+        if ctx.stage == Some(Stage::Late) && input.format_key() == FormatKey::Mtt {
+            let late = |stat: &Option<ShrunkStat>, delta| stat.filter(|s| s.displayable() && passes(s, Dir::Above(delta)));
+            out.stat("stage.late.calls_shoves", single(late(&input.late_call_vs_shove, LATE_CALLS_SHOVES).as_ref()));
+            out.stat("stage.late.shoves_wide", single(late(&input.late_open_shove, LATE_SHOVES_WIDE).as_ref()));
+        }
 
         // ---- bounty (K01)
         if let Some(bounty) = ctx.bounty.as_ref().filter(|b| b.is_big()) {
@@ -1449,6 +1550,19 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
         "ko.hunts_bounties",
         single(input.ko_call_vs_shove.as_ref().filter(|s| s.displayable() && passes(s, Dir::Above(0.15)))),
     );
+    // ---- bounty-driven calling (K02): both cover legs shown, the covering
+    // one high and well above the covered one.
+    let shown_leg = |stat: &Option<ShrunkStat>| stat.filter(|s| s.displayable());
+    if let (Some(covering), Some(covered)) = (shown_leg(&input.ko_call_covering), shown_leg(&input.ko_call_covered)) {
+        if passes(&covering, Dir::Above(KO_COVERING_HIGH)) && covering.shrunk - covered.shrunk >= KO_COVER_GAP - EPS {
+            let low = vec![
+                ("lowRaw", whole_pct(covered.raw.unwrap_or_default())),
+                ("lowHits", covered.hits.to_string()),
+                ("lowN", covered.opportunities.to_string()),
+            ];
+            out.stat_with("ko.calls_when_covering", single(Some(&covering)).map(|h| h.and(&covered)), low);
+        }
+    }
 
     // ---- postflop (F01–F12)
     out.stat("post.cbet_flop.high", single(one(input, CbetFlop, Dir::Above(0.15))));
@@ -1628,11 +1742,27 @@ pub const SHOWDOWN_OPPOSITES: [(&str, &str); 2] = [
     ("sd.shows_bluffs", "post.cbet_river.low"),
 ];
 
+/// Tournament reads and the more general read they refine (row T02, K02).
+/// The late-stage reads count the general stat over his late MTT hands
+/// only, the late stage the context is in, and their advice adds the cover
+/// condition pay jumps impose. The cover split explains his knockout calls
+/// (the general bounty read) and his late calls, whose value-only advice
+/// overstates his calls when he is covered. The first read of each pair
+/// always stays.
+pub const TOURNAMENT_OPPOSITES: [(&str, &str); 6] = [
+    ("stage.late.calls_shoves", "stk.call_shove.wide"),
+    ("stage.late.calls_shoves", "stk.call_shove.tight"),
+    ("stage.late.shoves_wide", "stk.open_shove.wide"),
+    ("stage.late.shoves_wide", "stk.open_shove.tight"),
+    ("ko.calls_when_covering", "ko.hunts_bounties"),
+    ("ko.calls_when_covering", "stage.late.calls_shoves"),
+];
+
 /// Removes the weaker read of every [`PREFLOP_OPPOSITES`] and
 /// [`POSTFLOP_OPPOSITES`] pair that fired together: the lower score goes,
 /// then the lower deviation; a tie keeps the pair's first read. Of every
-/// [`H2H_OPPOSITES`] and [`SHOWDOWN_OPPOSITES`] pair, the general read
-/// goes, whatever the scores.
+/// [`H2H_OPPOSITES`], [`SHOWDOWN_OPPOSITES`] and [`TOURNAMENT_OPPOSITES`]
+/// pair, the general read goes, whatever the scores.
 fn drop_opposites(reads: &mut Vec<EngineRuleResult>) {
     let at = |reads: &[EngineRuleResult], id: &str| reads.iter().position(|r| r.rule_id == id);
     for (a, b) in PREFLOP_OPPOSITES.into_iter().chain(POSTFLOP_OPPOSITES) {
@@ -1641,7 +1771,7 @@ fn drop_opposites(reads: &mut Vec<EngineRuleResult>) {
         let order = x.score.total_cmp(&y.score).then(x.deviation.total_cmp(&y.deviation));
         reads.remove(if order.is_lt() { i } else { j });
     }
-    for (specific, general) in H2H_OPPOSITES.into_iter().chain(SHOWDOWN_OPPOSITES) {
+    for (specific, general) in H2H_OPPOSITES.into_iter().chain(SHOWDOWN_OPPOSITES).chain(TOURNAMENT_OPPOSITES) {
         if let (Some(_), Some(j)) = (at(reads, specific), at(reads, general)) {
             reads.remove(j);
         }

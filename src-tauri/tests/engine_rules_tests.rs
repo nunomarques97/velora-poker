@@ -16,8 +16,9 @@ use velora_poker_lib::engine::context::{BountyContext, SeatRelation};
 use velora_poker_lib::engine::pooling::shrink;
 use velora_poker_lib::engine::rules::{
     observation_template, Variant, BB_VS_SB_OVERDEFEND, FOLD_TO_STEAL_LOW, FOLD_TO_STEAL_SB_HIGH,
-    H2H_OPPOSITES, HOVER_CARD_ADVICE_BUDGET, JAM_DEPTH_MAX_BB, LIMP_HIGH, POSTFLOP_OPPOSITES, PREFLOP_OPPOSITES,
-    SEAT_SUFFIX, SHOWDOWN_OPPOSITES, STAGE_EARLY_LIMP,
+    H2H_OPPOSITES, HOVER_CARD_ADVICE_BUDGET, JAM_DEPTH_MAX_BB, KO_COVERING_HIGH, KO_COVER_GAP, LATE_CALLS_SHOVES,
+    LATE_SHOVES_WIDE, LIMP_HIGH, POSTFLOP_OPPOSITES, PREFLOP_OPPOSITES, SEAT_SUFFIX, SHOWDOWN_OPPOSITES, STAGE_EARLY_LIMP,
+    TOURNAMENT_OPPOSITES,
 };
 use velora_poker_lib::engine::{
     evaluate_rules, latest_table_hand, player_rule_input, rule_def, stat_spec, templates,
@@ -517,7 +518,7 @@ fn short_stack_villain_gets_only_push_fold_reads() {
         assert!(
             matches!(r.family, Family::Stack | Family::Bounty | Family::Recency | Family::Showdown)
                 || r.rule_id == "ctx.short_stack"
-                || r.rule_id == "stage.late.overfolds_blinds",
+                || r.rule_id.starts_with("stage.late."),
             "{} is not a push/fold read",
             r.rule_id
         );
@@ -738,6 +739,190 @@ fn early_stage_limp_threshold_follows_format() {
     v.early_limp = Some(stat(m, Limp, h - 1, 40));
     assert!(!fires(&v, "stage.early.passive"), "MTT {}/40 does not", h - 1);
     assert_eq!(STAGE_EARLY_LIMP, [0.06, 0.06, 0.06, 0.12]);
+}
+
+// ------------------------------- late-stage push/fold and bounty calls (T02, K02)
+
+/// An MTT context at `eff` in the given stage.
+fn mtt_stage(eff: f64, stage: Stage) -> EngineContext {
+    let mut ctx = context(FormatKey::Mtt, eff);
+    ctx.stage = Some(stage);
+    ctx
+}
+
+#[test]
+fn late_stage_shove_reads_fire_at_threshold_and_not_below() {
+    // Row T02: late-stage MTT samples against the format prior. Call vs
+    // shove (prior .25, k 10) needs + .10: 12/30 → (12 + 2.5)/40 = .3625
+    // fires, 11/30 → .3375 does not. Open shove (prior .20, k 10) needs
+    // + .15: 12/30 → (12 + 2)/40 = .35 fires, 11/30 → .325 does not.
+    let m = FormatKey::Mtt;
+    assert_eq!((LATE_CALLS_SHOVES, LATE_SHOVES_WIDE), (0.10, 0.15));
+    for (id, key, delta) in [
+        ("stage.late.calls_shoves", CallVsShove, LATE_CALLS_SHOVES),
+        ("stage.late.shoves_wide", OpenShove, LATE_SHOVES_WIDE),
+    ] {
+        let late = |hits: u32, n: u32, ctx: Option<EngineContext>, format: FormatKey| {
+            let mut v = input(format, &[]);
+            let sample = Some(stat(format, key, hits, n));
+            match key {
+                CallVsShove => v.late_call_vs_shove = sample,
+                _ => v.late_open_shove = sample,
+            }
+            v.context = ctx;
+            v
+        };
+        let h = first_above(m, key, 30, delta);
+        assert_eq!(h, 12, "{id} boundary");
+        // Eligible at push/fold depth (12bb) and above it (30bb).
+        for eff in [12.0, 30.0] {
+            assert!(fires(&late(h, 30, Some(mtt_stage(eff, Stage::Late)), m), id), "{id} fires at {h}/30, {eff}bb");
+            assert!(!fires(&late(h - 1, 30, Some(mtt_stage(eff, Stage::Late)), m), id), "{id} not at {}/30", h - 1);
+        }
+        // n_min 6: 5 of 5 is not shown; 6 of 6 is (shrunk .53 and .50).
+        assert!(!fires(&late(5, 5, Some(mtt_stage(12.0, Stage::Late)), m), id), "{id} below n_min");
+        assert!(fires(&late(6, 6, Some(mtt_stage(12.0, Stage::Late)), m), id), "{id} at n_min");
+        // Only at the late stage, only in an MTT, only with a table context.
+        assert!(!fires(&late(20, 30, Some(mtt_stage(12.0, Stage::Middle)), m), id), "{id} middle stage");
+        assert!(!fires(&late(20, 30, None, m), id), "{id} without context");
+        let mut spin = context(FormatKey::Spin, 8.0);
+        spin.stage = Some(Stage::Late);
+        assert!(!fires(&late(20, 30, Some(spin), FormatKey::Spin), id), "{id} in a Spin & Go");
+    }
+
+    let mut v = input(m, &[]);
+    v.late_call_vs_shove = Some(stat(m, CallVsShove, 12, 30));
+    v.late_open_shove = Some(stat(m, OpenShove, 12, 30));
+    v.context = Some(mtt_stage(12.0, Stage::Late));
+    let reads = evaluate_rules(&v);
+    let calls = read(&reads, "stage.late.calls_shoves").unwrap();
+    assert_eq!(calls.observation, "Calls 40% (12/30) of all-in shoves late in the tournament.");
+    assert_eq!(calls.advice, "Late, shove into him for value only: 55+, A8+, KJ+; no K5o or 65s-type shoves.");
+    assert_eq!(calls.tag.as_deref(), Some("ICM-"));
+    assert_eq!(calls.family, Family::Stage);
+    let shoves = read(&reads, "stage.late.shoves_wide").unwrap();
+    assert_eq!(shoves.observation, "Open-shoves 40% (12/30) when folded to late in the tournament.");
+    assert_eq!(shoves.advice, "Call his late shoves with 22+, A2+, K9s+ if you cover him; 66+, A9+, KQ if not.");
+    assert_eq!(shoves.tag.as_deref(), Some("SHV"));
+    assert_eq!(shoves.evidence[0].stat_name, "open_shove");
+
+    // The late call read ranks like the call-vs-shove family it refines:
+    // ×1.5 at 15–25bb.
+    let score_at = |eff| {
+        let mut v = v.clone();
+        v.context = Some(mtt_stage(eff, Stage::Late));
+        read(&evaluate_rules(&v), "stage.late.calls_shoves").unwrap().score
+    };
+    assert!((score_at(20.0) / score_at(30.0) - 1.5).abs() < 1e-9);
+}
+
+#[test]
+fn bounty_driven_calling_needs_both_cover_legs_and_the_gap() {
+    // Row K02, MTT prior .25, k 10. Shoves he covers 14/20 → (14 + 2.5)/30
+    // = .55; shoves that cover him 2/20 → .15: .55 ≥ .40 and the gap .40 ≥
+    // .15, so the read fires.
+    let m = FormatKey::Mtt;
+    assert_eq!((KO_COVERING_HIGH, KO_COVER_GAP), (0.15, 0.15));
+    let bounty = |covering: (u32, u32), covered: (u32, u32)| {
+        let mut v = input(m, &[]);
+        v.ko_call_covering = Some(stat(m, CallVsShove, covering.0, covering.1));
+        v.ko_call_covered = Some(stat(m, CallVsShove, covered.0, covered.1));
+        v
+    };
+    let reads = evaluate_rules(&bounty((14, 20), (2, 20)));
+    let r = read(&reads, "ko.calls_when_covering").expect("bounty-driven read");
+    assert_eq!(r.observation, "Calls 70% (14/20) of shoves he covers in bounty games, 10% (2/20) when covered.");
+    assert_eq!(r.advice, "When he covers you, shove only 77+, AT+ and KQ; when you cover him, any pair or ace.");
+    assert_eq!(r.tag.as_deref(), Some("KO+"));
+    assert_eq!(r.family, Family::Bounty);
+    assert_eq!(r.confidence_pct, Some(67), "20 / (20 + 10) on both legs");
+    assert_eq!(r.evidence.len(), 2);
+
+    // The covering leg: + .15 over the prior. 10/20 → .4167 fires, 9/20 →
+    // .383 does not.
+    let h = first_above(m, CallVsShove, 20, KO_COVERING_HIGH);
+    assert_eq!(h, 10);
+    assert!(fires(&bounty((h, 20), (2, 20)), "ko.calls_when_covering"));
+    assert!(!fires(&bounty((h - 1, 20), (2, 20)), "ko.calls_when_covering"));
+    // The gap: with 14/20 covering (.55), 9/20 covered (.383, gap .167)
+    // fires and 10/20 (.4167, gap .133) does not: he calls wide whatever
+    // the cover, which is `ko.hunts_bounties`, not a bounty-driven split.
+    assert!(fires(&bounty((14, 20), (9, 20)), "ko.calls_when_covering"));
+    assert!(!fires(&bounty((14, 20), (10, 20)), "ko.calls_when_covering"));
+    // n_min 6 on each leg.
+    assert!(!fires(&bounty((14, 20), (0, 5)), "ko.calls_when_covering"), "covered leg below n_min");
+    assert!(!fires(&bounty((5, 5), (0, 20)), "ko.calls_when_covering"), "covering leg below n_min");
+    assert!(fires(&bounty((6, 6), (0, 6)), "ko.calls_when_covering"), "both legs at n_min");
+    // A missing leg never fires it.
+    let mut v = bounty((14, 20), (2, 20));
+    v.ko_call_covered = None;
+    assert!(!fires(&v, "ko.calls_when_covering"));
+
+    // The cover of the latest hand picks the half that applies; it stays
+    // eligible at push/fold.
+    let mut v = bounty((14, 20), (2, 20));
+    let mut ctx = mtt_stage(12.0, Stage::Middle);
+    for (covers, advice) in [
+        (Some(true), "While you cover him, shove any pair, any ace and broadways into him."),
+        (Some(false), "While he covers you, shove into him only with 77+, AT+ and KQ."),
+        (None, "When he covers you, shove only 77+, AT+ and KQ; when you cover him, any pair or ace."),
+    ] {
+        ctx.bounty = Some(BountyContext { amount: 10.0, currency: Some("USD".into()), ratio: Some(1.0), hero_covers: covers });
+        v.context = Some(ctx.clone());
+        let reads = evaluate_rules(&v);
+        assert_eq!(read(&reads, "ko.calls_when_covering").expect("at 12bb").advice, advice);
+    }
+}
+
+#[test]
+fn tournament_reads_replace_their_general_reads() {
+    // TOURNAMENT_OPPOSITES: the late-stage read counts the same stat over
+    // the stage the context is in, and the cover split explains his bounty
+    // and late calls, so the first read of each pair stays.
+    let m = FormatKey::Mtt;
+    let villain = |general: &[(StatKey, u32, u32)]| {
+        let mut v = input(m, general);
+        v.late_call_vs_shove = Some(stat(m, CallVsShove, 12, 30));
+        v.late_open_shove = Some(stat(m, OpenShove, 12, 30));
+        v
+    };
+    // Calls 15/30 → .4375 (wide), 2/30 → .1125 (tight); shoves 15/30 →
+    // .425 (wide), 1/30 → .075 (tight).
+    for general in [[(CallVsShove, 15, 30), (OpenShove, 15, 30)], [(CallVsShove, 2, 30), (OpenShove, 1, 30)]] {
+        let mut v = villain(&general);
+        v.context = Some(mtt_stage(12.0, Stage::Middle));
+        let middle = evaluate_rules(&v);
+        let generals: Vec<&str> = ids(&middle).into_iter().filter(|id| id.starts_with("stk.")).collect();
+        assert_eq!(generals.len(), 2, "both general reads fire at the middle stage: {generals:?}");
+        v.context = Some(mtt_stage(12.0, Stage::Late));
+        let late = evaluate_rules(&v);
+        for general in generals {
+            let (specific, _) = TOURNAMENT_OPPOSITES.iter().find(|(_, g)| *g == general).expect("declared pair");
+            assert!(read(&late, specific).is_some(), "{specific} fires late");
+            assert!(read(&late, general).is_none(), "{general} goes when {specific} fires");
+        }
+    }
+
+    // The cover split against the general bounty read and the late calls.
+    let mut v = villain(&[]);
+    v.ko_call_vs_shove = Some(stat(m, CallVsShove, 14, 20));
+    v.ko_call_covering = Some(stat(m, CallVsShove, 14, 20));
+    v.ko_call_covered = Some(stat(m, CallVsShove, 2, 20));
+    v.context = Some(mtt_stage(12.0, Stage::Late));
+    let reads = evaluate_rules(&v);
+    assert!(read(&reads, "ko.calls_when_covering").is_some());
+    assert!(read(&reads, "ko.hunts_bounties").is_none());
+    assert!(read(&reads, "stage.late.calls_shoves").is_none());
+    assert!(read(&reads, "stage.late.shoves_wide").is_some(), "a shove read is not a call read");
+    // Without the split, the general bounty read and the late call read stay.
+    v.ko_call_covered = Some(stat(m, CallVsShove, 12, 20));
+    let reads = evaluate_rules(&v);
+    assert!(read(&reads, "ko.calls_when_covering").is_none());
+    assert!(read(&reads, "ko.hunts_bounties").is_some());
+    assert!(read(&reads, "stage.late.calls_shoves").is_some());
+    for (a, b) in TOURNAMENT_OPPOSITES {
+        assert!(RULES.iter().any(|r| r.id == a) && RULES.iter().any(|r| r.id == b), "{a} / {b}");
+    }
 }
 
 // ------------------------------------------------------- seat relation (C01)
@@ -2310,15 +2495,27 @@ fn no_advice_references_in_hand_state() {
         v.late_fold_to_steal_bb = Some(stat(FormatKey::Mtt, FoldToStealBb, 16, 20));
         v.sizing = vec![tell(SizeBucket::Overbet, 4, 0, 0)];
         v.recent_form = Some(form(12, 9, 49, Some(FormFlag::Tilt), 3.3));
+        // A tournament villain whose late-stage and bounty-split reads fire
+        // (rows T02, K02); kept apart so the general reads they replace
+        // render on the first villain.
+        let mut t = input(FormatKey::Mtt, &[]);
+        t.late_call_vs_shove = Some(stat(FormatKey::Mtt, CallVsShove, 12, 30));
+        t.late_open_shove = Some(stat(FormatKey::Mtt, OpenShove, 12, 30));
+        t.ko_call_covering = Some(stat(FormatKey::Mtt, CallVsShove, 14, 20));
+        t.ko_call_covered = Some(stat(FormatKey::Mtt, CallVsShove, 2, 20));
+        t.context = ctx.clone();
+        let mut u = t.clone();
+        u.ko_call_covering = None;
         v.context = ctx;
-        for r in evaluate_rules(&v) {
+        for r in evaluate_rules(&v).into_iter().chain(evaluate_rules(&t)).chain(evaluate_rules(&u)) {
             assert_no_in_hand_state(&r.rule_id, &r.advice);
             assert_no_in_hand_state(&r.rule_id, &r.observation);
             seen.insert(r.rule_id);
         }
     }
     // The rendered pass reached advice variants and the new D107 reads.
-    for id in ["ko.big_bounty", "ko.hunts_bounties", "stage.late.overfolds_blinds", "pf.rfi_sb.wide", "pf.limp_call.high", "post.fold_cbet_river.high", "rec.tilt", "ctx.short_stack", "ctx.deep_stack"] {
+    for id in ["ko.big_bounty", "ko.hunts_bounties", "stage.late.overfolds_blinds", "pf.rfi_sb.wide", "pf.limp_call.high", "post.fold_cbet_river.high", "rec.tilt", "ctx.short_stack", "ctx.deep_stack",
+        "stage.late.calls_shoves", "stage.late.shoves_wide", "ko.calls_when_covering"] {
         assert!(seen.contains(id), "{id} was not rendered");
     }
 }
@@ -2584,7 +2781,7 @@ fn every_rule_has_a_unique_id_known_tag_and_catalogue_row() {
         "F3B", "C3B", "4B+", "F4B", "SQZ", "LMP", "ISO", "LRR", "LF", "CC+", "SHV", "NSV", "CLS",
         "TCS", "RSV", "RS-", "DEEP", "KO", "HNT", "CB+", "CB-", "FCB", "NFC", "BRL", "GIV", "TRB",
         "RV-", "DLY", "XR+", "XR-", "DNK", "FLT", "PRB", "RV+", "RR+", "WSD", "WWS", "H2H", "SDV",
-        "SDB", "SVB", "LSE", "TGT", "SB+", "LPC", "RVF",
+        "SDB", "SVB", "LSE", "TGT", "SB+", "LPC", "RVF", "ICM-", "KO+",
     ];
     // docs/ is local-only (git-excluded), so the spec is read at runtime and the
     // spec-membership checks are skipped on a checkout without it;

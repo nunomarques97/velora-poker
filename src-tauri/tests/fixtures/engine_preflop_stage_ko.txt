@@ -1,0 +1,302 @@
+PokerStars Hand #300000000301: Tournament #4100000002, €9.00+€1.00 EUR Hold'em No Limit - Level XII (200/400) - 2026/09/12 1:01:00 WET [2026/09/11 20:01:00 ET]
+Table '4100000002 1' 6-max Seat #4 is the button
+Seat 1: Hero (6000 in chips)
+Seat 2: Vil (7000 in chips)
+Seat 3: Sho (3000 in chips)
+Seat 4: Big (9000 in chips)
+Hero: posts the ante 50
+Vil: posts the ante 50
+Sho: posts the ante 50
+Big: posts the ante 50
+Hero: posts small blind 200
+Vil: posts big blind 400
+*** HOLE CARDS ***
+Dealt to Hero [9d 5c]
+Sho: raises 2550 to 2950 and is all-in
+Big: folds
+Hero: folds
+Vil: calls 2550
+*** FLOP *** [Kc 8d 3s]
+*** TURN *** [Kc 8d 3s] [2h]
+*** RIVER *** [Kc 8d 3s 2h] [Jc]
+*** SHOW DOWN ***
+Vil: shows [Qs Td] (high card King)
+Sho: shows [Ah 8h] (a pair of Eights)
+Sho collected 6300 from pot
+*** SUMMARY ***
+Total pot 6300 | Rake 0
+Board [Kc 8d 3s 2h Jc]
+Seat 1: Hero (small blind) folded before Flop
+Seat 2: Vil (big blind) showed [Qs Td] and lost with high card King
+Seat 3: Sho showed [Ah 8h] and won (6300) with a pair of Eights
+Seat 4: Big (button) folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000302: Tournament #4100000002, €9.00+€1.00 EUR Hold'em No Limit - Level XII (200/400) - 2026/09/12 1:02:00 WET [2026/09/11 20:02:00 ET]
+Table '4100000002 1' 6-max Seat #4 is the button
+Seat 1: Hero (6000 in chips)
+Seat 2: Vil (7000 in chips)
+Seat 3: Sho (3000 in chips)
+Seat 4: Big (9000 in chips)
+Hero: posts the ante 50
+Vil: posts the ante 50
+Sho: posts the ante 50
+Big: posts the ante 50
+Hero: posts small blind 200
+Vil: posts big blind 400
+*** HOLE CARDS ***
+Dealt to Hero [Th 4c]
+Sho: raises 2550 to 2950 and is all-in
+Big: folds
+Hero: folds
+Vil: folds
+Uncalled bet (2550) returned to Sho
+Sho collected 1200 from pot
+*** SUMMARY ***
+Total pot 1200 | Rake 0
+Seat 1: Hero (small blind) folded before Flop
+Seat 2: Vil (big blind) folded before Flop
+Seat 3: Sho collected (1200)
+Seat 4: Big (button) folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000303: Tournament #4100000002, €9.00+€1.00 EUR Hold'em No Limit - Level XII (200/400) - 2026/09/12 1:03:00 WET [2026/09/11 20:03:00 ET]
+Table '4100000002 1' 6-max Seat #3 is the button
+Seat 1: Hero (6000 in chips)
+Seat 2: Vil (5000 in chips)
+Seat 3: Sho (4000 in chips)
+Seat 4: Big (9000 in chips)
+Hero: posts the ante 50
+Vil: posts the ante 50
+Sho: posts the ante 50
+Big: posts the ante 50
+Big: posts small blind 200
+Hero: posts big blind 400
+*** HOLE CARDS ***
+Dealt to Hero [8s 3d]
+Vil: raises 4550 to 4950 and is all-in
+Sho: folds
+Big: folds
+Hero: folds
+Uncalled bet (4550) returned to Vil
+Vil collected 1200 from pot
+*** SUMMARY ***
+Total pot 1200 | Rake 0
+Seat 1: Hero (big blind) folded before Flop
+Seat 2: Vil collected (1200)
+Seat 3: Sho (button) folded before Flop (didn't bet)
+Seat 4: Big (small blind) folded before Flop
+
+
+PokerStars Hand #300000000304: Tournament #4100000002, €9.00+€1.00 EUR Hold'em No Limit - Level XII (200/400) - 2026/09/12 1:04:00 WET [2026/09/11 20:04:00 ET]
+Table '4100000002 1' 6-max Seat #3 is the button
+Seat 1: Hero (6000 in chips)
+Seat 2: Vil (5000 in chips)
+Seat 3: Sho (4000 in chips)
+Seat 4: Big (9000 in chips)
+Hero: posts the ante 50
+Vil: posts the ante 50
+Sho: posts the ante 50
+Big: posts the ante 50
+Big: posts small blind 200
+Hero: posts big blind 400
+*** HOLE CARDS ***
+Dealt to Hero [Qd 7c]
+Vil: folds
+Sho: folds
+Big: folds
+Uncalled bet (200) returned to Hero
+Hero collected 600 from pot
+Hero: doesn't show hand
+*** SUMMARY ***
+Total pot 600 | Rake 0
+Seat 1: Hero (big blind) collected (600)
+Seat 2: Vil folded before Flop (didn't bet)
+Seat 3: Sho (button) folded before Flop (didn't bet)
+Seat 4: Big (small blind) folded before Flop
+
+
+PokerStars Hand #300000000305: Tournament #4100000002, €9.00+€1.00 EUR Hold'em No Limit - Level V (100/200) - 2026/09/12 1:05:00 WET [2026/09/11 20:05:00 ET]
+Table '4100000002 1' 6-max Seat #4 is the button
+Seat 1: Hero (8000 in chips)
+Seat 2: Vil (9000 in chips)
+Seat 3: Sho (2000 in chips)
+Seat 4: Big (10000 in chips)
+Hero: posts the ante 25
+Vil: posts the ante 25
+Sho: posts the ante 25
+Big: posts the ante 25
+Hero: posts small blind 100
+Vil: posts big blind 200
+*** HOLE CARDS ***
+Dealt to Hero [6h 2c]
+Sho: raises 1775 to 1975 and is all-in
+Big: folds
+Hero: folds
+Vil: calls 1775
+*** FLOP *** [Kd 9c 4s]
+*** TURN *** [Kd 9c 4s] [7h]
+*** RIVER *** [Kd 9c 4s 7h] [2s]
+*** SHOW DOWN ***
+Vil: shows [Qc Jh] (high card King)
+Sho: shows [Ad 5d] (high card Ace)
+Sho collected 4150 from pot
+*** SUMMARY ***
+Total pot 4150 | Rake 0
+Board [Kd 9c 4s 7h 2s]
+Seat 1: Hero (small blind) folded before Flop
+Seat 2: Vil (big blind) showed [Qc Jh] and lost with high card King
+Seat 3: Sho showed [Ad 5d] and won (4150) with high card Ace
+Seat 4: Big (button) folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000306: Tournament #4300000002, $9.65+$0.35 USD Hold'em No Limit - Level VIII (50/100) - 2026/09/12 1:06:00 WET [2026/09/11 20:06:00 ET]
+Table '4300000002 1' 3-max Seat #3 is the button
+Seat 1: Hero (300 in chips)
+Seat 2: Vil (700 in chips)
+Seat 3: Sho (500 in chips)
+Hero: posts small blind 50
+Vil: posts big blind 100
+*** HOLE CARDS ***
+Dealt to Hero [7d 2h]
+Sho: raises 400 to 500 and is all-in
+Hero: folds
+Vil: calls 400
+*** FLOP *** [Ks Th 5c]
+*** TURN *** [Ks Th 5c] [3d]
+*** RIVER *** [Ks Th 5c 3d] [9s]
+*** SHOW DOWN ***
+Vil: shows [Qd Jd] (high card King)
+Sho: shows [As 4s] (high card Ace)
+Sho collected 1050 from pot
+*** SUMMARY ***
+Total pot 1050 | Rake 0
+Board [Ks Th 5c 3d 9s]
+Seat 1: Hero (small blind) folded before Flop
+Seat 2: Vil (big blind) showed [Qd Jd] and lost with high card King
+Seat 3: Sho (button) showed [As 4s] and won (1050) with high card Ace
+
+
+PokerStars Hand #300000000307: Tournament #4100000003, €4.50+€4.50+€1.00 EUR Hold'em No Limit - Level XII (200/400) - 2026/09/12 2:01:00 WET [2026/09/11 21:01:00 ET]
+Table '4100000003 1' 6-max Seat #4 is the button
+Seat 1: Hero (6000 in chips, €4.50 bounty)
+Seat 2: Vil (7000 in chips, €4.50 bounty)
+Seat 3: Sho (3000 in chips, €4.50 bounty)
+Seat 4: Big (9000 in chips, €4.50 bounty)
+Hero: posts the ante 50
+Vil: posts the ante 50
+Sho: posts the ante 50
+Big: posts the ante 50
+Hero: posts small blind 200
+Vil: posts big blind 400
+*** HOLE CARDS ***
+Dealt to Hero [Jd 4s]
+Sho: raises 2550 to 2950 and is all-in
+Big: folds
+Hero: folds
+Vil: calls 2550
+*** FLOP *** [Qh 8c 5d]
+*** TURN *** [Qh 8c 5d] [3c]
+*** RIVER *** [Qh 8c 5d 3c] [2d]
+*** SHOW DOWN ***
+Vil: shows [Ks 9s] (high card King)
+Sho: shows [Ac 6c] (high card Ace)
+Sho collected 6300 from pot
+*** SUMMARY ***
+Total pot 6300 | Rake 0
+Board [Qh 8c 5d 3c 2d]
+Seat 1: Hero (small blind) folded before Flop
+Seat 2: Vil (big blind) showed [Ks 9s] and lost with high card King
+Seat 3: Sho showed [Ac 6c] and won (6300) with high card Ace
+Seat 4: Big (button) folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000308: Tournament #4100000003, €4.50+€4.50+€1.00 EUR Hold'em No Limit - Level V (100/200) - 2026/09/12 2:02:00 WET [2026/09/11 21:02:00 ET]
+Table '4100000003 1' 6-max Seat #4 is the button
+Seat 1: Hero (8000 in chips, €4.50 bounty)
+Seat 2: Vil (9000 in chips, €4.50 bounty)
+Seat 3: Sho (2000 in chips, €4.50 bounty)
+Seat 4: Big (10000 in chips, €4.50 bounty)
+Hero: posts the ante 25
+Vil: posts the ante 25
+Sho: posts the ante 25
+Big: posts the ante 25
+Hero: posts small blind 100
+Vil: posts big blind 200
+*** HOLE CARDS ***
+Dealt to Hero [Td 3h]
+Sho: raises 1775 to 1975 and is all-in
+Big: folds
+Hero: folds
+Vil: folds
+Uncalled bet (1775) returned to Sho
+Sho collected 600 from pot
+*** SUMMARY ***
+Total pot 600 | Rake 0
+Seat 1: Hero (small blind) folded before Flop
+Seat 2: Vil (big blind) folded before Flop
+Seat 3: Sho collected (600)
+Seat 4: Big (button) folded before Flop (didn't bet)
+
+
+PokerStars Hand #300000000309: Tournament #4100000003, €4.50+€4.50+€1.00 EUR Hold'em No Limit - Level V (100/200) - 2026/09/12 2:03:00 WET [2026/09/11 21:03:00 ET]
+Table '4100000003 1' 6-max Seat #4 is the button
+Seat 1: Hero (8000 in chips, €4.50 bounty)
+Seat 2: Vil (9000 in chips, €4.50 bounty)
+Seat 3: Sho (2000 in chips, €4.50 bounty)
+Seat 4: Big (10000 in chips, €4.50 bounty)
+Hero: posts the ante 25
+Vil: posts the ante 25
+Sho: posts the ante 25
+Big: posts the ante 25
+Hero: posts small blind 100
+Vil: posts big blind 200
+*** HOLE CARDS ***
+Dealt to Hero [8c 2d]
+Sho: folds
+Big: raises 9775 to 9975 and is all-in
+Hero: folds
+Vil: folds
+Uncalled bet (9775) returned to Big
+Big collected 600 from pot
+*** SUMMARY ***
+Total pot 600 | Rake 0
+Seat 1: Hero (small blind) folded before Flop
+Seat 2: Vil (big blind) folded before Flop
+Seat 3: Sho folded before Flop (didn't bet)
+Seat 4: Big (button) collected (600)
+
+
+PokerStars Hand #300000000310: Tournament #4100000003, €4.50+€4.50+€1.00 EUR Hold'em No Limit - Level V (100/200) - 2026/09/12 2:04:00 WET [2026/09/11 21:04:00 ET]
+Table '4100000003 1' 6-max Seat #4 is the button
+Seat 1: Hero (8000 in chips, €4.50 bounty)
+Seat 2: Vil (9000 in chips, €4.50 bounty)
+Seat 3: Sho (2000 in chips, €4.50 bounty)
+Seat 4: Big (10000 in chips, €4.50 bounty)
+Hero: posts the ante 25
+Vil: posts the ante 25
+Sho: posts the ante 25
+Big: posts the ante 25
+Hero: posts small blind 100
+Vil: posts big blind 200
+*** HOLE CARDS ***
+Dealt to Hero [9h 4d]
+Sho: folds
+Big: raises 9775 to 9975 and is all-in
+Hero: folds
+Vil: calls 8775 and is all-in
+Uncalled bet (1000) returned to Big
+*** FLOP *** [Ah Td 6c]
+*** TURN *** [Ah Td 6c] [4c]
+*** RIVER *** [Ah Td 6c 4c] [3s]
+*** SHOW DOWN ***
+Vil: shows [As Kd] (a pair of Aces)
+Big: shows [Qs Qd] (a pair of Queens)
+Vil collected 18150 from pot
+*** SUMMARY ***
+Total pot 18150 | Rake 0
+Board [Ah Td 6c 4c 3s]
+Seat 1: Hero (small blind) folded before Flop
+Seat 2: Vil (big blind) showed [As Kd] and won (18150) with a pair of Aces
+Seat 3: Sho folded before Flop (didn't bet)
+Seat 4: Big (button) showed [Qs Qd] and lost with a pair of Queens

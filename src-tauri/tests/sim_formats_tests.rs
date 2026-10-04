@@ -292,12 +292,13 @@ fn assert_push_fold_reads(conn: &Connection, name: &str, pid: i64, ctx: EngineCo
     let reads: Vec<String> = payload.reads.iter().map(|r| format!("{} ({:?}) {:.2}", r.rule_id, r.family, r.score)).collect();
     eprintln!("{name} at {eff}bb: tag {:?}, reads {reads:?}", payload.tag.as_ref().map(|t| &t.text));
     // Section 5 of the spec: at push/fold depth only stack, short-stack,
-    // bounty, recency and showdown reads apply, plus the late-stage blind
-    // read (audit 2026-10, section 17).
+    // bounty, recency and showdown reads apply, plus the late-stage reads:
+    // the blind read (audit 2026-10, section 17) and the late shoves and
+    // calls of row T02.
     for read in &payload.reads {
         let allowed = matches!(read.family, Family::Stack | Family::Bounty | Family::Recency | Family::Showdown)
             || read.rule_id == "ctx.short_stack"
-            || read.rule_id == "stage.late.overfolds_blinds";
+            || read.rule_id.starts_with("stage.late.");
         assert!(allowed, "{name}: {} ({:?}) at push/fold depth", read.rule_id, read.family);
     }
     let short = payload.reads.iter().find(|r| r.rule_id == "ctx.short_stack").expect("the short-stack fact");
