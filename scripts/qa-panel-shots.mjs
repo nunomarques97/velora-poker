@@ -1,9 +1,10 @@
 // Screenshots and behaviour assertions for the side panel, from qa-panel.html.
 //
-// Starts Vite on a free port, then drives the installed Edge headless:
-// --screenshot for docs/design/verification/panel-*.png (480x1000, a narrow
-// second-monitor column, and 1440x900) and --dump-dom to read the numbers
-// qa-panel.html writes to <body>:
+// Starts Vite on a free port, then drives the installed Edge headless over
+// the DevTools protocol, with the page itself set to each size (device
+// metrics), for docs/design/verification/panel-*.png (480x1000, a narrow
+// second-monitor column, and 1440x900) and the numbers qa-panel.html writes
+// to <body>:
 //   - 8 tables render, one row each, with quality score and label (or the
 //     D102 unavailable text in the default build);
 //   - multi-table flags match the mock world and name the other tables;
@@ -16,6 +17,10 @@
 //     focus to the heading; a failed refresh keeps the list, flagged, and
 //     Retry clears it; an empty panel fills in when tables open;
 //   - StrictMode leaves one listener per event;
+//   - every open villain row shows the tag, top read and advice of
+//     src-tauri/tests/fixtures/qa_engine_reads.json (engine output, kept in
+//     step by qa_fixture_tests.rs) for its table's kind, in full, at both
+//     widths;
 //   - the villain search: a labelled box that matches screen names across
 //     tables (any case), shows only the matching tables, opened, with the
 //     matches marked; says so when nothing matches; Esc and clearing bring
@@ -26,7 +31,8 @@
 // Screenshots panel-search-*.png at 480x1000 and 1440x900.
 // Exits non-zero on any failure and always stops Vite and Edge.
 //
-// The data is a mocked snapshot, not a live PokerStars session.
+// The snapshot is mocked (tables, seats, quality); its tags and reads are the
+// engine's, from simulated villains, not a live PokerStars session.
 //
 // Usage: node scripts/qa-panel-shots.mjs
 
@@ -120,51 +126,7 @@ const BASE_FLAGS = [
   "--force-device-scale-factor=1",
 ];
 
-function edge(args, { capture = false } = {}) {
-  const base = [...BASE_FLAGS, `--user-data-dir=${newProfile()}`, "--virtual-time-budget=6000"];
-  return new Promise((res, rej) => {
-    execFile(
-      EDGE,
-      [...base, ...args],
-      { maxBuffer: 32 * 1024 * 1024, timeout: 60000, windowsHide: true },
-      (err, stdout, stderr) => {
-        if (err && !capture) return rej(new Error(`Edge failed: ${err.message}\n${stderr}`));
-        if (err && !stdout) return rej(new Error(`Edge failed: ${err.message}\n${stderr}`));
-        res(stdout);
-      },
-    );
-  });
-}
-
-function qaAttributes(dom) {
-  // The last <body ...> tag: the page's own comment mentions "<body>" too.
-  const body = [...dom.matchAll(/<body\b[^>]*>/gi)].pop();
-  if (!body) return {};
-  const attrs = {};
-  for (const m of body[0].matchAll(/data-qa-([a-z-]+)="([^"]*)"/g)) {
-    attrs[m[1]] = m[2]
-      .replace(/&quot;/g, '"')
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&amp;/g, "&");
-  }
-  return attrs;
-}
-
 const pageUrl = (base, params) => `${base}/qa-panel.html?${new URLSearchParams(params)}`;
-
-async function dump(base, params, size = NARROW) {
-  const dom = await edge([`--window-size=${size.w},${size.h}`, "--dump-dom", pageUrl(base, params)], { capture: true });
-  const qa = qaAttributes(dom);
-  if (qa.ready !== "1") throw new Error(`qa-panel.html never settled for ${JSON.stringify(params)}`);
-  return qa;
-}
-
-async function shot(base, size, params, name) {
-  const file = join(outDir, name);
-  await edge([`--window-size=${size.w},${size.h}`, `--screenshot=${file}`, pageUrl(base, params)]);
-  check(existsSync(file), `screenshot ${name}`);
-}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -231,6 +193,8 @@ async function strategicChecks(base) {
   check(r.before === "empty" && r.nextStep === "1" && r.after === "ready" && r.rows === String(TABLES),
     `${label}: empty (with the next step) -> populated after tables open`, JSON.stringify(r));
 
+  await fixtureReadChecks(base);
+
   await shot(base, NARROW, { expand: "1,3" }, "panel-8tables-480x1000.png");
   await shot(base, WIDE, { expand: "1" }, "panel-8tables-1440x900.png");
   await shot(base, NARROW, {}, "panel-8tables-collapsed-480x1000.png");
@@ -239,16 +203,48 @@ async function strategicChecks(base) {
   await shot(base, NARROW, { start: "error" }, "panel-error-480x1000.png");
 }
 
+// The fixture's top read per table kind and villain, as qa-panel.html takes it.
+const FIXTURE = JSON.parse(readFileSync(join(root, "src-tauri", "tests", "fixtures", "qa_engine_reads.json"), "utf8"));
+const FIXTURE_READS = { cash: new Map(), tournament: new Map() };
+for (const table of FIXTURE.tables) {
+  const kind = table.format === "cash" ? "cash" : "tournament";
+  for (const p of table.players) {
+    if (p.seatOffset !== 0 && p.engine?.topReads.length) FIXTURE_READS[kind].set(p.name, { tag: p.engine.tag?.text ?? "", ...p.engine.topReads[0] });
+  }
+}
+// Table 1 (Halley III) is a cash table and table 3 a tournament; each seats
+// these villains with a fixture read.
+const OPEN_TABLES = { 1: { kind: "cash", reads: 3 }, 3: { kind: "tournament", reads: 5 } };
+
+/** Every open row shows the fixture's tag, top read and advice, none cut off. */
+async function fixtureReadChecks(base) {
+  for (const [size, tag] of [[NARROW, "480x1000"], [WIDE, "1440x900"]]) {
+    const label = `fixture reads ${tag}`;
+    const shown = JSON.parse((await dump(base, { expand: "1,3" }, size))["read-texts"] || "[]");
+    for (const [table, { kind, reads }] of Object.entries(OPEN_TABLES)) {
+      const rows = shown.filter((r) => r.table === table);
+      check(rows.length === reads, `${label}: table ${table} shows ${reads} reads`, `shown=${rows.length}`);
+      for (const row of rows) {
+        const want = FIXTURE_READS[kind].get(row.name) ?? FIXTURE_READS[kind === "cash" ? "tournament" : "cash"].get(row.name);
+        check(!!want && row.tag === want.tag && row.observation === want.observation && row.advice === want.advice,
+          `${label}: ${row.name} at table ${table} shows the fixture's tag, top read and advice`,
+          `${row.tag}: ${short(row.observation, 70)} / ${short(row.advice, 70)}`);
+        check(!row.cut, `${label}: ${row.name}'s read and advice are shown in full`, row.cut ? "cut off" : "");
+      }
+    }
+  }
+}
+
 async function searchChecks(base) {
   const label = "search";
   let r = fields((await dump(base, { action: "search" }))["action-result"]);
   check(r.label === "Find_a_player", `${label}: the box has a visible label`, JSON.stringify(r));
   check(r.rows === "1,2,5" && r.matches === "3" && r.marks === "3",
-    `${label}: "ANNA" matches AggroAnna77 at every table she sits at, any case, marked`, JSON.stringify(r));
+    `${label}: "SPRAY" matches SprayAndPray at every table he sits at, any case, marked`, JSON.stringify(r));
   check(r.expanded === "1,2,5", `${label}: matching tables open, the others hidden`, JSON.stringify(r));
   check(r.collapsed === "1,5", `${label}: a matching row can still be collapsed during the search`, JSON.stringify(r));
   check(r.line === "1_player_at_3_of_8_tables_·_Esc_clears", `${label}: the result line counts players and tables`, r.line);
-  check(r.announced === '1_player_matches_"ANNA"_at_3_tables.', `${label}: the result is announced politely`, r.announced);
+  check(r.announced === '1_player_matches_"SPRAY"_at_3_tables.', `${label}: the result is announced politely`, r.announced);
   check(r.clearedRows === String(TABLES) && r.restored === "4",
     `${label}: clearing the box restores every table and the rows open before`, JSON.stringify(r));
   check(r.clearedAnnounce === "Search_cleared._8_tables_open.", `${label}: clearing is announced`, r.clearedAnnounce);
@@ -266,16 +262,16 @@ async function searchChecks(base) {
   r = fields((await dump(base, { action: "searchrefresh" }))["action-result"]);
   check(r.before === "2,3" && r.afterHand === "1,2,3/1,2,3", `${label}: a new hand refreshes the filtered list (new match shown, opened)`,
     JSON.stringify(r));
-  check(r.afterClose === "1,3/1,3" && r.query === "tony", `${label}: a table closing keeps the query and drops its row`, JSON.stringify(r));
+  check(r.afterClose === "1,3/1,3" && r.query === "fern", `${label}: a table closing keeps the query and drops its row`, JSON.stringify(r));
   check(r.restored === "4", `${label}: clearing after refreshes restores the rows open before the search`, JSON.stringify(r));
 
   r = fields((await dump(base, { action: "searchstale" }))["action-result"]);
-  check(r.mid === "new" && r.end === "new" && r.query === "anna" && r.rows === "1,2,5",
+  check(r.mid === "new" && r.end === "new" && r.query === "spray" && r.rows === "1,2,5",
     `${label}: an older refresh answering last never overwrites the newer filtered result`, JSON.stringify(r));
 
   r = fields((await dump(base, { action: "searchretry" }))["action-result"]);
-  check(r.banner === "1" && r.kept === "anna/1,2,5", `${label}: a failed refresh keeps the query and the filtered list`, JSON.stringify(r));
-  check(r.alertsAfter === "0" && r.query === "anna" && r.rows === "1,2,5" && r.fresh === "1",
+  check(r.banner === "1" && r.kept === "spray/1,2,5", `${label}: a failed refresh keeps the query and the filtered list`, JSON.stringify(r));
+  check(r.alertsAfter === "0" && r.query === "spray" && r.rows === "1,2,5" && r.fresh === "1",
     `${label}: Retry recovers with the query still applied`, JSON.stringify(r));
 
   for (const [size, tag] of [[NARROW, "480x1000"], [WIDE, "1440x900"]]) {
@@ -313,7 +309,18 @@ class Cdp {
   send(method, params = {}) {
     const id = this.nextId++;
     this.ws.send(JSON.stringify({ id, method, params }));
-    return new Promise((res, rej) => this.pending.set(id, { res, rej }));
+    // A call Edge never answers (a page that stopped rendering) fails the
+    // run instead of hanging it.
+    return new Promise((res, rej) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        rej(new Error(`DevTools ${method} timed out`));
+      }, 30000);
+      this.pending.set(id, {
+        res: (v) => (clearTimeout(timer), res(v)),
+        rej: (e) => (clearTimeout(timer), rej(e)),
+      });
+    });
   }
   async eval(expression) {
     const { result, exceptionDetails } = await this.send("Runtime.evaluate", {
@@ -363,39 +370,120 @@ function killTree(child) {
   }
 }
 
-async function keyboardPass(base) {
-  const label = "search keyboard";
+// The page's data-qa-* attributes by their attribute names: qaReadTexts -> read-texts.
+const READ_QA = `Object.fromEntries(Object.entries(document.body.dataset)
+  .filter(([k]) => k.startsWith("qa"))
+  .map(([k, v]) => [k.slice(2).replace(/[A-Z]/g, (c, i) => (i ? "-" : "") + c.toLowerCase()), v]))`;
+
+/** A private headless Edge on about:blank, driven over DevTools. */
+async function openEdge(size) {
   const profile = newProfile();
   const browser = spawn(
     EDGE,
-    [...BASE_FLAGS, `--user-data-dir=${profile}`, "--remote-debugging-port=0", `--window-size=${NARROW.w},${NARROW.h}`,
-      pageUrl(base, { expand: "4" })],
+    [...BASE_FLAGS, `--user-data-dir=${profile}`, "--remote-debugging-port=0", `--window-size=${size.w + 100},${size.h + 200}`, "about:blank"],
     { stdio: "ignore", windowsHide: true },
   );
   let cdp = null;
   try {
     const portFile = join(profile, "DevToolsActivePort");
-    const deadline = Date.now() + 20000;
-    while (!existsSync(portFile) && Date.now() < deadline) await sleep(100);
-    if (!existsSync(portFile)) throw new Error("Edge never wrote DevToolsActivePort");
-    const port = readFileSync(portFile, "utf8").split(/\r?\n/)[0].trim();
-
+    const deadline = Date.now() + 30000;
+    // Edge may still hold the file open while writing it.
+    let port = "";
+    while (!port && Date.now() < deadline) {
+      try {
+        port = readFileSync(portFile, "utf8").split(/\r?\n/)[0].trim();
+      } catch {
+        // not written yet
+      }
+      if (!port) await sleep(100);
+    }
+    if (!port) throw new Error("Edge never wrote DevToolsActivePort");
     let page = null;
-    while (!page && Date.now() < deadline + 10000) {
+    while (!page && Date.now() < deadline) {
       const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then((r) => r.json()).catch(() => []);
-      page = targets.find((t) => t.type === "page" && t.url.includes("qa-panel.html"));
+      page = targets.find((t) => t.type === "page");
       if (!page) await sleep(100);
     }
-    if (!page) throw new Error("no qa-panel.html page target");
+    if (!page) throw new Error("no page target in Edge");
     cdp = await Cdp.connect(page.webSocketDebuggerUrl);
+    await cdp.send("Emulation.setDeviceMetricsOverride", { width: size.w, height: size.h, deviceScaleFactor: 1, mobile: false });
+    // A page driven over DevTools is not the focused window; focus and blur
+    // events need it to be.
+    await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+    await cdp.send("Page.enable");
+    // Edge sometimes opens a second tab; a background tab never runs
+    // requestAnimationFrame.
+    await cdp.send("Page.bringToFront");
     await cdp.send("Runtime.enable");
+  } catch (err) {
+    await closeEdge(browser, cdp);
+    throw err;
+  }
+  return { browser, cdp };
+}
 
-    const readyBy = Date.now() + 20000;
-    const readyFlag = () => cdp.eval(`document.body?.getAttribute("data-qa-ready") ?? null`).catch(() => null);
-    while ((await readyFlag()) !== "1") {
-      if (Date.now() > readyBy) throw new Error("side panel never became ready");
-      await sleep(100);
+async function closeEdge(browser, cdp) {
+  if (cdp) {
+    // Edge may close the socket before it answers.
+    await Promise.race([cdp.send("Browser.close").catch(() => {}), sleep(1000)]);
+    cdp.close();
+  }
+  killTree(browser);
+}
+
+async function waitReady(cdp, what) {
+  // Longer than the page's own 25s wait for its first render.
+  const readyBy = Date.now() + 45000;
+  const ready = () => cdp.eval(`document.body?.dataset.qaReady ?? null`).catch(() => null);
+  while ((await ready()) !== "1") {
+    if (Date.now() > readyBy) throw new Error(`qa-panel.html never settled for ${what}`);
+    await sleep(100);
+  }
+}
+
+/**
+ * Loads `params` with the page exactly `size` (DevTools device metrics),
+ * waits for the harness to settle and returns its data-qa-* attributes; with
+ * `file`, also saves a screenshot. --window-size sizes the window, not the
+ * page: this Edge never gave a page under 492px wide, so a "480x1000" dump
+ * measured a wider, shorter page, and --screenshot resized it to the window
+ * only at capture.
+ */
+async function runPage(base, size, params, file = null) {
+  const { browser, cdp } = await openEdge(size);
+  try {
+    await cdp.send("Page.navigate", { url: pageUrl(base, params) });
+    await waitReady(cdp, `${JSON.stringify(params)} at ${size.w}x${size.h}`);
+    const qa = await cdp.eval(READ_QA);
+    if (qa.viewport !== `${size.w}x${size.h}`) throw new Error(`page is ${qa.viewport}, not ${size.w}x${size.h}`);
+    if (file) {
+      // Two frames after the harness settles, so the capture shows its final state.
+      await cdp.eval(`new Promise((r) => { requestAnimationFrame(() => requestAnimationFrame(() => r(true))); setTimeout(() => r(true), 500); })`);
+      const { data } = await cdp.send("Page.captureScreenshot", { format: "png" });
+      writeFileSync(file, Buffer.from(data, "base64"));
     }
+    return qa;
+  } finally {
+    await closeEdge(browser, cdp);
+  }
+}
+
+async function dump(base, params, size = NARROW) {
+  return runPage(base, size, params);
+}
+
+async function shot(base, size, params, name) {
+  const file = join(outDir, name);
+  await runPage(base, size, params, file);
+  check(existsSync(file), `screenshot ${name}`);
+}
+
+async function keyboardPass(base) {
+  const label = "search keyboard";
+  const { browser, cdp } = await openEdge(NARROW);
+  try {
+    await cdp.send("Page.navigate", { url: pageUrl(base, { expand: "4" }) });
+    await waitReady(cdp, "the keyboard pass");
     await cdp.eval(`document.activeElement?.blur(), window.focus(), true`);
 
     await cdp.key("Tab");
@@ -403,13 +491,13 @@ async function keyboardPass(base) {
     check(first?.id === "villain-search", `${label}: the first Tab reaches the search box`, JSON.stringify(first));
     check(!!first?.focusVisible && !!first?.ring, `${label}: the box shows a :focus-visible ring`, JSON.stringify(first));
 
-    await cdp.send("Input.insertText", { text: "anna" });
+    await cdp.send("Input.insertText", { text: "spray" });
     await sleep(700);
     const typed = await cdp.eval(`({
       rows: [...document.querySelectorAll("li[data-table-id]")].map((li) => li.dataset.tableId).join(","),
       announce: document.querySelector("[role=status]")?.textContent ?? "",
     })`);
-    check(typed.rows === "1,2,5" && typed.announce === '1 player matches "anna" at 3 tables.',
+    check(typed.rows === "1,2,5" && typed.announce === '1 player matches "spray" at 3 tables.',
       `${label}: typing filters the tables and announces the result`, JSON.stringify(typed));
     const { data } = await cdp.send("Page.captureScreenshot", { format: "png" });
     const focusShot = "panel-search-keyboard-480x1000.png";
@@ -432,12 +520,7 @@ async function keyboardPass(base) {
     check(next?.tag === "BUTTON" && next?.text.startsWith("Halley III") && !!next?.ring,
       `${label}: the next Tab moves on to the first table row, with a ring`, JSON.stringify(next));
   } finally {
-    if (cdp) {
-      await cdp.send("Browser.close").catch(() => {});
-      cdp.close();
-    }
-    await sleep(300);
-    killTree(browser);
+    await closeEdge(browser, cdp);
   }
 }
 
@@ -475,7 +558,7 @@ async function main() {
 
   try {
     await waitForServer(`${base}/qa-panel.html`, vite);
-    // First hit compiles the module graph; warm it so virtual time is spent on the page.
+    // First hit compiles the module graph; warm it so the first checks do not wait on it.
     await dump(base, {}).catch(() => {});
 
     await strategicChecks(base);

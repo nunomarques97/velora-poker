@@ -17,11 +17,14 @@
         max=6|9            table size (default 6)
         frame=hero|absolute  Auto-Center on (hero, default) or off
         model=compact|badge  HUD profile model (default compact)
-        engine=1           opponents carry an engine payload (strategic-analysis
-                           build): chip tags, hover card, drawer reads
+        engine=1           the strategic-analysis build: the table is a real one from
+                           src-tauri/tests/fixtures/qa_engine_reads.json (players,
+                           stats and the engine's own tags, reads and samples,
+                           written by src-tauri/tests/qa_fixture_tests.rs); without
+                           it, the default build's hand-written roster and no reads
         action=drag|cancel|click|external   optional scripted interaction
                hover|hoverall|leave|nativeleave|esc|focus|hoverdrag|hoverclick|
-               refresh|drop|outoforder|burst    hover-card actions (engine=1)
+               refresh|drop|outoforder|burst|clampprobe    hover-card actions (engine=1)
         seat=<key>         seat key the action targets (default 2)
         dx=<px>&dy=<px>    drag distance (default 40, 14)
         scroll=end         with action=click: scroll the drawer to its end
@@ -52,7 +55,10 @@
         data-qa-card-violations    open card x (protected zones, any seat's hole cards, own chip, window edge)
         data-qa-card-hole          open card x any seat's hole cards (hero or opponent; must be 0)
         data-qa-card-hot           1 when the card is clickable or a hot zone
+        data-qa-card-blocks        observation and advice blocks on the open card
+        data-qa-card-clamped       those cut short by the two-line clamp
         data-qa-listeners          JSON: live event listeners per event
+        data-qa-viewport           the page's size, <width>x<height> CSS px
     -->
     <style>
       html,
@@ -217,10 +223,22 @@
         const max = params.get("max") === "9" ? 9 : 6;
         const frame = params.get("frame") === "absolute" ? "absolute" : "hero";
         const model = params.get("model") === "badge" ? "badge" : "compact";
-        const heroSeat = max === 9 ? 7 : 4;
 
-        // Realistic spread: two players under min_hands (25), one wide
-        // 4-digit sample, two automatic archetypes, one manual colour.
+        // The strategic-analysis table: real payloads from the engine, read
+        // synchronously so the mock is complete before the overlay mounts.
+        function fixtureTable() {
+          const xhr = new XMLHttpRequest();
+          xhr.open("GET", "/src-tauri/tests/fixtures/qa_engine_reads.json", false);
+          xhr.send();
+          if (xhr.status !== 200) throw new Error(`QA engine fixture: HTTP ${xhr.status}`);
+          return JSON.parse(xhr.responseText).tables.find((t) => t.maxPlayers === max);
+        }
+        const fixture = params.get("engine") === "1" ? fixtureTable() : null;
+        const heroSeat = fixture ? fixture.players.find((p) => p.seatOffset === 0).seat : max === 9 ? 7 : 4;
+
+        // The default build's roster. Realistic spread: two players under
+        // min_hands (25), one wide 4-digit sample, two automatic archetypes,
+        // one manual colour.
         const roster = [
           ["Hero_Nuno", 2140, 23, 19, 8, null],
           ["fishy_mcfold", 12, 58, 6, 2, null],
@@ -232,13 +250,12 @@
           ["M4ster_Bluff", 77, 36, 30, 14, ["maniac", "Maniac", "#e0524f"]],
           ["RockSolid_R", 44, 11, 9, 2, null],
         ];
-        const players = [];
-        for (let seat = 1; seat <= max; seat++) {
+        const players = fixture ? fixture.players.map(fromFixture) : [];
+        for (let seat = 1; !fixture && seat <= max; seat++) {
           // Seat order: the hero first, then clockwise.
           const offset = (seat - heroSeat + max) % max;
           const [name, hands, vpip, pfr, threeBet, arche] = roster[offset];
           const override = name === "calldown_carl";
-          const engine = params.get("engine") === "1" && offset !== 0 ? engineFor(name, hands) : null;
           players.push({
             id: `p${seat}`,
             name,
@@ -247,70 +264,40 @@
               vpip, pfr, threeBet,
               foldToThreeBet: 55, cBet: 62, foldToCBet: 41, aggressionFactor: 2.4, wtsd: 27, wsd: 51,
             },
-            // As commands.rs: with an engine, the descriptions are its reads.
-            descriptions: engine ? engine.reads : [],
+            descriptions: [],
             note: null,
             classification: arche
               ? { classification: arche[0], label: arche[1], color: arche[2], isOverride: override, available: true }
               : { classification: "unknown", label: "Unknown", color: "#6b7280", isOverride: false, available: true },
             seat,
             seatOffset: offset,
-            engine,
+            engine: null,
           });
         }
 
-        // The `strategic-analysis` payload (src/data/types.ts EnginePayload),
-        // with tags from the spec vocabulary and wording of realistic length.
-        // `sample` as rules.rs builds it: hands for VPIP-based, recency and
-        // showdown reads, opportunities for the rest, none for a stack fact.
-        function read(ruleId, family, tag, observation, advice, pct, n) {
-          const tier = pct >= 75 ? "high" : pct >= 50 ? "medium" : "low";
-          const hands = ruleId === "pf.vpip.low" || family === "recency" || family === "showdown";
+        // One fixture player as get_active_table_players returns him. Tags,
+        // reads, samples, stats and archetype are the engine's; the drawer's
+        // other sections (head-to-head, showdowns, sizing, recent form,
+        // auto-notes) are not in the fixture and stay illustrative. The hero's
+        // own payload is dropped: the harness shows opponents' reads.
+        function fromFixture(p) {
+          const engine = p.seatOffset === 0 || !p.engine ? null : { ...p.engine, ...drawerExtras(p.hands) };
           return {
-            ruleId, category: "exploit", observation, advice,
-            confidencePct: pct, confidenceTier: tier, scenarioId: "P06", family, tag, score: pct / 100,
-            evidence: [{ statName: ruleId, value: 61, opportunities: n, hits: Math.round(n * 0.61), shrunk: 58 }],
-            sample: family === "stack" ? null : { count: n, unit: hands ? "hands" : "opportunities" },
+            id: `p${p.seat}`,
+            name: p.name,
+            hands: p.hands,
+            stats: p.stats,
+            descriptions: engine ? p.descriptions : [],
+            note: null,
+            classification: p.classification,
+            seat: p.seat,
+            seatOffset: p.seatOffset,
+            engine,
           };
         }
-        function engineFor(name, hands) {
-          if (hands < 10) {
-            // Too few hands for any read: no tag, an honest empty card.
-            return { version: 1, tag: null, topReads: [], reads: [], context: null, headToHead: null,
-              showdowns: [], sizingTells: [], recentForm: null, autoNotes: [] };
-          }
-          const byName = {
-            fishy_mcfold: [read("pf.limp.high", "preflop", "LMP", "Limps 41% of the hands he enters.", "Isolate his limps wider, in position.", 52, 12)],
-            TightTony: [
-              read("pf.fold_to_3bet.high", "preflop", "F3B", "Folds to 72% of 3-bets (36/50).", "3-bet his opens wider as a bluff.", 81, 50),
-              read("post.fold_to_cbet.high", "postflop", "FCB", "Folds to 64% of flop c-bets.", "C-bet small and often when he defends.", 68, 44),
-            ],
-            AggroAnna77: [
-              read("pf.three_bet.high", "preflop", "3B+", "3-bets 14% of the time when you open.", "4-bet her lighter; call her 3-bets wider in position.", 77, 120),
-              read("post.barrel.high", "postflop", "BRL", "Barrels the turn after 71% of her flop c-bets.", "Float flops wider and fold more turns to her second bet.", 63, 58),
-            ],
-            calldown_carl: [
-              read("post.wtsd.high", "postflop", "STN", "Goes to showdown 38% of the hands he sees a flop.", "Value bet thinner and stop bluffing the river.", 71, 64),
-              read("pf.cold_call.high", "preflop", "CC+", "Cold-calls 22% of opens.", "Raise bigger for value against his calls.", 55, 40),
-            ],
-            GrinderGus: [
-              read("stack.push_fold", "stack", "12bb", "12bb effective: shoves or folds preflop.", "Call his shoves with a push/fold range, not a cash range.", 66, 30),
-              read("pf.steal.high", "preflop", "STL", "Steals 48% from the cutoff and button.", "3-bet or reshove his late opens wider.", 60, 38),
-            ],
-            M4ster_Bluff: [
-              read("recency.tilt", "recency", "TILT", "VPIP 58% in the last 30 hands, against 36% before.", "Value bet wider while he stays loose.", 58, 30),
-              read("showdown.river_overbet_bluff", "showdown", "OVB", "Showed a bluff after a river overbet, 2 of 3 times.", "Call his river overbets more often.", 45, 3),
-            ],
-            RockSolid_R: [read("pf.vpip.low", "preflop", "NIT", "Plays 11% of hands; opens only the top of the range.", "Steal his blinds; fold to his 3-bets.", 62, 44)],
-          };
-          const reads = byName[name] ?? [];
-          const top = reads.slice(0, 2);
-          const lead = reads[0];
-          const tag = lead
-            ? { text: lead.tag, ruleId: lead.ruleId, source: lead.family === "recency" ? "tilt" : lead.family === "stack" ? "stack" : "read" }
-            : null;
+        function drawerExtras(hands) {
           return {
-            version: 1, tag, topReads: top, reads, context: null,
+            context: null,
             headToHead: { hands: 64, stats: [{ key: "three_bet_vs_hero_open", hits: 4, opportunities: 22, rawPct: 18.2, shrunkPct: 13.1 }] },
             showdowns: [{
               handId: "254119872004", playedAt: "2026-10-02T21:14:00Z", cards: "Jd 9d", board: "Ts 8h 2c 7d Ks",
@@ -324,7 +311,7 @@
               lastAggression: { street: "river", sizeBucket: "overbet", potFraction: 1.4, class: "value" },
             }],
             sizingTells: [{ bucket: "overbet", value: 3, bluff: 1, neither: 0, n: 4 }],
-            recentForm: { window: 30, windowHits: 17, baselineOpportunities: hands, windowVpipPct: 56.7, baselineVpipPct: 36, z: 2.4, flag: name === "M4ster_Bluff" ? "tilt" : null, afterBigLoss: name === "M4ster_Bluff" },
+            recentForm: { window: 30, windowHits: 9, baselineOpportunities: hands, windowVpipPct: 30, baselineVpipPct: 28, z: 0.4, flag: null, afterBigLoss: false },
             autoNotes: [{ id: 1, handId: "254119871233", kind: "limp_reraise_premium", text: "Limp-reraised preflop and showed AA.", createdAt: "2026-10-02T20:51:00Z", source: "auto" }],
           };
         }
@@ -516,6 +503,7 @@
         const maxZone = Math.max(0, ...qa.hotZones.map((z) => (z.width * z.height) / area));
         const fonts = chipButtons().map((b) => parseFloat(getComputedStyle(b).fontSize));
         const d = document.body.dataset;
+        d.qaViewport = `${W()}x${H()}`;
         d.qaChips = String(chips.length);
         d.qaOverlap = String(overlap);
         d.qaIntersections = String(intersections);
@@ -554,7 +542,8 @@
       /** What the open card covers; `owner` is its chip's button. */
       function cardReport(owner = document.querySelector("[data-hud-chip] > button[aria-describedby]")) {
         const card = openCard();
-        if (!card) return { qaCard: "0", qaCardReads: "0", qaCardText: "", qaCardViolations: "0", qaCardHole: "0", qaCardHot: "0" };
+        if (!card)
+          return { qaCard: "0", qaCardReads: "0", qaCardText: "", qaCardViolations: "0", qaCardHole: "0", qaCardHot: "0", qaCardBlocks: "0", qaCardClamped: "0" };
         const c = domRect(card);
         let violations = 0;
         for (const z of zones) if (overlaps(c, pxRect(z.rect))) violations++;
@@ -566,6 +555,10 @@
         violations += hole;
         // Never a control: no pointer input, and the hot zones are the chips alone.
         const hot = getComputedStyle(card).pointerEvents !== "none" || qa.hotZones.length !== chipButtons().length;
+        // Each read's observation and advice, clamped to two lines by the card:
+        // a block whose text is taller than its box is cut short.
+        const blocks = [...card.querySelectorAll("li > div > span:first-child, li > p")];
+        const clamped = blocks.filter((el) => el.scrollHeight > el.clientHeight + 1).length;
         return {
           qaCard: "1",
           qaCardReads: String(card.querySelectorAll("li").length),
@@ -573,6 +566,8 @@
           qaCardViolations: String(violations),
           qaCardHole: String(hole),
           qaCardHot: hot ? "1" : "0",
+          qaCardBlocks: String(blocks.length),
+          qaCardClamped: String(clamped),
         };
       }
 
@@ -629,7 +624,8 @@
         if (action === "hoverall") {
           // Every chip with reads in turn: its card opens next to it, covers
           // nothing protected, and closes when the pointer leaves.
-          let opened = 0, violations = 0, hole = 0, hot = 0, stuck = 0, twoReads = 0;
+          let opened = 0, violations = 0, hole = 0, hot = 0, stuck = 0, twoReads = 0, blocks = 0, clamped = 0;
+          const clampedWho = [], openedKeys = [];
           for (const b of chipButtons()) {
             const key = Number(b.parentElement.dataset.seatKey);
             if (!playerAt(key)?.engine) continue;
@@ -641,13 +637,29 @@
               violations += Number(rep.qaCardViolations);
               hole += Number(rep.qaCardHole);
               hot += Number(rep.qaCardHot);
+              openedKeys.push(key);
               if (rep.qaCardReads === "2") twoReads++;
+              blocks += Number(rep.qaCardBlocks);
+              clamped += Number(rep.qaCardClamped);
+              if (rep.qaCardClamped !== "0") clampedWho.push(playerAt(key).name);
             }
             leave(b);
             await sleep(60);
             stuck += cardOpen();
           }
-          return `opened=${opened} violations=${violations} hole=${hole} hot=${hot} stuck=${stuck} twoReads=${twoReads}`;
+          return `opened=${opened} violations=${violations} hole=${hole} hot=${hot} stuck=${stuck} twoReads=${twoReads} blocks=${blocks} clamped=${clamped} clampedWho=${clampedWho.join(",") || "-"} keys=${openedKeys.join(",") || "-"}`;
+        }
+        if (action === "clampprobe") {
+          // The clamp check's own control: a read far longer than two lines
+          // must be counted as cut short.
+          const p = playerAt(seat);
+          p.engine.topReads[0] = { ...p.engine.topReads[0], advice: "Too long to fit in two lines of the card. ".repeat(6) };
+          qa.emit("hands-imported", 1);
+          await sleep(300);
+          enter(chipFor(seat));
+          await settle();
+          const rep = cardReport(chipFor(seat));
+          return `card=${rep.qaCard} clamped=${rep.qaCardClamped}`;
         }
         if (action === "leave") {
           enter(btn);
@@ -815,7 +827,9 @@
 
       (async () => {
         // Wait for every player's chip, then for the measured-size relayout.
-        for (let i = 0; i < 100 && chipButtons().length < qa.players.length; i++) await sleep(50);
+        // A cold Vite transform on a busy machine can take well over 5s to
+        // mount the overlay; giving up early reported a page with no chips.
+        for (let i = 0; i < 500 && chipButtons().length < qa.players.length; i++) await sleep(50);
         await sleep(300);
         const action = params.get("action");
         if (action) document.body.dataset.qaActionResult = await runAction(action);

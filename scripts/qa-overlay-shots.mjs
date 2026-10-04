@@ -1,8 +1,9 @@
 // Screenshots and layout assertions for the overlay HUD, from qa-overlay.html.
 //
-// Starts Vite on a free port, then drives the installed Edge headless:
-// --screenshot for the images in docs/design/verification/hud-compact-*.png
-// and --dump-dom to read the numbers qa-overlay.html writes to <body>:
+// Starts Vite on a free port, then drives the installed Edge headless over
+// the DevTools protocol, with the page itself set to each size (device
+// metrics), for the images in docs/design/verification/hud-*.png and the
+// numbers qa-overlay.html writes to <body>:
 //   - the default layouts: no chip overlaps another chip (overlap=0) and no
 //     chip covers a protected zone, i.e. board, bets, the hero's hole cards or
 //     action buttons (intersections=0), nor an opponent's hole cards, nor
@@ -11,7 +12,9 @@
 //     seat key; a cancelled drag saves nothing; a plain click opens the
 //     detail panel; a save made by another overlay of the same size moves
 //     this one's chip;
-//   - the strategic-analysis overlay (engine=1): tagged chips still overlap
+//   - the strategic-analysis overlay (engine=1), on the real table of
+//     src-tauri/tests/fixtures/qa_engine_reads.json (engine output, kept in
+//     step by qa_fixture_tests.rs): tagged chips still overlap
 //     nothing and no other seat's name plate, tag text >= 10px and in the
 //     accessible name; the sample behind each read tag is on the chip,
 //     >= 10px, and in words in the accessible name; every hover card stays
@@ -21,7 +24,10 @@
 //     pointer-left event, Esc, blur, drag start, the drawer opening and a
 //     refresh that drops the player; a new hand refreshes it; an older
 //     refresh answering last is ignored; StrictMode leaves one listener per
-//     event. Screenshots: hud-tagged-*, hud-hover-*, hud-engine-drawer-*.
+//     event; at 800x570 no observation or advice line of any fixture
+//     villain's card is cut short by the two-line clamp (at 483x359 the
+//     clamped count is reported); the card shows the fixture's top read.
+//     Screenshots: hud-tagged-*, hud-hover-*, hud-engine-drawer-*.
 // Independent page loads run QA_JOBS (default 4) Edge processes at a time;
 // the log still prints in plan order.
 // Exits non-zero on any failure and always stops Vite.
@@ -32,7 +38,7 @@
 // Usage: node scripts/qa-overlay-shots.mjs
 
 import { spawn, execFile } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -149,6 +155,10 @@ function stopVite(vite) {
 // removed at exit: never touches (or waits on) the user's running Edge.
 let profileRoot = null;
 let profileSeq = 0;
+function newProfile() {
+  profileRoot ??= mkdtempSync(join(process.env.TEMP || tmpdir(), "velora-qa-edge-"));
+  return join(profileRoot, String(profileSeq++));
+}
 function removeProfiles() {
   if (!profileRoot) return;
   try {
@@ -159,67 +169,218 @@ function removeProfiles() {
   profileRoot = null;
 }
 
-function edge(args, { capture = false } = {}) {
-  profileRoot ??= mkdtempSync(join(process.env.TEMP || tmpdir(), "velora-qa-edge-"));
-  const profile = join(profileRoot, String(profileSeq++));
-  const base = [
-    "--headless=new",
-    "--disable-gpu",
-    "--no-first-run",
-    "--no-default-browser-check",
-    "--disable-extensions",
-    "--hide-scrollbars",
-    "--force-device-scale-factor=1",
-    `--user-data-dir=${profile}`,
-    "--virtual-time-budget=6000",
-  ];
-  return new Promise((res, rej) => {
-    execFile(
-      EDGE,
-      [...base, ...args],
-      { maxBuffer: 32 * 1024 * 1024, timeout: 60000, windowsHide: true },
-      (err, stdout, stderr) => {
-        if (err && !capture) return rej(new Error(`Edge failed: ${err.message}\n${stderr}`));
-        if (err && !stdout) return rej(new Error(`Edge failed: ${err.message}\n${stderr}`));
-        res(stdout);
-      },
-    );
-  });
+const BASE_FLAGS = [
+  "--headless=new",
+  "--disable-gpu",
+  "--no-first-run",
+  "--no-default-browser-check",
+  "--disable-extensions",
+  "--hide-scrollbars",
+  "--force-device-scale-factor=1",
+];
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+class Cdp {
+  constructor(ws) {
+    this.ws = ws;
+    this.nextId = 1;
+    this.pending = new Map();
+    ws.addEventListener("message", (event) => {
+      const msg = JSON.parse(event.data);
+      if (msg.id && this.pending.has(msg.id)) {
+        const { res, rej } = this.pending.get(msg.id);
+        this.pending.delete(msg.id);
+        if (msg.error) rej(new Error(msg.error.message));
+        else res(msg.result);
+      }
+    });
+  }
+  static async connect(url) {
+    const ws = new WebSocket(url);
+    await new Promise((res, rej) => {
+      ws.addEventListener("open", res, { once: true });
+      ws.addEventListener("error", () => rej(new Error(`cannot open ${url}`)), { once: true });
+    });
+    return new Cdp(ws);
+  }
+  send(method, params = {}) {
+    const id = this.nextId++;
+    this.ws.send(JSON.stringify({ id, method, params }));
+    // A call Edge never answers (a page that stopped rendering) fails the
+    // run instead of hanging it.
+    return new Promise((res, rej) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        rej(new Error(`DevTools ${method} timed out`));
+      }, 30000);
+      this.pending.set(id, {
+        res: (v) => (clearTimeout(timer), res(v)),
+        rej: (e) => (clearTimeout(timer), rej(e)),
+      });
+    });
+  }
+  async eval(expression) {
+    const { result, exceptionDetails } = await this.send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
+    if (exceptionDetails) throw new Error(`evaluate failed: ${exceptionDetails.text}`);
+    return result.value;
+  }
+  close() {
+    try {
+      this.ws.close();
+    } catch {
+      // already closed
+    }
+  }
 }
 
-function qaAttributes(dom) {
-  // The last <body ...> tag: the page's own comment mentions "<body>" too.
-  const body = [...dom.matchAll(/<body\b[^>]*>/gi)].pop();
-  if (!body) return {};
-  const attrs = {};
-  for (const m of body[0].matchAll(/data-qa-([a-z-]+)="([^"]*)"/g)) {
-    attrs[m[1]] = m[2].replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+function killTree(child) {
+  if (!child || child.exitCode !== null) return;
+  try {
+    execFile("taskkill", ["/pid", String(child.pid), "/t", "/f"], () => {});
+  } catch {
+    child.kill();
   }
-  return attrs;
+}
+
+// The page's data-qa-* attributes by their attribute names: qaCardText -> card-text.
+const READ_QA = `Object.fromEntries(Object.entries(document.body.dataset)
+  .filter(([k]) => k.startsWith("qa"))
+  .map(([k, v]) => [k.slice(2).replace(/[A-Z]/g, (c, i) => (i ? "-" : "") + c.toLowerCase()), v]))`;
+
+/**
+ * Loads `url` in a private headless Edge whose page is exactly `size`, set
+ * through DevTools device metrics, waits for the harness to settle and
+ * returns its data-qa-* attributes; with `file`, also saves a screenshot.
+ * --window-size sizes the window, not the page: this Edge gave an 800x570
+ * window a 776x478 page and never a page under 492px wide, and --screenshot
+ * resized the page to the window only at capture, after the scripted action
+ * had run at the other size.
+ */
+async function runPage(url, size, file = null) {
+  const profile = newProfile();
+  const browser = spawn(
+    EDGE,
+    [...BASE_FLAGS, `--user-data-dir=${profile}`, "--remote-debugging-port=0", `--window-size=${size.w + 100},${size.h + 200}`, "about:blank"],
+    { stdio: "ignore", windowsHide: true },
+  );
+  let cdp = null;
+  try {
+    const portFile = join(profile, "DevToolsActivePort");
+    const deadline = Date.now() + 30000;
+    // Edge may still hold the file open while writing it.
+    let port = "";
+    while (!port && Date.now() < deadline) {
+      try {
+        port = readFileSync(portFile, "utf8").split(/\r?\n/)[0].trim();
+      } catch {
+        // not written yet
+      }
+      if (!port) await sleep(100);
+    }
+    if (!port) throw new Error("Edge never wrote DevToolsActivePort");
+    let page = null;
+    while (!page && Date.now() < deadline) {
+      const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then((r) => r.json()).catch(() => []);
+      page = targets.find((t) => t.type === "page");
+      if (!page) await sleep(100);
+    }
+    if (!page) throw new Error("no page target in Edge");
+    cdp = await Cdp.connect(page.webSocketDebuggerUrl);
+    await cdp.send("Emulation.setDeviceMetricsOverride", { width: size.w, height: size.h, deviceScaleFactor: 1, mobile: false });
+    // A page driven over DevTools is not the focused window; focus and blur
+    // events need it to be.
+    await cdp.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+    await cdp.send("Page.enable");
+    // Edge sometimes opens a second tab; a background tab never runs
+    // requestAnimationFrame.
+    await cdp.send("Page.bringToFront");
+    await cdp.send("Page.navigate", { url });
+    // Longer than the page's own 25s wait for its chips.
+    const readyBy = Date.now() + 45000;
+    const ready = () => cdp.eval(`document.body?.dataset.qaReady ?? null`).catch(() => null);
+    while ((await ready()) !== "1") {
+      if (Date.now() > readyBy) throw new Error(`qa-overlay.html never settled: ${url} at ${size.w}x${size.h}`);
+      await sleep(100);
+    }
+    const qa = await cdp.eval(READ_QA);
+    if (file) {
+      // Two frames after the harness settles, so the capture shows its final state.
+      await cdp.eval(`new Promise((r) => { requestAnimationFrame(() => requestAnimationFrame(() => r(true))); setTimeout(() => r(true), 500); })`);
+      const { data } = await cdp.send("Page.captureScreenshot", { format: "png" });
+      writeFileSync(file, Buffer.from(data, "base64"));
+    }
+    return qa;
+  } finally {
+    if (cdp) {
+      // Edge may close the socket before it answers.
+      await Promise.race([cdp.send("Browser.close").catch(() => {}), sleep(1000)]);
+      cdp.close();
+    }
+    killTree(browser);
+  }
 }
 
 const pageUrl = (base, params) => `${base}/qa-overlay.html?${new URLSearchParams({ table: "1", ...params })}`;
 
 async function dump(base, size, params) {
-  const dom = await edge([`--window-size=${size.w},${size.h}`, "--dump-dom", pageUrl(base, params)], { capture: true });
-  const qa = qaAttributes(dom);
-  if (qa.ready !== "1") throw new Error(`qa-overlay.html never settled for ${JSON.stringify(params)} at ${size.w}x${size.h}`);
+  const qa = await runPage(pageUrl(base, params), size);
+  if (qa.viewport !== `${size.w}x${size.h}`) throw new Error(`page is ${qa.viewport}, not ${size.w}x${size.h}`);
   return qa;
 }
 
 async function shot(t, base, size, params, name) {
   const file = join(outDir, name);
-  await edge([`--window-size=${size.w},${size.h}`, `--screenshot=${file}`, pageUrl(base, params)]);
-  t.check(existsSync(file), `screenshot ${name}`);
+  const qa = await runPage(pageUrl(base, params), size, file);
+  t.check(existsSync(file) && qa.viewport === `${size.w}x${size.h}`, `screenshot ${name}`, `page ${qa.viewport}`);
 }
 
 /** `a=1 b=x` → { a: "1", b: "x" } */
 const fields = (s) => Object.fromEntries((s ?? "").split(" ").filter(Boolean).map((kv) => kv.split("=")));
 
-// qa-overlay.html's engine roster: opponents with a tag, with a sample on
-// the chip (every read tag; the 9-max stack tag "12bb" has none) and with any
-// card at all.
-const ENGINE = { 6: { tags: 4, samples: 4, cards: 5 }, 9: { tags: 7, samples: 6, cards: 8 } };
+// qa-overlay.html's engine table at each size, from the same fixture: the
+// opponents with a tag, with a sample on the chip (PlayerHudCard's
+// tagSample: the sample of the read the tag stands for; a stack or bounty
+// fact has none) and with a card.
+const FIXTURE = JSON.parse(readFileSync(join(root, "src-tauri", "tests", "fixtures", "qa_engine_reads.json"), "utf8"));
+const ENGINE = Object.fromEntries(
+  TABLES.map((max) => {
+    const table = FIXTURE.tables.find((t) => t.maxPlayers === max);
+    const villains = table.players.filter((p) => p.seatOffset !== 0 && p.engine);
+    const sample = (p) => (p.engine.tag ? (p.engine.reads.find((r) => r.ruleId === p.engine.tag.ruleId)?.sample ?? null) : null);
+    return [max, {
+      tags: villains.filter((p) => p.engine.tag).length,
+      samples: villains.filter(sample).length,
+      cards: villains.length,
+      at: (key) => villains.find((p) => p.seatOffset === key),
+    }];
+  }),
+);
+
+/** The card's confidence text, as HoverReadCard's confidenceText prints it. */
+const TIER = { high: "High", medium: "Medium", low: "Low", insufficientData: "Low data" };
+const confidence = (read) => `${TIER[read.confidenceTier]}${read.confidencePct === null ? "" : ` ${Math.round(read.confidencePct)}%`}`;
+/** qa-overlay.html writes the card text with " as '. */
+const asCardText = (text) => text.replace(/"/g, "'");
+
+/**
+ * The seat whose card the hover checks open: the dragged seat's, or, when
+ * that card fits nowhere at this size (9-max at the minimum size, see
+ * hoverall), the first chip whose card does. One lookup per table and size.
+ */
+const hoverSeats = new Map();
+function hoverSeat(base, max, size) {
+  const key = `${max}/${size.w}`;
+  if (!hoverSeats.has(key)) {
+    hoverSeats.set(key, (async () => {
+      if (size.w !== SIZES[0].w) return DRAG.seat;
+      const all = fields((await dump(base, size, { max: String(max), engine: "1", action: "hoverall" }))["action-result"]);
+      const keys = (all.keys ?? "").split(",").map(Number).filter(Boolean);
+      return keys.includes(DRAG.seat) || !keys.length ? DRAG.seat : keys[0];
+    })());
+  }
+  return hoverSeats.get(key);
+}
 
 /** The `strategic-analysis` overlay: tagged chips, the hover card and its lifecycle. */
 function planEngineChecks(base) {
@@ -266,26 +427,40 @@ function planEngineChecks(base) {
           if (size.w === SIZES[1].w) {
             check(r.opened === String(expected.cards), `${label}: a card opens on every chip with an engine payload`, all["action-result"]);
           } else {
-            info(`${label}: cards placed ${r.opened}/${expected.cards} (the rest fit nowhere clear of every seat's cards)`);
+            info(`${label}: cards placed ${r.opened}/${expected.cards} (the rest fit nowhere clear of every seat's cards), at seat keys ${r.keys}`);
           }
           check(r.violations === "0" && r.hole === "0",
             `${label}: no card covers a protected zone, any seat's hole cards, its chip or the window edge`, all["action-result"]);
           check(r.hot === "0", `${label}: no card takes pointer input or becomes a hot zone`, all["action-result"]);
           check(r.stuck === "0", `${label}: every card closes on pointer leave`, all["action-result"]);
           info(`${label}: cards with two reads: ${r.twoReads}/${r.opened}`);
+          // Every read's observation and advice wraps to at most two lines; the
+          // clamp cuts a longer one short. The medium window must show them in
+          // full; at the minimum one some may not fit, which is reported.
+          if (size.w === SIZES[1].w) {
+            check(r.clamped === "0", `${label}: no observation or advice of any card is clamped`,
+              `clamped=${r.clamped}/${r.blocks} (${r.clampedWho})`);
+          } else {
+            info(`${label}: clamped observation/advice blocks: ${r.clamped}/${r.blocks} (${r.clampedWho})`);
+          }
         });
       }
       group(async (t) => {
-        const { check } = t;
-        const hover = { max: String(max), engine: "1", action: "hover", seat: String(DRAG.seat) };
+        const { check, info } = t;
+        const seat = await hoverSeat(base, max, size);
+        if (seat !== DRAG.seat) info(`${tag} hover: seat ${DRAG.seat}'s card fits nowhere at this size; hovering seat ${seat}`);
+        const hover = { max: String(max), engine: "1", action: "hover", seat: String(seat) };
         const qa = await dump(base, size, hover);
         check(qa.card === "1" && qa["card-reads"] !== "0" && qa["card-violations"] === "0" && qa["card-hole"] === "0" && qa["card-hot"] === "0",
           `${tag} hover: card open, clear of protected zones and every seat's hole cards, not a hot zone`,
           `card=${qa.card} reads=${qa["card-reads"]} violations=${qa["card-violations"]} hole=${qa["card-hole"]} hot=${qa["card-hot"]}`);
-        check(/Folds to 72% of 3-bets/.test(qa["card-text"] ?? "") && /3-bet his opens wider/.test(qa["card-text"] ?? "")
-          && /High 81%/.test(qa["card-text"] ?? ""), `${tag} hover: card shows observation, advice and confidence`, qa["card-text"]);
+        const villain = expected.at(seat);
+        const top = villain.engine.topReads[0];
+        const text = qa["card-text"] ?? "";
+        check(text.includes(asCardText(top.observation)) && text.includes(asCardText(top.advice)) && text.includes(confidence(top)),
+          `${tag} hover: card shows the fixture's top read (observation, advice, ${confidence(top)})`, text);
         // The card may sit away from its chip (never over any seat's cards), so it names its player.
-        check((qa["card-text"] ?? "").startsWith("TightTony"), `${tag} hover: card names the player first`, qa["card-text"]);
+        check(text.startsWith(villain.name), `${tag} hover: card names the player first`, text);
         await shot(t, base, size, { max: String(max), engine: "1" }, `hud-tagged-${tag}.png`);
         await shot(t, base, size, hover, `hud-hover-${tag}.png`);
       });
@@ -295,8 +470,12 @@ function planEngineChecks(base) {
     const size = SIZES[0];
     const tag = `${max}max-${size.w}x${size.h}`;
     const act = (action, verify) =>
-      group(async ({ check }) =>
-        verify(check, fields((await dump(base, size, { max: String(max), engine: "1", action, seat: String(DRAG.seat) }))["action-result"])));
+      group(async ({ check }) => {
+        const seat = await hoverSeat(base, max, size);
+        verify(check, fields((await dump(base, size, { max: String(max), engine: "1", action, seat: String(seat) }))["action-result"]));
+      });
+    act("clampprobe", (check, r) =>
+      check(r.card === "1" && Number(r.clamped) >= 1, `${tag} the clamp check counts a read too long for two lines`, JSON.stringify(r)));
     act("leave", (check, r) =>
       check(r.before === "1" && r.after === "0", `${tag} card closes on pointer leave`, JSON.stringify(r)));
     act("nativeleave", (check, r) =>
