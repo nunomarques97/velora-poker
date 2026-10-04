@@ -1,6 +1,7 @@
 //! Read ranking and the chip tag (`docs/specs/opponent-engine.md`, section
-//! 7): the biggest, surest deviations go first, and a 2–4 character tag
-//! names the villain at a glance across a dozen tables.
+//! 7): the reads worth the most money to the hero against this villain, in
+//! the between-hands context, go first, and a 2–4 character tag names the
+//! villain at a glance across a dozen tables.
 //!
 //! Catalogue rows G01 (`rank.score`), G02 (`rank.tag`) and X03
 //! (`gate.min_hands_archetype`). Pure functions of the reads the rules
@@ -11,9 +12,9 @@ use std::cmp::Ordering;
 
 use serde::Serialize;
 
-use super::context::EngineContext;
+use super::context::{reseats_every_hand, EngineContext, Side, Stage, StackBucket};
 use super::pooling::FormatKey;
-use super::rules::EngineRuleResult;
+use super::rules::{EngineRuleResult, Family, RuleDef, JAM_DEPTH_MAX_BB};
 
 /// Spec id of the ranking (catalogue row G01).
 pub const RULE_RANK_SCORE: &str = "rank.score";
@@ -36,11 +37,207 @@ const STACK_TAG_RULE: &str = "ctx.effective_stack";
 const SHORT_STACK_RULE: &str = "ctx.short_stack";
 const TILT_RULE: &str = "rec.tilt";
 
-/// `deviation × confidence × multiplier` (section 7). Context and recency
-/// reads carry a fixed base instead of `deviation × confidence`; the rules
-/// apply that themselves, so ranking only ever reads `score`.
-pub fn score(deviation: f64, confidence: f64, multiplier: f64) -> f64 {
-    deviation * confidence * multiplier
+/// The money-relevance score (section 7): `deviation × confidence × weight
+/// × context`, where `weight` is the rule's [`spot_weight`] and `context`
+/// its [`context_multiplier`]. Context, recency and showdown reads carry a
+/// fixed base instead of `deviation × confidence`; the rules apply that
+/// themselves, so ranking only ever reads `score`.
+pub fn score(deviation: f64, confidence: f64, weight: f64, context: f64) -> f64 {
+    deviation * confidence * weight * context
+}
+
+// ------------------------------------------------------- spot weight (7.2)
+
+/// Spot weight of head-to-head reads: they count the hero's own spots
+/// against this villain, so every one of them is a spot the hero plays.
+pub const H2H_WEIGHT: f64 = 1.25;
+/// Spot weight of reads about rare lines (a squeeze needs an open and a
+/// caller, a river raise a river bet first) and of outcome stats (won
+/// pots), whose lever is diffuse: they rank below a frequency read of the
+/// same size.
+pub const MINOR_SPOT_WEIGHT: f64 = 0.8;
+
+/// Reads whose spot is rare or whose stat is an outcome (section 7.2).
+const MINOR_SPOTS: [&str; 11] = [
+    "pf.squeeze.high",
+    "pf.limp_reraise.seen",
+    "post.delayed_cbet.high",
+    "post.donk.high",
+    "post.float.high",
+    "post.probe.high",
+    "post.river_raise.high",
+    "post.fold_river_raise.high",
+    "post.wwsf_low",
+    "post.wwsf_high",
+    "post.wsd_strong",
+];
+
+/// How often the read's spot comes up for the hero and how big its pot is,
+/// relative to an ordinary preflop open or flop c-bet spot (1.0).
+pub fn spot_weight(def: &RuleDef) -> f64 {
+    if def.family == Family::H2h {
+        H2H_WEIGHT
+    } else if MINOR_SPOTS.contains(&def.id) {
+        MINOR_SPOT_WEIGHT
+    } else {
+        1.0
+    }
+}
+
+// --------------------------------------------------- context (section 7.2)
+
+/// The kind of spot a read is about, which decides how the between-hands
+/// context changes its money value (section 7.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Lever {
+    /// Blind battles: his steals and small-blind opens, his blind defence.
+    Steal,
+    /// His limps and the raises over them.
+    Limp,
+    /// His own 3-bets, 4-bets and squeezes.
+    Reraise,
+    /// His open shoves: the hero's calls.
+    Shove,
+    /// His reshoves over opens: the hero's opens and calls.
+    Reshove,
+    /// His calls of all-ins: the hero's shoves.
+    CallShove,
+    /// Postflop lines.
+    Postflop,
+    /// Everything else (opens, folds to 3-bets, profile, context, recency,
+    /// showdown tells): no context factor beyond the seat.
+    Other,
+}
+
+/// The lever of a rule id.
+pub fn lever(rule_id: &str) -> Lever {
+    match rule_id {
+        "pf.steal.high" | "pf.steal.low" | "pf.rfi_sb.wide" | "pf.fold_to_steal.high" | "pf.fold_to_steal.low"
+        | "pf.bb_vs_sb.overfold" | "pf.bb_vs_sb.overdefend" | "stage.late.overfolds_blinds"
+        | "h2h.steal_vs_hero.high" | "h2h.defend_vs_hero_steal.high" => Lever::Steal,
+        "pf.limp.high" | "pf.iso.high" | "pf.limp_fold.high" | "pf.limp_reraise.seen" | "pf.limp_call.high"
+        | "stage.early.passive" => Lever::Limp,
+        "pf.3bet.high_ip" | "pf.3bet.high_oop" | "pf.3bet.low" | "pf.4bet.high" | "pf.squeeze.high"
+        | "h2h.3bet_vs_hero.high" => Lever::Reraise,
+        "stk.open_shove.wide" | "stk.open_shove.tight" | "stage.late.shoves_wide" => Lever::Shove,
+        "stk.reshove.high" | "stk.reshove.low" => Lever::Reshove,
+        "stk.call_shove.wide" | "stk.call_shove.tight" | "stage.late.calls_shoves" | "ko.hunts_bounties"
+        | "ko.calls_when_covering" => Lever::CallShove,
+        "h2h.fold_to_hero_cbet.high" => Lever::Postflop,
+        id if id.starts_with("post.") => Lever::Postflop,
+        _ => Lever::Other,
+    }
+}
+
+/// Seat factor of a read about the side of the hero the villain sits on
+/// (his answers to the hero's opens on the left, his own opens on the
+/// right), directly next to the hero.
+pub const SEAT_DIRECT: f64 = 1.25;
+/// Seat factor on the read's side, further away.
+pub const SEAT_SAME_SIDE: f64 = 1.1;
+/// Seat factor on the other side, further away: the spot still comes up,
+/// less often.
+pub const SEAT_OTHER_SIDE: f64 = 0.9;
+/// Seat factor directly next to the hero on the other side.
+pub const SEAT_OTHER_SIDE_DIRECT: f64 = 0.8;
+/// All-in reads at 15–25bb (`reshove`): his reshoves and his calls of
+/// shoves decide most pots there.
+pub const RESHOVE_PRIORITY: f64 = 1.5;
+/// His reshoves at 25–40bb (jam depth above the reshove bucket).
+pub const JAM_DEPTH_RESHOVE: f64 = 1.25;
+/// All-in reads at 60–150bb (`standard`) and above 150bb (`deep`): their
+/// samples come from 25bb or less and their spots rarely arise this deep.
+pub const STANDARD_ALL_IN: f64 = 0.6;
+pub const DEEP_ALL_IN: f64 = 0.5;
+/// His sized 3-bets, 4-bets and squeezes at 15–25bb: there his re-raise is
+/// a jam, which the depth-specific reshove read counts.
+pub const RESHOVE_RERAISE: f64 = 0.8;
+/// Postflop reads at 15–25bb (few streets left to play) and above 150bb
+/// (most of the money is won postflop).
+pub const RESHOVE_POSTFLOP: f64 = 0.75;
+pub const DEEP_POSTFLOP: f64 = 1.2;
+/// Late tournament stage: blind battles and all-in spots decide the stage,
+/// postflop play shrinks.
+pub const LATE_STAGE_PRIORITY: f64 = 1.25;
+pub const LATE_STAGE_POSTFLOP: f64 = 0.8;
+/// Early tournament stage: limped pots are the cheapest money.
+pub const EARLY_STAGE_LIMP: f64 = 1.25;
+/// Knockout, effective stack 25bb or less, the hero covers a villain
+/// carrying a big bounty: calling his shoves and reshoves also wins it.
+pub const BOUNTY_CALL_PRIORITY: f64 = 1.5;
+/// Knockout, effective stack 25bb or less, he covers the hero: the hero's
+/// bounty pays his calls.
+pub const BOUNTY_COVERED_PRIORITY: f64 = 1.25;
+/// Effective stack up to which the bounty factors apply (`reshove`'s top).
+const BOUNTY_MAX_BB: f64 = 25.0;
+
+fn all_in(lever: Lever) -> bool {
+    matches!(lever, Lever::Shove | Lever::Reshove | Lever::CallShove)
+}
+
+/// The seat factor (section 7.2): only for reads with a seat side, never
+/// at Zoom, where the seats change every hand.
+fn seat_factor(def: &RuleDef, ctx: &EngineContext) -> f64 {
+    if reseats_every_hand(ctx.variant.as_deref()) {
+        return 1.0;
+    }
+    let (Some(side), Some(seat)) = (def.seat, ctx.seat) else { return 1.0 };
+    let direct = match seat.side {
+        Side::Left => seat.direct_left,
+        Side::Right => seat.direct_right,
+    };
+    match (seat.side == side, direct) {
+        (true, true) => SEAT_DIRECT,
+        (true, false) => SEAT_SAME_SIDE,
+        (false, false) => SEAT_OTHER_SIDE,
+        (false, true) => SEAT_OTHER_SIDE_DIRECT,
+    }
+}
+
+fn stack_factor(lever: Lever, ctx: &EngineContext) -> f64 {
+    let Some(bucket) = ctx.stack_bucket else { return 1.0 };
+    let jam_depth = ctx.effective_stack_bb.is_some_and(|eff| eff <= JAM_DEPTH_MAX_BB + 1e-9);
+    match (bucket, lever) {
+        (StackBucket::Reshove, Lever::Reshove | Lever::CallShove) => RESHOVE_PRIORITY,
+        (StackBucket::Reshove, Lever::Reraise) => RESHOVE_RERAISE,
+        (StackBucket::Reshove, Lever::Postflop) => RESHOVE_POSTFLOP,
+        (StackBucket::Mid, Lever::Reshove) if jam_depth => JAM_DEPTH_RESHOVE,
+        (StackBucket::Standard, l) if all_in(l) => STANDARD_ALL_IN,
+        (StackBucket::Deep, l) if all_in(l) => DEEP_ALL_IN,
+        (StackBucket::Deep, Lever::Postflop) => DEEP_POSTFLOP,
+        _ => 1.0,
+    }
+}
+
+fn stage_factor(lever: Lever, ctx: &EngineContext) -> f64 {
+    match (ctx.stage, lever) {
+        (Some(Stage::Late), Lever::Steal) => LATE_STAGE_PRIORITY,
+        (Some(Stage::Late), l) if all_in(l) => LATE_STAGE_PRIORITY,
+        (Some(Stage::Late), Lever::Postflop) => LATE_STAGE_POSTFLOP,
+        (Some(Stage::Early), Lever::Limp) => EARLY_STAGE_LIMP,
+        _ => 1.0,
+    }
+}
+
+fn bounty_factor(lever: Lever, ctx: &EngineContext) -> f64 {
+    let Some(bounty) = &ctx.bounty else { return 1.0 };
+    if !ctx.effective_stack_bb.is_some_and(|eff| eff <= BOUNTY_MAX_BB + 1e-9) {
+        return 1.0;
+    }
+    match (bounty.hero_covers, lever) {
+        (Some(true), Lever::Shove | Lever::Reshove) if bounty.is_big() => BOUNTY_CALL_PRIORITY,
+        (Some(false), Lever::CallShove) => BOUNTY_COVERED_PRIORITY,
+        _ => 1.0,
+    }
+}
+
+/// The context multiplier of a read (section 7.2): seat × stack depth ×
+/// tournament stage × bounty, each 1.0 where it does not apply. `None`
+/// (no table scope) is 1.0.
+pub fn context_multiplier(def: &RuleDef, context: Option<&EngineContext>) -> f64 {
+    let Some(ctx) = context else { return 1.0 };
+    let lever = lever(def.id);
+    seat_factor(def, ctx) * stack_factor(lever, ctx) * stage_factor(lever, ctx) * bounty_factor(lever, ctx)
 }
 
 /// Section 7's order: score descending, then confidence descending, then

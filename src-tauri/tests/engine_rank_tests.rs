@@ -15,17 +15,17 @@ use velora_poker_lib::classification::{self, PlayerClassification};
 use velora_poker_lib::commands::{active_table_payloads, build_player_payload};
 use velora_poker_lib::db;
 use velora_poker_lib::description_rules::{ConfidenceTier, RuleCategory};
-use velora_poker_lib::engine::rank::score;
+use velora_poker_lib::engine::rank::{context_multiplier, score, spot_weight, H2H_WEIGHT, MINOR_SPOT_WEIGHT};
 use velora_poker_lib::engine::{
     chip_tag, engine_payload, evaluate_rules, is_valid_tag, latest_table_hand, player_replay, rank,
-    rank_reads, stat_spec, villain_context, EngineCache, EngineContext, EngineRuleResult, Family,
+    rank_reads, rule_def, stat_spec, villain_context, EngineCache, EngineContext, EngineRuleResult, Family,
     FormatKey, RuleInput, ShrunkStat, StackBucket, StatKey, TagSource, RULES,
 };
 
 // ------------------------------------------------------------------ helpers
 
-/// A read with a known deviation, confidence and multiplier; its score is
-/// the section-7 product.
+/// A read with a known deviation, confidence and context multiplier (spot
+/// weight 1); its score is the section-7 product.
 fn read(id: &str, tag: Option<&str>, deviation: f64, confidence: f64, multiplier: f64) -> EngineRuleResult {
     EngineRuleResult {
         rule_id: id.to_string(),
@@ -39,9 +39,10 @@ fn read(id: &str, tag: Option<&str>, deviation: f64, confidence: f64, multiplier
         scenario_id: "P06".into(),
         family: Family::Preflop,
         tag: tag.map(str::to_string),
-        score: score(deviation, confidence, multiplier),
+        score: score(deviation, confidence, 1.0, multiplier),
         deviation,
         confidence,
+        weight: 1.0,
         multiplier,
         adapted_by: Vec::new(),
     }
@@ -109,7 +110,7 @@ fn keys(value: &Value) -> Vec<&str> {
 // ------------------------------------------------------------- ranking (G01)
 
 #[test]
-fn ranking_orders_by_deviation_times_confidence() {
+fn ranking_orders_by_money_relevance_score() {
     // Biggest deviation (3.0 × 0.30 = 0.90), surest read (1.0 × 0.95 =
     // 0.95) and the best product (1.5 × 0.80 = 1.20): the product wins.
     let reads = vec![
@@ -126,19 +127,58 @@ fn ranking_orders_by_deviation_times_confidence() {
     assert_eq!(ids(&rank(boosted))[0], "a.big_deviation");
 
     // On real rule output, every stat read's score is deviation ×
-    // confidence × multiplier and the ranked list never rises.
+    // confidence × spot weight × context multiplier, the weight and the
+    // multiplier are section 7.2's, and the ranked list never rises; with
+    // and without a table context.
     let format = FormatKey::Cash;
     let prior = builtin(format);
     let mut input = RuleInput::default();
-    for (key, hits, n) in [(StatKey::FoldTo3betOop, 30, 30), (StatKey::Steal, 30, 40), (StatKey::Vpip, 2, 60)] {
+    for (key, hits, n) in [
+        (StatKey::FoldTo3betOop, 30, 30),
+        (StatKey::Steal, 30, 40),
+        (StatKey::Vpip, 2, 60),
+        (StatKey::Squeeze, 12, 40),
+        (StatKey::Wwsf, 40, 60),
+    ] {
         input.stats.insert(key, ShrunkStat::new(key, hits, n, prior(key)));
     }
-    let ranked = rank(evaluate_rules(&input));
-    assert!(ranked.len() >= 2, "{:?}", ids(&ranked));
-    for r in &ranked {
-        assert!((r.score - r.deviation * r.confidence * r.multiplier).abs() < 1e-12, "{}", r.rule_id);
+    for ctx in [None, Some(context(format, Some(20.0))), Some(context(format, Some(200.0)))] {
+        input.context = ctx;
+        let ranked = rank(evaluate_rules(&input));
+        assert!(ranked.len() >= 3, "{:?}", ids(&ranked));
+        for r in &ranked {
+            let def = rule_def(&r.rule_id);
+            assert_eq!(r.weight, spot_weight(def), "{}", r.rule_id);
+            assert_eq!(r.multiplier, context_multiplier(def, input.context.as_ref()), "{}", r.rule_id);
+            assert!((r.score - r.deviation * r.confidence * r.weight * r.multiplier).abs() < 1e-12, "{}", r.rule_id);
+        }
+        assert!(ranked.windows(2).all(|w| w[0].score >= w[1].score), "{:?}", ids(&ranked));
     }
-    assert!(ranked.windows(2).all(|w| w[0].score >= w[1].score), "{:?}", ids(&ranked));
+}
+
+#[test]
+fn spot_weights_follow_section_seven_two() {
+    // Head-to-head reads are the hero's own spots (×1.25); rare lines and
+    // outcome stats rank ×0.8; every other read ×1.
+    for def in RULES {
+        let expected = match def.id {
+            id if id.starts_with("h2h.") => H2H_WEIGHT,
+            "pf.squeeze.high" | "pf.limp_reraise.seen" | "post.delayed_cbet.high" | "post.donk.high"
+            | "post.float.high" | "post.probe.high" | "post.river_raise.high" | "post.fold_river_raise.high"
+            | "post.wwsf_low" | "post.wwsf_high" | "post.wsd_strong" => MINOR_SPOT_WEIGHT,
+            _ => 1.0,
+        };
+        assert_eq!(spot_weight(def), expected, "{}", def.id);
+    }
+    assert_eq!((H2H_WEIGHT, MINOR_SPOT_WEIGHT), (1.25, 0.8));
+
+    // A weight moves a read past one with a bigger deviation × confidence:
+    // a 4-bet read (1.0 × 0.9) under a head-to-head read (0.8 × 0.9 × 1.25).
+    let mut h2h = read("h2h.3bet_vs_hero.high", Some("H2H"), 0.8, 0.9, 1.0);
+    h2h.weight = spot_weight(rule_def("h2h.3bet_vs_hero.high"));
+    h2h.score = score(0.8, 0.9, h2h.weight, 1.0);
+    let four_bet = read("pf.4bet.high", Some("4B+"), 0.85, 0.9, 1.0);
+    assert_eq!(ids(&rank(vec![four_bet, h2h])), ["h2h.3bet_vs_hero.high", "pf.4bet.high"]);
 }
 
 #[test]

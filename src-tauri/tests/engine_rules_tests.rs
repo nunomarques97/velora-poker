@@ -532,12 +532,14 @@ fn short_stack_villain_gets_only_push_fold_reads() {
         assert!(read(&reads, id).is_none(), "{id} must not show at 12bb");
     }
 
-    // 15bb is still push/fold; 15.1bb is not.
+    // 15bb is still push/fold; 15.1bb is not. (At 15–25bb his 3-bet read
+    // yields to his reshove read when both fire, section 7.2, so the
+    // fold-to-3-bet read shows the preflop reads are back.)
     short.context = Some(context(FormatKey::Mtt, 15.0));
-    assert!(read(&evaluate_rules(&short), "pf.3bet.high_ip").is_none());
+    assert!(read(&evaluate_rules(&short), "pf.fold_to_3bet.high").is_none());
     short.context = Some(context(FormatKey::Mtt, 15.1));
     let reads = evaluate_rules(&short);
-    assert!(read(&reads, "pf.3bet.high_ip").is_some());
+    assert!(read(&reads, "pf.fold_to_3bet.high").is_some());
     assert!(read(&reads, "ctx.short_stack").is_none());
 }
 
@@ -545,21 +547,29 @@ fn short_stack_villain_gets_only_push_fold_reads() {
 fn reshove_family_takes_priority_at_20bb() {
     // Reshove 5/12 in an MTT: shrunk (5 + 1)/22 = .273, d = 2.88,
     // confidence 12/22 → score 1.57. 3-bet IP 8/40: (8 + 1.75)/65 = .15,
-    // d = 2.67, confidence 40/65 → score 1.64.
+    // d = 2.67, confidence 40/65 → score 1.64. Section 7.2: ×1.5 for the
+    // reshove and call-shove reads at 15–25bb, ×1.25 for the reshove read
+    // at 25–40bb, ×1 above; at 15–25bb the 3-bet read yields to the reshove
+    // read (DEPTH_OPPOSITES).
     let mut v = input(FormatKey::Mtt, &[(Reshove, 5, 12), (ThreeBetIp, 8, 40), (CallVsShove, 15, 30)]);
-    v.context = Some(context(FormatKey::Mtt, 40.0));
-    let deep = evaluate_rules(&v);
-    v.context = Some(context(FormatKey::Mtt, 20.0));
+    v.context = Some(context(FormatKey::Mtt, 60.0));
     let mid = evaluate_rules(&v);
+    v.context = Some(context(FormatKey::Mtt, 40.0));
+    let jam = evaluate_rules(&v);
+    v.context = Some(context(FormatKey::Mtt, 20.0));
+    let reshove = evaluate_rules(&v);
 
     let score = |reads: &[EngineRuleResult], id: &str| read(reads, id).unwrap().score;
-    assert!(score(&deep, "pf.3bet.high_ip") > score(&deep, "stk.reshove.high"));
-    assert!(score(&mid, "stk.reshove.high") > score(&mid, "pf.3bet.high_ip"));
+    assert!(score(&mid, "pf.3bet.high_ip") > score(&mid, "stk.reshove.high"));
+    assert!(score(&jam, "stk.reshove.high") > score(&jam, "pf.3bet.high_ip"));
+    assert!(read(&reshove, "pf.3bet.high_ip").is_none(), "{:?}", ids(&reshove));
     for id in ["stk.reshove.high", "stk.call_shove.wide"] {
-        let ratio = score(&mid, id) / score(&deep, id);
+        let ratio = score(&reshove, id) / score(&mid, id);
         assert!((ratio - 1.5).abs() < 1e-9, "{id}: ×{ratio}");
     }
-    assert_eq!(score(&mid, "pf.3bet.high_ip"), score(&deep, "pf.3bet.high_ip"));
+    assert!((score(&jam, "stk.reshove.high") / score(&mid, "stk.reshove.high") - 1.25).abs() < 1e-9);
+    assert_eq!(score(&jam, "stk.call_shove.wide"), score(&mid, "stk.call_shove.wide"));
+    assert_eq!(score(&jam, "pf.3bet.high_ip"), score(&mid, "pf.3bet.high_ip"));
 }
 
 #[test]
