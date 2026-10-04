@@ -1,0 +1,167 @@
+PokerStars Hand #272000000201:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/02 21:00:00 ET
+Table 'Audit Engine A' 6-max Seat #4 is the button
+Seat 1: Ari ($50 in chips)
+Seat 2: Bel ($50 in chips)
+Seat 3: Cas ($50 in chips)
+Seat 4: Dov ($50 in chips)
+Seat 5: Eno ($50 in chips)
+Seat 6: Fyn ($50 in chips)
+Eno: posts small blind $0.25
+Fyn: posts big blind $0.50
+*** HOLE CARDS ***
+Ari: folds
+Bel: folds
+Cas: folds
+Dov: folds
+Eno: raises $1 to $1.50
+Fyn: calls $1
+*** FLOP *** [8c 5d 2h]
+Eno: bets $1
+Fyn: folds
+Uncalled bet ($1) returned to Eno
+Eno collected $3 from pot
+Eno: doesn't show hand
+*** SUMMARY ***
+Total pot $3 | Rake $0
+Board [8c 5d 2h]
+Seat 1: Ari folded before Flop (didn't bet)
+Seat 2: Bel folded before Flop (didn't bet)
+Seat 3: Cas folded before Flop (didn't bet)
+Seat 4: Dov (button) folded before Flop (didn't bet)
+Seat 5: Eno (small blind) collected ($3)
+Seat 6: Fyn (big blind) folded on the Flop
+
+
+
+PokerStars Hand #272000000202:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/02 21:01:00 ET
+Table 'Audit Engine A' 6-max Seat #4 is the button
+Seat 1: Ari ($50 in chips)
+Seat 2: Bel ($50 in chips)
+Seat 3: Cas ($50 in chips)
+Seat 4: Dov ($50 in chips)
+Seat 5: Eno ($50 in chips)
+Seat 6: Fyn ($50 in chips)
+Eno: posts small blind $0.25
+Fyn: posts big blind $0.50
+*** HOLE CARDS ***
+Ari: folds
+Bel: folds
+Cas: folds
+Dov: folds
+Eno: raises $1 to $1.50
+Fyn: raises $3.50 to $5
+Eno: raises $7 to $12
+Fyn: folds
+Uncalled bet ($7) returned to Eno
+Eno collected $10 from pot
+Eno: doesn't show hand
+*** SUMMARY ***
+Total pot $10 | Rake $0
+Seat 1: Ari folded before Flop (didn't bet)
+Seat 2: Bel folded before Flop (didn't bet)
+Seat 3: Cas folded before Flop (didn't bet)
+Seat 4: Dov (button) folded before Flop (didn't bet)
+Seat 5: Eno (small blind) collected ($10)
+Seat 6: Fyn (big blind) folded before Flop
+
+
+
+PokerStars Hand #272000000203:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/02 21:02:00 ET
+Table 'Audit Engine A' 6-max Seat #4 is the button
+Seat 1: Ari ($50 in chips)
+Seat 2: Bel ($50 in chips)
+Seat 3: Cas ($50 in chips)
+Seat 4: Dov ($50 in chips)
+Seat 5: Eno ($50 in chips)
+Seat 6: Fyn ($50 in chips)
+Eno: posts small blind $0.25
+Fyn: posts big blind $0.50
+*** HOLE CARDS ***
+Ari: folds
+Bel: folds
+Cas: folds
+Dov: folds
+Eno: raises $1 to $1.50
+Fyn: folds
+Uncalled bet ($1) returned to Eno
+Eno collected $1 from pot
+Eno: doesn't show hand
+*** SUMMARY ***
+Total pot $1 | Rake $0
+Seat 1: Ari folded before Flop (didn't bet)
+Seat 2: Bel folded before Flop (didn't bet)
+Seat 3: Cas folded before Flop (didn't bet)
+Seat 4: Dov (button) folded before Flop (didn't bet)
+Seat 5: Eno (small blind) collected ($1)
+Seat 6: Fyn (big blind) folded before Flop
+
+
+
+PokerStars Hand #272000000204:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/02 21:03:00 ET
+Table 'Audit Engine A' 6-max Seat #4 is the button
+Seat 1: Ari ($50 in chips)
+Seat 2: Bel ($50 in chips)
+Seat 3: Cas ($50 in chips)
+Seat 4: Dov ($50 in chips)
+Seat 5: Eno ($50 in chips)
+Seat 6: Fyn ($50 in chips)
+Eno: posts small blind $0.25
+Fyn: posts big blind $0.50
+*** HOLE CARDS ***
+Ari: calls $0.50
+Bel: raises $2 to $2.50
+Cas: calls $2.50
+Dov: raises $6.50 to $9
+Eno: folds
+Fyn: folds
+Ari: folds
+Bel: folds
+Cas: folds
+Uncalled bet ($6.50) returned to Dov
+Dov collected $8.75 from pot
+Dov: doesn't show hand
+*** SUMMARY ***
+Total pot $8.75 | Rake $0
+Seat 1: Ari folded before Flop
+Seat 2: Bel folded before Flop
+Seat 3: Cas folded before Flop
+Seat 4: Dov (button) collected ($8.75)
+Seat 5: Eno (small blind) folded before Flop
+Seat 6: Fyn (big blind) folded before Flop
+
+
+
+PokerStars Hand #272000000205:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/02 21:04:00 ET
+Table 'Audit Engine A' 6-max Seat #4 is the button
+Seat 1: Ari ($50 in chips) 
+Seat 2: Bel ($50 in chips) 
+Seat 3: Cas ($50 in chips) 
+Seat 4: Dov ($50 in chips) 
+Seat 5: Eno ($50 in chips) 
+Seat 6: Fyn ($50 in chips) 
+Eno: posts small blind $0.25
+Fyn: posts big blind $0.50
+*** HOLE CARDS ***
+Ari: folds 
+Bel: folds 
+Cas: folds 
+Dov: folds 
+Eno: raises $1 to $1.50
+Fyn: raises $3.50 to $5
+Eno: raises $7 to $12
+Fyn: calls $7
+*** FLOP *** [Qd 9h 3s]
+Eno: bets $8
+Fyn: folds 
+Uncalled bet ($8) returned to Eno
+Eno collected $24 from pot
+Eno: doesn't show hand 
+*** SUMMARY ***
+Total pot $24 | Rake $0 
+Board [Qd 9h 3s]
+Seat 1: Ari folded before Flop (didn't bet)
+Seat 2: Bel folded before Flop (didn't bet)
+Seat 3: Cas folded before Flop (didn't bet)
+Seat 4: Dov (button) folded before Flop (didn't bet)
+Seat 5: Eno (small blind) collected ($24)
+Seat 6: Fyn (big blind) folded on the Flop

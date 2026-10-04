@@ -1,0 +1,200 @@
+PokerStars Hand #272000000101: Tournament #4220000001, $10+$1 USD Hold'em No Limit - Level VI (100/200) - 2026/10/02 20:00:00 ET
+Table '4220000001 1' 6-max Seat #6 is the button
+Seat 1: Ace (3000 in chips)
+Seat 2: Bix (3100 in chips)
+Seat 3: Cue (2400 in chips)
+Seat 4: Dax (5000 in chips)
+Seat 5: Eli (5200 in chips)
+Seat 6: Fin (20000 in chips)
+Ace: posts the ante 25
+Bix: posts the ante 25
+Cue: posts the ante 25
+Dax: posts the ante 25
+Eli: posts the ante 25
+Fin: posts the ante 25
+Ace: posts small blind 100
+Bix: posts big blind 200
+*** HOLE CARDS ***
+Cue: raises 2175 to 2375 and is all-in
+Dax: folds
+Eli: calls 2375
+Fin: folds
+Ace: folds
+Bix: folds
+Cue: shows [Ah Ad] (a pair of Aces)
+Eli: shows [Kc Qc] (a pair of Kings)
+*** FLOP *** [Kd 8s 3c]
+*** TURN *** [Kd 8s 3c] [2h]
+*** RIVER *** [Kd 8s 3c 2h] [Jd]
+*** SHOW DOWN ***
+Cue collected 5200 from pot
+*** SUMMARY ***
+Total pot 5200 | Rake 0
+Board [Kd 8s 3c 2h Jd]
+Seat 1: Ace (small blind) folded before Flop
+Seat 2: Bix (big blind) folded before Flop
+Seat 3: Cue showed [Ah Ad] and won (5200) with a pair of Aces
+Seat 4: Dax folded before Flop (didn't bet)
+Seat 5: Eli showed [Kc Qc] and lost with a pair of Kings
+Seat 6: Fin (button) folded before Flop (didn't bet)
+
+
+
+PokerStars Hand #272000000102: Tournament #4220000001, $10+$1 USD Hold'em No Limit - Level VI (100/200) - 2026/10/02 20:02:00 ET
+Table '4220000001 1' 6-max Seat #1 is the button
+Seat 1: Ace (3000 in chips)
+Seat 2: Bix (3100 in chips)
+Seat 3: Cue (2400 in chips)
+Seat 4: Dax (5000 in chips)
+Seat 5: Eli (5200 in chips)
+Seat 6: Fin (20000 in chips)
+Ace: posts the ante 25
+Bix: posts the ante 25
+Cue: posts the ante 25
+Dax: posts the ante 25
+Eli: posts the ante 25
+Fin: posts the ante 25
+Bix: posts small blind 100
+Cue: posts big blind 200
+*** HOLE CARDS ***
+Dax: folds
+Eli: folds
+Fin: folds
+Ace: raises 200 to 400
+Bix: raises 2675 to 3075 and is all-in
+Cue: folds
+Ace: calls 2575 and is all-in
+Uncalled bet (100) returned to Bix
+Ace: shows [Qs Qh] (a pair of Queens)
+Bix: shows [Ac Jd] (high card Ace)
+*** FLOP *** [9c 7d 2s]
+*** TURN *** [9c 7d 2s] [4h]
+*** RIVER *** [9c 7d 2s 4h] [Th]
+*** SHOW DOWN ***
+Ace collected 6300 from pot
+*** SUMMARY ***
+Total pot 6300 | Rake 0
+Board [9c 7d 2s 4h Th]
+Seat 1: Ace (button) showed [Qs Qh] and won (6300) with a pair of Queens
+Seat 2: Bix (small blind) showed [Ac Jd] and lost with high card Ace
+Seat 3: Cue (big blind) folded before Flop
+Seat 4: Dax folded before Flop (didn't bet)
+Seat 5: Eli folded before Flop (didn't bet)
+Seat 6: Fin folded before Flop (didn't bet)
+
+
+
+PokerStars Hand #272000000103: Tournament #4220000001, $10+$1 USD Hold'em No Limit - Level VI (100/200) - 2026/10/02 20:04:00 ET
+Table '4220000001 1' 6-max Seat #4 is the button
+Seat 1: Ace (3000 in chips)
+Seat 2: Bix (3100 in chips)
+Seat 3: Cue (2400 in chips)
+Seat 4: Dax (5000 in chips)
+Seat 5: Eli (5200 in chips)
+Seat 6: Fin (20000 in chips)
+Ace: posts the ante 25
+Bix: posts the ante 25
+Cue: posts the ante 25
+Dax: posts the ante 25
+Eli: posts the ante 25
+Fin: posts the ante 25
+Eli: posts small blind 100
+Fin: posts big blind 200
+*** HOLE CARDS ***
+Ace: folds
+Bix: raises 200 to 400
+Cue: folds
+Dax: calls 400
+Eli: raises 4775 to 5175 and is all-in
+Fin: folds
+Bix: folds
+Dax: folds
+Uncalled bet (4775) returned to Eli
+Eli collected 1550 from pot
+Eli: doesn't show hand
+*** SUMMARY ***
+Total pot 1550 | Rake 0
+Seat 1: Ace folded before Flop (didn't bet)
+Seat 2: Bix folded before Flop
+Seat 3: Cue folded before Flop (didn't bet)
+Seat 4: Dax (button) folded before Flop
+Seat 5: Eli (small blind) collected (1550)
+Seat 6: Fin (big blind) folded before Flop
+
+
+
+PokerStars Hand #272000000104: Tournament #4220000001, $10+$1 USD Hold'em No Limit - Level VI (100/200) - 2026/10/02 20:06:00 ET
+Table '4220000001 1' 6-max Seat #6 is the button
+Seat 1: Ace (3000 in chips)
+Seat 2: Bix (3100 in chips)
+Seat 3: Cue (2400 in chips)
+Seat 4: Dax (5000 in chips)
+Seat 5: Eli (5200 in chips)
+Seat 6: Fin (20000 in chips)
+Ace: posts the ante 25
+Bix: posts the ante 25
+Cue: posts the ante 25
+Dax: posts the ante 25
+Eli: posts the ante 25
+Fin: posts the ante 25
+Ace: posts small blind 100
+Bix: posts big blind 200
+*** HOLE CARDS ***
+Cue: calls 200
+Dax: raises 600 to 800
+Eli: folds
+Fin: folds
+Ace: folds
+Bix: folds
+Cue: folds
+Uncalled bet (600) returned to Dax
+Dax collected 850 from pot
+Dax: doesn't show hand
+*** SUMMARY ***
+Total pot 850 | Rake 0
+Seat 1: Ace (small blind) folded before Flop
+Seat 2: Bix (big blind) folded before Flop
+Seat 3: Cue folded before Flop
+Seat 4: Dax collected (850)
+Seat 5: Eli folded before Flop (didn't bet)
+Seat 6: Fin (button) folded before Flop (didn't bet)
+
+
+
+PokerStars Hand #272000000105: Tournament #4220000001, $10+$1 USD Hold'em No Limit - Level VI (100/200) - 2026/10/02 20:08:00 ET
+Table '4220000001 1' 6-max Seat #4 is the button
+Seat 1: Ace (3000 in chips)
+Seat 2: Bix (3100 in chips)
+Seat 3: Cue (2400 in chips)
+Seat 4: Dax (5000 in chips)
+Seat 5: Eli (5200 in chips)
+Seat 6: Fin (20000 in chips)
+Ace: posts the ante 25
+Bix: posts the ante 25
+Cue: posts the ante 25
+Dax: posts the ante 25
+Eli: posts the ante 25
+Fin: posts the ante 25
+Eli: posts small blind 100
+Fin: posts big blind 200
+*** HOLE CARDS ***
+Ace: raises 1400 to 1600
+Bix: folds
+Cue: folds
+Dax: folds
+Eli: folds
+Fin: folds
+Uncalled bet (1400) returned to Ace
+Ace collected 650 from pot
+Ace: doesn't show hand
+*** SUMMARY ***
+Total pot 650 | Rake 0
+Seat 1: Ace collected (650)
+Seat 2: Bix folded before Flop (didn't bet)
+Seat 3: Cue folded before Flop (didn't bet)
+Seat 4: Dax (button) folded before Flop (didn't bet)
+Seat 5: Eli (small blind) folded before Flop
+Seat 6: Fin (big blind) folded before Flop
+
+
+
