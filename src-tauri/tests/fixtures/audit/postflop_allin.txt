@@ -1,0 +1,150 @@
+PokerStars Hand #272000000201:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/02 21:00:00 ET
+Table 'Audit Postflop B' 6-max Seat #1 is the button
+Seat 1: Gia ($50 in chips)
+Seat 2: Hob ($50 in chips)
+Seat 3: Ina ($50 in chips)
+Seat 4: Jem ($50 in chips)
+Seat 5: Kye ($50 in chips)
+Seat 6: Lars ($1.20 in chips)
+Hob: posts small blind $0.25
+Ina: posts big blind $0.50
+*** HOLE CARDS ***
+Jem: folds
+Kye: raises $1 to $1.50
+Lars: calls $1.20 and is all-in
+Gia: folds
+Hob: folds
+Ina: folds
+Uncalled bet ($0.30) returned to Kye
+*** FLOP *** [Jc 8d 5s]
+*** TURN *** [Jc 8d 5s] [Kh]
+*** RIVER *** [Jc 8d 5s Kh] [3c]
+*** SHOW DOWN ***
+Kye: shows [Qd Qc] (a pair of Queens)
+Lars: shows [Ah Js] (a pair of Jacks)
+Kye collected $3.15 from pot
+*** SUMMARY ***
+Total pot $3.15 | Rake $0
+Board [Jc 8d 5s Kh 3c]
+Seat 1: Gia (button) folded before Flop (didn't bet)
+Seat 2: Hob (small blind) folded before Flop
+Seat 3: Ina (big blind) folded before Flop
+Seat 4: Jem folded before Flop (didn't bet)
+Seat 5: Kye showed [Qd Qc] and won ($3.15) with a pair of Queens
+Seat 6: Lars showed [Ah Js] and lost with a pair of Jacks
+
+
+
+PokerStars Hand #272000000202:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/02 21:01:00 ET
+Table 'Audit Postflop B' 6-max Seat #2 is the button
+Seat 1: Gia ($50 in chips)
+Seat 2: Hob ($50 in chips)
+Seat 3: Ina ($50 in chips)
+Seat 4: Jem ($20 in chips)
+Seat 5: Kye ($50 in chips)
+Seat 6: Lars ($50 in chips)
+Ina: posts small blind $0.25
+Jem: posts big blind $0.50
+*** HOLE CARDS ***
+Kye: folds
+Lars: folds
+Gia: raises $1 to $1.50
+Hob: folds
+Ina: folds
+Jem: calls $1
+*** FLOP *** [Th 9h 2c]
+Jem: checks
+Gia: bets $48.50 and is all-in
+Jem: calls $18.50 and is all-in
+Uncalled bet ($30) returned to Gia
+*** TURN *** [Th 9h 2c] [4d]
+*** RIVER *** [Th 9h 2c 4d] [7s]
+*** SHOW DOWN ***
+Jem: shows [Ah Kh] (high card Ace)
+Gia: shows [Tc Td] (three of a kind, Tens)
+Gia collected $40.25 from pot
+*** SUMMARY ***
+Total pot $40.25 | Rake $0
+Board [Th 9h 2c 4d 7s]
+Seat 1: Gia showed [Tc Td] and won ($40.25) with three of a kind, Tens
+Seat 2: Hob (button) folded before Flop (didn't bet)
+Seat 3: Ina (small blind) folded before Flop
+Seat 4: Jem (big blind) showed [Ah Kh] and lost with high card Ace
+Seat 5: Kye folded before Flop (didn't bet)
+Seat 6: Lars folded before Flop (didn't bet)
+
+
+
+PokerStars Hand #272000000203:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/02 21:02:00 ET
+Table 'Audit Postflop B' 6-max Seat #3 is the button
+Seat 1: Gia ($50 in chips)
+Seat 2: Hob ($50 in chips)
+Seat 3: Ina ($50 in chips)
+Seat 4: Jem ($50 in chips)
+Seat 5: Kye ($50 in chips)
+Seat 6: Lars ($8 in chips)
+Jem: posts small blind $0.25
+Kye: posts big blind $0.50
+*** HOLE CARDS ***
+Lars: raises $7.50 to $8 and is all-in
+Gia: folds
+Hob: calls $8
+Ina: folds
+Jem: folds
+Kye: calls $7.50
+*** FLOP *** [Qh 6d 3s]
+Kye: checks
+Hob: bets $10
+Kye: calls $10
+*** TURN *** [Qh 6d 3s] [8c]
+Kye: checks
+Hob: checks
+*** RIVER *** [Qh 6d 3s 8c] [Jd]
+Kye: bets $15
+Hob: calls $15
+*** SHOW DOWN ***
+Kye: shows [Qc Jc] (two pair, Queens and Jacks)
+Hob: shows [Qd Ts] (a pair of Queens)
+Kye collected $50 from side pot
+Lars: shows [6c 6s] (three of a kind, Sixes)
+Lars collected $24.25 from main pot
+*** SUMMARY ***
+Total pot $74.25 Main pot $24.25. Side pot $50. | Rake $0
+Board [Qh 6d 3s 8c Jd]
+Seat 1: Gia folded before Flop (didn't bet)
+Seat 2: Hob showed [Qd Ts] and lost with a pair of Queens
+Seat 3: Ina (button) folded before Flop (didn't bet)
+Seat 4: Jem (small blind) folded before Flop
+Seat 5: Kye (big blind) showed [Qc Jc] and won ($50) with two pair, Queens and Jacks
+Seat 6: Lars showed [6c 6s] and won ($24.25) with three of a kind, Sixes
+
+
+
+PokerStars Hand #272000000204:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/02 21:03:00 ET
+Table 'Audit Postflop B' 6-max Seat #4 is the button
+Seat 1: Gia ($50 in chips)
+Seat 2: Hob ($50 in chips)
+Seat 3: Ina ($50 in chips)
+Seat 4: Jem ($50 in chips)
+Seat 5: Kye ($50 in chips)
+Seat 6: Lars ($50 in chips)
+Kye: posts small blind $0.25
+Lars: posts big blind $0.50
+*** HOLE CARDS ***
+Gia: folds
+Hob: folds
+Ina: raises $49.50 to $50 and is all-in
+Jem: folds
+Kye: folds
+Lars: folds
+Uncalled bet ($49.50) returned to Ina
+Ina collected $1.25 from pot
+Ina: doesn't show hand
+*** SUMMARY ***
+Total pot $1.25 | Rake $0
+Seat 1: Gia folded before Flop (didn't bet)
+Seat 2: Hob folded before Flop (didn't bet)
+Seat 3: Ina collected ($1.25)
+Seat 4: Jem (button) folded before Flop (didn't bet)
+Seat 5: Kye (small blind) folded before Flop
+Seat 6: Lars (big blind) folded before Flop

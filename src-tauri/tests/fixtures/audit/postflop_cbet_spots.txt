@@ -1,0 +1,197 @@
+PokerStars Hand #272000000101:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/02 20:00:00 ET
+Table 'Audit Postflop A' 6-max Seat #1 is the button
+Seat 1: Ana ($50 in chips)
+Seat 2: Bru ($50 in chips)
+Seat 3: Caz ($50 in chips)
+Seat 4: Dov ($50 in chips)
+Seat 5: Eli ($50 in chips)
+Seat 6: Fin ($50 in chips)
+Bru: posts small blind $0.25
+Caz: posts big blind $0.50
+*** HOLE CARDS ***
+Dov: folds
+Eli: folds
+Fin: folds
+Ana: raises $1 to $1.50
+Bru: folds
+Caz: calls $1
+*** FLOP *** [Kc 8d 3h]
+Caz: checks
+Ana: bets $2
+Caz: folds
+Uncalled bet ($2) returned to Ana
+Ana collected $3.25 from pot
+Ana: doesn't show hand
+*** SUMMARY ***
+Total pot $3.25 | Rake $0
+Board [Kc 8d 3h]
+Seat 1: Ana (button) collected ($3.25)
+Seat 2: Bru (small blind) folded before Flop
+Seat 3: Caz (big blind) folded on the Flop
+Seat 4: Dov folded before Flop (didn't bet)
+Seat 5: Eli folded before Flop (didn't bet)
+Seat 6: Fin folded before Flop (didn't bet)
+
+
+
+PokerStars Hand #272000000102:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/02 20:01:00 ET
+Table 'Audit Postflop A' 6-max Seat #2 is the button
+Seat 1: Ana ($50 in chips)
+Seat 2: Bru ($50 in chips)
+Seat 3: Caz ($50 in chips)
+Seat 4: Dov ($50 in chips)
+Seat 5: Eli ($50 in chips)
+Seat 6: Fin ($50 in chips)
+Caz: posts small blind $0.25
+Dov: posts big blind $0.50
+*** HOLE CARDS ***
+Eli: folds
+Fin: folds
+Ana: raises $1 to $1.50
+Bru: folds
+Caz: folds
+Dov: calls $1
+*** FLOP *** [Qs 7c 2d]
+Dov: checks
+Ana: checks
+*** TURN *** [Qs 7c 2d] [5h]
+Dov: bets $2
+Ana: calls $2
+*** RIVER *** [Qs 7c 2d 5h] [Jc]
+Dov: bets $4
+Ana: folds
+Uncalled bet ($4) returned to Dov
+Dov collected $7.25 from pot
+Dov: doesn't show hand
+*** SUMMARY ***
+Total pot $7.25 | Rake $0
+Board [Qs 7c 2d 5h Jc]
+Seat 1: Ana folded on the River
+Seat 2: Bru (button) folded before Flop (didn't bet)
+Seat 3: Caz (small blind) folded before Flop
+Seat 4: Dov (big blind) collected ($7.25)
+Seat 5: Eli folded before Flop (didn't bet)
+Seat 6: Fin folded before Flop (didn't bet)
+
+
+
+PokerStars Hand #272000000103:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/02 20:02:00 ET
+Table 'Audit Postflop A' 6-max Seat #3 is the button
+Seat 1: Ana ($50 in chips)
+Seat 2: Bru ($50 in chips)
+Seat 3: Caz ($50 in chips)
+Seat 4: Dov ($50 in chips)
+Seat 5: Eli ($50 in chips)
+Seat 6: Fin ($50 in chips)
+Dov: posts small blind $0.25
+Eli: posts big blind $0.50
+*** HOLE CARDS ***
+Fin: folds
+Ana: folds
+Bru: folds
+Caz: raises $1 to $1.50
+Dov: calls $1.25
+Eli: calls $1
+*** FLOP *** [9h 8h 4c]
+Dov: bets $3
+Eli: folds
+Caz: calls $3
+*** TURN *** [9h 8h 4c] [2s]
+Dov: checks
+Caz: bets $6
+Dov: folds
+Uncalled bet ($6) returned to Caz
+Caz collected $10.50 from pot
+Caz: doesn't show hand
+*** SUMMARY ***
+Total pot $10.50 | Rake $0
+Board [9h 8h 4c 2s]
+Seat 1: Ana folded before Flop (didn't bet)
+Seat 2: Bru folded before Flop (didn't bet)
+Seat 3: Caz (button) collected ($10.50)
+Seat 4: Dov (small blind) folded on the Turn
+Seat 5: Eli (big blind) folded on the Flop
+Seat 6: Fin folded before Flop (didn't bet)
+
+
+
+PokerStars Hand #272000000104:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/02 20:03:00 ET
+Table 'Audit Postflop A' 6-max Seat #4 is the button
+Seat 1: Ana ($50 in chips)
+Seat 2: Bru ($50 in chips)
+Seat 3: Caz ($50 in chips)
+Seat 4: Dov ($50 in chips)
+Seat 5: Eli ($50 in chips)
+Seat 6: Fin ($50 in chips)
+Eli: posts small blind $0.25
+Fin: posts big blind $0.50
+*** HOLE CARDS ***
+Ana: raises $1 to $1.50
+Bru: folds
+Caz: folds
+Dov: calls $1.50
+Eli: folds
+Fin: calls $1
+*** FLOP *** [Ad 7s 3s]
+Fin: checks
+Ana: bets $3
+Dov: raises $6 to $9
+Fin: folds
+Ana: folds
+Uncalled bet ($6) returned to Dov
+Dov collected $10.75 from pot
+Dov: doesn't show hand
+*** SUMMARY ***
+Total pot $10.75 | Rake $0
+Board [Ad 7s 3s]
+Seat 1: Ana folded on the Flop
+Seat 2: Bru folded before Flop (didn't bet)
+Seat 3: Caz folded before Flop (didn't bet)
+Seat 4: Dov (button) collected ($10.75)
+Seat 5: Eli (small blind) folded before Flop
+Seat 6: Fin (big blind) folded on the Flop
+
+
+
+PokerStars Hand #272000000105:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/02 20:04:00 ET
+Table 'Audit Postflop A' 6-max Seat #5 is the button
+Seat 1: Ana ($50 in chips)
+Seat 2: Bru ($50 in chips)
+Seat 3: Caz ($50 in chips)
+Seat 4: Dov ($50 in chips)
+Seat 5: Eli ($50 in chips)
+Seat 6: Fin ($50 in chips)
+Fin: posts small blind $0.25
+Ana: posts big blind $0.50
+*** HOLE CARDS ***
+Bru: raises $1 to $1.50
+Caz: folds
+Dov: folds
+Eli: calls $1.50
+Fin: folds
+Ana: calls $1
+*** FLOP *** [Kd Th 6c]
+Ana: checks
+Bru: bets $3
+Eli: raises $6 to $9
+Ana: calls $9
+Bru: folds
+*** TURN *** [Kd Th 6c] [6d]
+Ana: checks
+Eli: checks
+*** RIVER *** [Kd Th 6c 6d] [2c]
+Ana: checks
+Eli: checks
+*** SHOW DOWN ***
+Ana: shows [Ks Qs] (two pair, Kings and Sixes)
+Eli: shows [Kh Tc] (two pair, Kings and Tens)
+Eli collected $25.75 from pot
+*** SUMMARY ***
+Total pot $25.75 | Rake $0
+Board [Kd Th 6c 6d 2c]
+Seat 1: Ana (big blind) showed [Ks Qs] and lost with two pair, Kings and Sixes
+Seat 2: Bru folded on the Flop
+Seat 3: Caz folded before Flop (didn't bet)
+Seat 4: Dov folded before Flop (didn't bet)
+Seat 5: Eli (button) showed [Kh Tc] and won ($25.75) with two pair, Kings and Tens
+Seat 6: Fin (small blind) folded before Flop

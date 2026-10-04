@@ -63,7 +63,6 @@ struct ActionRow {
     player_id: i64,
     street: String,
     action_type: String,
-    is_all_in: bool,
 }
 
 #[derive(Default)]
@@ -169,7 +168,7 @@ fn compute_accumulator(conn: &Connection, player_id: i64) -> rusqlite::Result<Ac
     }
 
     let mut stmt = conn.prepare(
-        "SELECT a.hand_id, a.player_id, a.street, a.action_type, a.is_all_in
+        "SELECT a.hand_id, a.player_id, a.street, a.action_type
          FROM actions a
          WHERE a.hand_id IN (SELECT hand_id FROM player_hands WHERE player_id = ?1)
          ORDER BY a.hand_id,
@@ -185,7 +184,6 @@ fn compute_accumulator(conn: &Connection, player_id: i64) -> rusqlite::Result<Ac
                 player_id: row.get(1)?,
                 street: row.get(2)?,
                 action_type: row.get(3)?,
-                is_all_in: row.get::<_, i64>(4)? != 0,
             },
         ))
     })?;
@@ -253,7 +251,6 @@ fn evaluate_hand(
     let mut was_3better = false;
     let mut facing_3bet = false;
     let mut facing_4bet = false;
-    let mut player_all_in_preflop = false;
     let mut last_preflop_raiser: Option<i64> = None;
     // True once anyone has voluntarily called/bet/raised preflop — posting a
     // blind/ante doesn't count, and folds don't either, so this stays false
@@ -302,10 +299,6 @@ fn evaluate_hand(
 
     for action in actions.iter().filter(|a| a.street == "preflop") {
         let is_us = action.player_id == player_id;
-
-        if is_us && action.is_all_in && action.action_type != "fold" {
-            player_all_in_preflop = true;
-        }
 
         // A player's own `post_ante`/`post_small_blind`/`post_big_blind` row
         // is always their first row in the hand, at a point where nobody has
@@ -468,23 +461,33 @@ fn evaluate_hand(
     }
 
     let flop_actions: Vec<&ActionRow> = actions.iter().filter(|a| a.street == "flop").collect();
-    // A player who shoved all-in preflop and was called is still in the hand
-    // when the flop is dealt but is never required to act again, so they have
-    // no flop-street action row of their own — without this they'd wrongly be
-    // excluded from the WTSD denominator despite reaching showdown. But an
-    // all-in preflop that gets folded to never sees a flop dealt at all, and
-    // looks identical here (zero flop-street rows for anyone) — `went_to_showdown`
-    // is what discriminates the two: no flop, no showdown, ever.
-    let saw_flop = flop_actions.iter().any(|a| a.player_id == player_id)
-        || (player_all_in_preflop && went_to_showdown);
+    let first_own_flop = flop_actions.iter().position(|a| a.player_id == player_id);
+    // A player still in the hand when the flop is dealt has no flop-street
+    // action row of their own when nobody can bet against them: they shoved
+    // all-in preflop and were called, or they called a preflop all-in with
+    // chips behind and nobody else left. Either way the hand reaches showdown
+    // with them in it, so `went_to_showdown` (a showdown always deals the
+    // board) is what counts them; without it WTSD's numerator could hold a
+    // hand its denominator does not. An all-in preflop that gets folded to
+    // never sees a flop dealt and never a showdown, so it stays out.
+    let saw_flop = first_own_flop.is_some() || went_to_showdown;
     if saw_flop {
         acc.saw_flop_hands += 1;
 
+        // A c-bet opportunity is the last preflop raiser's first flop
+        // action, when nobody has bet before it. A raiser all-in preflop
+        // never acts on the flop, and one facing a donk bet can no longer
+        // bet first: neither had the opportunity.
         if last_preflop_raiser == Some(player_id) {
-            acc.cbet_opportunities += 1;
-            if let Some(first_own) = flop_actions.iter().find(|a| a.player_id == player_id) {
-                if first_own.action_type == "bet" {
-                    acc.cbets += 1;
+            if let Some(first_own) = first_own_flop {
+                let bet_before = flop_actions[..first_own]
+                    .iter()
+                    .any(|a| matches!(a.action_type.as_str(), "bet" | "raise"));
+                if !bet_before {
+                    acc.cbet_opportunities += 1;
+                    if flop_actions[first_own].action_type == "bet" {
+                        acc.cbets += 1;
+                    }
                 }
             }
         }

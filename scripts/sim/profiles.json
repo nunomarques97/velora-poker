@@ -421,7 +421,7 @@
           "tol": 8
         },
         "wtsd": {
-          "target": 40,
+          "target": 35,
           "tol": 9
         }
       },
@@ -526,7 +526,7 @@
           "tol": 20
         },
         "cBet": {
-          "target": 27,
+          "target": 70,
           "tol": 10
         },
         "foldToCBet": {

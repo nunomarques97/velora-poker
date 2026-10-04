@@ -96,7 +96,10 @@ fn computes_stats_for_tournament_only_player() {
     assert_close(s.pfr, 50.0, "TourneyHero pfr");
     assert_no_opportunity(s.three_bet, "TourneyHero three_bet");
     assert_no_opportunity(s.fold_to_three_bet, "TourneyHero fold_to_three_bet");
-    assert_close(s.c_bet, 0.0, "TourneyHero c_bet");
+    // TourneyHero raised preflop, but Opponent13 bet the flop into him before
+    // he acted (a donk bet): he could not bet first, so it is no c-bet
+    // opportunity (stats audit S2; it read 0% before).
+    assert_no_opportunity(s.c_bet, "TourneyHero c_bet");
     assert_no_opportunity(s.fold_to_c_bet, "TourneyHero fold_to_c_bet");
     assert_close(s.aggression_factor, 0.0, "TourneyHero aggression_factor");
     // The all-in-preflop-disconnect fixture is folded to (no showdown, no

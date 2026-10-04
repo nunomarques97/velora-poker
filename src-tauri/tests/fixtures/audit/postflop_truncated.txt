@@ -1,0 +1,61 @@
+PokerStars Hand #272000000105:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/02 20:04:00 ET
+Table 'Audit Postflop A' 6-max Seat #5 is the button
+Seat 1: Ana ($50 in chips)
+Seat 2: Bru ($50 in chips)
+Seat 3: Caz ($50 in chips)
+Seat 4: Dov ($50 in chips)
+Seat 5: Eli ($50 in chips)
+Seat 6: Fin ($50 in chips)
+Fin: posts small blind $0.25
+Ana: posts big blind $0.50
+*** HOLE CARDS ***
+Bru: raises $1 to $1.50
+Caz: folds
+Dov: folds
+Eli: calls $1.50
+Fin: folds
+Ana: calls $1
+*** FLOP *** [Kd Th 6c]
+Ana: checks
+Bru: bets $3
+Eli: raises $6 to $9
+Ana: calls $9
+Bru: folds
+*** TURN *** [Kd Th 6c] [6d]
+Ana: checks
+
+
+
+PokerStars Hand #272000000105:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/02 20:04:00 ET
+Table 'Audit Postflop A' 6-max Seat #5 is the button
+Seat 1: Ana ($50 in chips)
+Seat 2: Bru ($50 in chips)
+Seat 3: Caz ($50 in chips)
+Seat 4: Dov ($50 in chips)
+Seat 5: Eli ($50 in chips)
+Seat 6: Fin ($50 in chips)
+Fin: posts small blind $0.25
+Ana: posts big blind $0.50
+*** HOLE CARDS ***
+Bru: raises $1 to $1.50
+Caz: folds
+Dov: folds
+Eli: calls $1.50
+Fin: folds
+Ana: calls $1
+*** FLOP *** [Kd Th 6c]
+Ana: checks
+Bru: bets $3
+Eli: raises $6 to $9
+Ana: calls $9
+Bru: folds
+*** TURN *** [Kd Th 6c] [6d]
+Ana: checks
+Eli: checks
+*** RIVER *** [Kd Th 6c 6d] [2c]
+Ana: checks
+Eli: checks
+*** SHOW DOWN ***
+Ana: shows [Ks Qs] (two pair, Kings and Sixes)
+Eli: shows [Kh Tc] (two pair, Kings and Tens)
+Eli collected $25.75 from pot
