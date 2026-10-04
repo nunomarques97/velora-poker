@@ -1,0 +1,55 @@
+PokerStars Hand #271000000601:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/01 20:50:00 ET
+Table 'Audit Preflop F' 6-max Seat #4 is the button
+Seat 1: Pat ($50 in chips) 
+Seat 2: Quy ($50 in chips) 
+Seat 3: Ros ($50 in chips) 
+Seat 4: Sal ($50 in chips) 
+Seat 5: Tom ($50 in chips) 
+Seat 6: Uli ($50 in chips) 
+Tom: posts small blind $0.25
+Uli: posts big blind $0.50
+*** HOLE CARDS ***
+Pat: folds 
+Quy: folds 
+Ros: folds 
+Sal: folds 
+Tom: folds 
+Uncalled bet ($0.25) returned to Uli
+Uli collected $0.50 from pot
+Uli: doesn't show hand 
+*** SUMMARY ***
+Total pot $0.50 | Rake $0 
+Seat 1: Pat folded before Flop (didn't bet)
+Seat 2: Quy folded before Flop (didn't bet)
+Seat 3: Ros folded before Flop (didn't bet)
+Seat 4: Sal (button) folded before Flop (didn't bet)
+Seat 5: Tom (small blind) folded before Flop
+Seat 6: Uli (big blind) collected ($0.50)
+
+
+
+PokerStars Hand #271000000602: Tournament #4210000001, $5+$0.50 USD Hold'em No Limit - Level V (50/100) - 2026/10/01 21:00:00 WET [2026/10/01 16:00:00 ET]
+Table '4210000001 3' 6-max Seat #2 is the button
+Seat 1: Vic (3000 in chips)
+Seat 2: Wes (2500 in chips)
+Seat 3: Xia (4100 in chips)
+Seat 4: Yan (1800 in chips)
+Vic: posts the ante 10
+Wes: posts the ante 10
+Xia: posts the ante 10
+Yan: posts the ante 10
+Xia: posts small blind 50
+Yan: posts big blind 100
+*** HOLE CARDS ***
+Vic: folds
+Wes: folds
+Xia: folds
+Uncalled bet (50) returned to Yan
+Yan collected 140 from pot
+Yan: doesn't show hand
+*** SUMMARY ***
+Total pot 140 | Rake 0
+Seat 1: Vic folded before Flop (didn't bet)
+Seat 2: Wes (button) folded before Flop (didn't bet)
+Seat 3: Xia (small blind) folded before Flop
+Seat 4: Yan (big blind) collected (140)

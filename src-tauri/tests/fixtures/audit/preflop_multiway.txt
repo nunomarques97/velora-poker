@@ -1,0 +1,49 @@
+PokerStars Hand #271000000501:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/01 20:40:00 ET
+Table 'Audit Preflop E' 9-max Seat #7 is the button
+Seat 1: Aria ($50 in chips) 
+Seat 2: Bo ($50 in chips) 
+Seat 3: Cy ($50 in chips) 
+Seat 4: Di ($50 in chips) 
+Seat 5: Ed ($50 in chips) 
+Seat 6: Flo ($50 in chips) 
+Seat 7: Gil ($50 in chips) 
+Seat 8: Hu ($50 in chips) 
+Seat 9: Io ($50 in chips) 
+Hu: posts small blind $0.25
+Io: posts big blind $0.50
+*** HOLE CARDS ***
+Aria: raises $1 to $1.50
+Bo: folds 
+Cy: calls $1.50
+Di: calls $1.50
+Ed: folds 
+Flo: raises $7 to $8.50
+Gil: folds 
+Hu: calls $8.25
+Io: folds 
+Aria: calls $7
+Cy: calls $7
+Di: folds 
+*** FLOP *** [Qs Td 4d]
+Hu: checks 
+Aria: checks 
+Cy: checks 
+Flo: bets $20
+Hu: folds 
+Aria: folds 
+Cy: folds 
+Uncalled bet ($20) returned to Flo
+Flo collected $34.50 from pot
+Flo: doesn't show hand 
+*** SUMMARY ***
+Total pot $36 | Rake $1.50 
+Board [Qs Td 4d]
+Seat 1: Aria folded on the Flop
+Seat 2: Bo folded before Flop (didn't bet)
+Seat 3: Cy folded on the Flop
+Seat 4: Di folded before Flop
+Seat 5: Ed folded before Flop (didn't bet)
+Seat 6: Flo collected ($34.50)
+Seat 7: Gil (button) folded before Flop (didn't bet)
+Seat 8: Hu (small blind) folded on the Flop
+Seat 9: Io (big blind) folded before Flop

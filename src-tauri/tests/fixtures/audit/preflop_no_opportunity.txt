@@ -1,0 +1,37 @@
+PokerStars Hand #271000000101:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/01 20:00:00 ET
+Table 'Audit Preflop A' 6-max Seat #4 is the button
+Seat 1: Ann ($50 in chips) 
+Seat 2: Ben ($50 in chips) 
+Seat 3: Cid ($50 in chips) 
+Seat 4: Dee ($50 in chips) 
+Seat 5: Eve ($50 in chips) 
+Seat 6: Fay ($50 in chips) 
+Eve: posts small blind $0.25
+Fay: posts big blind $0.50
+*** HOLE CARDS ***
+Ann: calls $0.50
+Ben: calls $0.50
+Cid: folds 
+Dee: folds 
+Eve: calls $0.25
+Fay: checks 
+*** FLOP *** [Kh 7d 2c]
+Eve: checks 
+Fay: checks 
+Ann: checks 
+Ben: bets $1.50
+Eve: folds 
+Fay: folds 
+Ann: folds 
+Uncalled bet ($1.50) returned to Ben
+Ben collected $1.90 from pot
+Ben: doesn't show hand 
+*** SUMMARY ***
+Total pot $2 | Rake $0.10 
+Board [Kh 7d 2c]
+Seat 1: Ann folded on the Flop
+Seat 2: Ben collected ($1.90)
+Seat 3: Cid folded before Flop (didn't bet)
+Seat 4: Dee (button) folded before Flop (didn't bet)
+Seat 5: Eve (small blind) folded on the Flop
+Seat 6: Fay (big blind) folded on the Flop

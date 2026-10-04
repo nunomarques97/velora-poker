@@ -1,0 +1,44 @@
+PokerStars Hand #271000000201:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/01 20:10:00 ET
+Table 'Audit Preflop B' 6-max Seat #4 is the button
+Seat 1: Gus ($30 in chips) 
+Seat 2: Hana ($50 in chips) 
+Seat 3: Ike ($50 in chips) 
+Seat 4: Jo ($50 in chips) 
+Seat 5: Kim ($50 in chips) 
+Seat 6: Lou ($12 in chips) 
+Kim: posts small blind $0.25
+Lou: posts big blind $0.50
+*** HOLE CARDS ***
+Gus: folds 
+Hana: folds 
+Ike: raises $49.50 to $50 and is all-in
+Jo: folds 
+Kim: folds 
+
+
+
+PokerStars Hand #271000000201:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/01 20:10:00 ET
+Table 'Audit Preflop B' 6-max Seat #4 is the button
+Seat 1: Gus ($30 in chips) 
+Seat 2: Hana ($50 in chips) 
+Seat 3: Ike ($50 in chips) 
+Seat 4: Jo ($50 in chips) 
+Seat 5: Kim ($50 in chips) 
+Seat 6: Lou ($12 in chips) 
+Kim: posts small blind $0.25
+Lou: posts big blind $0.50
+*** HOLE CARDS ***
+Gus: folds 
+Hana: folds 
+Ike: raises $49.50 to $50 and is all-in
+Jo: folds 
+Kim: folds 
+Lou: calls $11.50 and is all-in
+Uncalled bet ($38) returned to Ike
+*** FLOP *** [9s 6d 3c]
+*** TURN *** [9s 6d 3c] [Qh]
+*** RIVER *** [9s 6d 3c Qh] [2s]
+*** SHOW DOWN ***
+Ike: shows [Ad Kd] (high card Ace)
+Lou: shows [7h 7c] (a pair of Sevens)
+Lou collected $23.25 from pot

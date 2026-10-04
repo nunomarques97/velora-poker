@@ -1,0 +1,60 @@
+PokerStars Hand #271000000401:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/01 20:30:00 ET
+Table 'Audit Preflop D' 2-max Seat #1 is the button
+Seat 1: Hal ($50 in chips) 
+Seat 2: Ivy ($50 in chips) 
+Hal: posts small blind $0.25
+Ivy: posts big blind $0.50
+*** HOLE CARDS ***
+Hal: raises $1 to $1.50
+Ivy: raises $3 to $4.50
+Hal: raises $6 to $10.50
+Ivy: folds 
+Uncalled bet ($6) returned to Hal
+Hal collected $9 from pot
+Hal: doesn't show hand 
+*** SUMMARY ***
+Total pot $9 | Rake $0 
+Seat 1: Hal (button) (small blind) collected ($9)
+Seat 2: Ivy (big blind) folded before Flop
+
+
+
+PokerStars Hand #271000000402:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/01 20:31:00 ET
+Table 'Audit Preflop D' 2-max Seat #2 is the button
+Seat 1: Hal ($54.50 in chips) 
+Seat 2: Ivy ($45.50 in chips) 
+Ivy: posts small blind $0.25
+Hal: posts big blind $0.50
+*** HOLE CARDS ***
+Ivy: calls $0.25
+Hal: checks 
+*** FLOP *** [Tc 6s 2h]
+Hal: checks 
+Ivy: bets $0.50
+Hal: folds 
+Uncalled bet ($0.50) returned to Ivy
+Ivy collected $0.95 from pot
+Ivy: doesn't show hand 
+*** SUMMARY ***
+Total pot $1 | Rake $0.05 
+Board [Tc 6s 2h]
+Seat 1: Hal (big blind) folded on the Flop
+Seat 2: Ivy (button) (small blind) collected ($0.95)
+
+
+
+PokerStars Hand #271000000403:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/01 20:32:00 ET
+Table 'Audit Preflop D' 2-max Seat #1 is the button
+Seat 1: Hal ($54 in chips) 
+Seat 2: Ivy ($45.95 in chips) 
+Hal: posts small blind $0.25
+Ivy: posts big blind $0.50
+*** HOLE CARDS ***
+Hal: folds 
+Uncalled bet ($0.25) returned to Ivy
+Ivy collected $0.50 from pot
+Ivy: doesn't show hand 
+*** SUMMARY ***
+Total pot $0.50 | Rake $0 
+Seat 1: Hal (button) (small blind) folded before Flop
+Seat 2: Ivy (big blind) collected ($0.50)

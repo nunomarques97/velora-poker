@@ -1,0 +1,65 @@
+PokerStars Hand #271000000201:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/01 20:10:00 ET
+Table 'Audit Preflop B' 6-max Seat #4 is the button
+Seat 1: Gus ($30 in chips) 
+Seat 2: Hana ($50 in chips) 
+Seat 3: Ike ($50 in chips) 
+Seat 4: Jo ($50 in chips) 
+Seat 5: Kim ($50 in chips) 
+Seat 6: Lou ($12 in chips) 
+Kim: posts small blind $0.25
+Lou: posts big blind $0.50
+*** HOLE CARDS ***
+Gus: folds 
+Hana: folds 
+Ike: raises $49.50 to $50 and is all-in
+Jo: folds 
+Kim: folds 
+Lou: calls $11.50 and is all-in
+Uncalled bet ($38) returned to Ike
+*** FLOP *** [9s 6d 3c]
+*** TURN *** [9s 6d 3c] [Qh]
+*** RIVER *** [9s 6d 3c Qh] [2s]
+*** SHOW DOWN ***
+Ike: shows [Ad Kd] (high card Ace)
+Lou: shows [7h 7c] (a pair of Sevens)
+Lou collected $23.25 from pot
+*** SUMMARY ***
+Total pot $24.25 | Rake $1 
+Board [9s 6d 3c Qh 2s]
+Seat 1: Gus folded before Flop (didn't bet)
+Seat 2: Hana folded before Flop (didn't bet)
+Seat 3: Ike showed [Ad Kd] and lost with high card Ace
+Seat 4: Jo (button) folded before Flop (didn't bet)
+Seat 5: Kim (small blind) folded before Flop
+Seat 6: Lou (big blind) showed [7h 7c] and won ($23.25) with a pair of Sevens
+
+
+
+PokerStars Hand #271000000202:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/01 20:11:00 ET
+Table 'Audit Preflop B' 6-max Seat #5 is the button
+Seat 1: Gus ($30 in chips) 
+Seat 2: Hana ($50 in chips) 
+Seat 3: Ike ($38 in chips) 
+Seat 4: Jo ($50 in chips) 
+Seat 5: Kim ($49.75 in chips) 
+Seat 6: Lou ($23.25 in chips) 
+Lou: posts small blind $0.25
+Gus: posts big blind $0.50
+*** HOLE CARDS ***
+Hana: folds 
+Ike: folds 
+Jo: folds 
+Kim: folds 
+Lou: raises $22.75 to $23.25 and is all-in
+Gus: folds 
+Uncalled bet ($22.75) returned to Lou
+Lou collected $1 from pot
+Lou: doesn't show hand 
+*** SUMMARY ***
+Total pot $1 | Rake $0 
+Seat 1: Gus (big blind) folded before Flop
+Seat 2: Hana folded before Flop (didn't bet)
+Seat 3: Ike folded before Flop (didn't bet)
+Seat 4: Jo folded before Flop (didn't bet)
+Seat 5: Kim (button) folded before Flop (didn't bet)
+Seat 6: Lou (small blind) collected ($1)

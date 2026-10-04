@@ -1,0 +1,73 @@
+PokerStars Hand #271000000301:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/01 20:20:00 ET
+Table 'Audit Preflop C' 6-max Seat #4 is the button
+Seat 1: Mo ($50 in chips) 
+Seat 2: Nia ($50 in chips) 
+Seat 3: Oz ($50 in chips) 
+Seat 4: Pia ($50 in chips) 
+Seat 5: Quin ($50 in chips) 
+Seat 6: Rex ($50 in chips) 
+Quin: posts small blind $0.25
+Rex: posts big blind $0.50
+*** HOLE CARDS ***
+Mo: calls $0.50
+Nia: calls $0.50
+Oz: raises $2.50 to $3
+Pia: calls $3
+Quin: folds 
+Rex: folds 
+Mo: raises $9 to $12
+Nia: folds 
+Oz: folds 
+Pia: calls $9
+*** FLOP *** [Jd 8h 4s]
+Mo: bets $15
+Pia: folds 
+Uncalled bet ($15) returned to Mo
+Mo collected $27.25 from pot
+Mo: doesn't show hand 
+*** SUMMARY ***
+Total pot $28.25 | Rake $1 
+Board [Jd 8h 4s]
+Seat 1: Mo collected ($27.25)
+Seat 2: Nia folded before Flop
+Seat 3: Oz folded before Flop
+Seat 4: Pia (button) folded on the Flop
+Seat 5: Quin (small blind) folded before Flop
+Seat 6: Rex (big blind) folded before Flop
+
+
+
+PokerStars Hand #271000000302:  Hold'em No Limit ($0.25/$0.50 USD) - 2026/10/01 20:21:00 ET
+Table 'Audit Preflop C' 6-max Seat #5 is the button
+Seat 1: Mo ($65.25 in chips) 
+Seat 2: Nia ($49.50 in chips) 
+Seat 3: Oz ($47 in chips) 
+Seat 4: Pia ($38 in chips) 
+Seat 5: Quin ($49.75 in chips) 
+Seat 6: Rex ($49.50 in chips) 
+Rex: posts small blind $0.25
+Mo: posts big blind $0.50
+*** HOLE CARDS ***
+Nia: folds 
+Oz: folds 
+Pia: folds 
+Quin: calls $0.50
+Rex: calls $0.25
+Mo: raises $2 to $2.50
+Quin: calls $2
+Rex: folds 
+*** FLOP *** [Ac 9c 5h]
+Mo: bets $3
+Quin: folds 
+Uncalled bet ($3) returned to Mo
+Mo collected $5.25 from pot
+Mo: doesn't show hand 
+*** SUMMARY ***
+Total pot $5.50 | Rake $0.25 
+Board [Ac 9c 5h]
+Seat 1: Mo (big blind) collected ($5.25)
+Seat 2: Nia folded before Flop (didn't bet)
+Seat 3: Oz folded before Flop (didn't bet)
+Seat 4: Pia folded before Flop (didn't bet)
+Seat 5: Quin (button) folded on the Flop
+Seat 6: Rex (small blind) folded before Flop
