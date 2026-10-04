@@ -18,7 +18,7 @@ use rusqlite::Connection;
 use serde::Serialize;
 
 use super::aggregate::{aggregate_player, H2hKey, H2hStat, PlayerAggregate, StatAgg, View};
-use super::context::{average_stack_bb, EngineContext, Side, Stage, StackBucket};
+use super::context::{average_stack_bb, EngineContext, Side, Stage, StackBucket, PUSH_FOLD_MAX_BB};
 use super::facts::{load_player_hands, HandFacts, StatKey};
 use super::pooling::{confidence, stat_spec, FormatKey, ShrunkStat};
 use super::pot::SizeBucket;
@@ -33,6 +33,11 @@ use crate::parser::Street;
 /// Spec id of the between-hands text guard (catalogue row G03): no template
 /// carries an in-hand phrasing, no observation an imperative verb.
 pub const RULE_GUARD: &str = "guard.between_hands";
+
+/// Spec id of the advice-quality guard (catalogue row G05, section 17.1):
+/// every advice fits the hover card and names a concrete lever, and
+/// opposite preflop reads never fire together.
+pub const RULE_ADVICE_QUALITY: &str = "guard.advice_quality";
 
 /// Spec id of the seat-relation suffix (catalogue row C01). It is appended
 /// to preflop advice, never shown as a read of its own.
@@ -64,6 +69,33 @@ pub const PROFILE_STATION_WTSD: f64 = 0.05;
 pub const PROFILE_LAG_VPIP: f64 = 0.05;
 pub const PROFILE_LAG_PFR: f64 = 0.05;
 
+/// Preflop thresholds changed by the 2026-10 audit (section 17), as deltas
+/// from the format's prior; arrays are `[MTT, 6-max cash, Zoom, Spin & Go]`.
+/// `pf.fold_to_steal.high`, the small blind's leg (the big blind's stays .12).
+pub const FOLD_TO_STEAL_SB_HIGH: f64 = 0.15;
+/// `pf.fold_to_steal.low`: fold_to_steal_bb at most prior minus this.
+pub const FOLD_TO_STEAL_LOW: [f64; 4] = [0.25, 0.20, 0.20, 0.20];
+/// `pf.bb_vs_sb.overdefend`: bb_defend_vs_sb at least prior plus this.
+pub const BB_VS_SB_OVERDEFEND: [f64; 4] = [0.25, 0.20, 0.20, 0.20];
+/// `pf.limp.high`: limp at least prior plus this.
+pub const LIMP_HIGH: [f64; 4] = [0.08, 0.08, 0.08, 0.12];
+
+/// Upper bound of the 3-bet-jam depth (section 5): above push/fold and up
+/// to this effective stack, preflop re-raises are all-ins, so the
+/// [`Variant::JamDepth`] advice replaces 3-bet/4-bet sizing advice.
+pub const JAM_DEPTH_MAX_BB: f64 = 40.0;
+
+/// Character budget of one advice block on the hover card at the medium
+/// table (section 17.1): `hoverCardMetrics(800, 570)` gives a 248px card,
+/// whose 7px padding and 1px border leave 232px of text; the block is
+/// clamped to two lines (`HoverReadCard.module.css`). Two lines are 464px;
+/// 40px are kept for the word a line break pushes down; advice text in the
+/// card's font (Segoe UI Variable, 11px, weight 500) measures 4.9px per
+/// character in headless Edge, so `floor(424 / 4.9) = 86`. Measured over
+/// the seat suffix too: every advice of up to 90 characters stayed on two
+/// lines.
+pub const HOVER_CARD_ADVICE_BUDGET: usize = 86;
+
 /// Payload family of a read (section 13).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -90,6 +122,12 @@ pub enum Variant {
     HeroCovered,
     /// Knockout game and the hero covers the villain.
     HeroCovers,
+    /// Effective stack above push/fold and at most [`JAM_DEPTH_MAX_BB`]:
+    /// re-raises are all-ins, not sized 3-bets and 4-bets.
+    JamDepth,
+    /// MTT or Spin & Go: smaller opens (min-raises) and isolations than in
+    /// cash, because of antes.
+    Tournament,
 }
 
 /// One catalogue rule: identity and every text it can show.
@@ -142,114 +180,177 @@ use Family as F;
 use RuleCategory::{Exploit as X, Tendency as T};
 
 /// Seat suffix appended to preflop advice (row C01). `{where}` is `on` or
-/// `directly on`.
-pub const SEAT_SUFFIX: &str = ", and he sits {where} your {side}.";
+/// `directly on`. Kept short (section 17.1): the advice and its suffix share
+/// the hover card's two-line advice block.
+pub const SEAT_SUFFIX: &str = " ({where} your {side}).";
 
 /// Every rule of section 8, in catalogue order.
 pub const RULES: &[RuleDef] = &[
-    // ---- preflop profile (P12)
+    // ---- preflop profile (P12). Audit 2026-10 (section 17): every preflop
+    // advice names its lever (hand classes, sizing, seat) and switches to
+    // jam wording at 15–40bb and to min-raise sizing in tournaments.
     with(
         rule("pf.profile.nit", "P12", F::Preflop, T, Some("NIT"),
             "Plays few hands: VPIP {raw}% ({hits}/{n}).",
-            "Give his raises credit and steal his blinds often."),
-        &[(Variant::LateStage, "Give his raises credit and attack his blinds with shoves and min-raises.")],
+            "Steal his blinds with any two suited; fold AJo and KQo to his opens."),
+        &[
+            (Variant::LateStage, "Min-raise any two into his blinds; call his shoves with TT+ and AQ+ only."),
+            (Variant::Tournament, "Min-raise his blinds with any two suited; fold AJo and KQo to his opens."),
+        ],
     ),
     rule("pf.profile.station", "P12", F::Preflop, X, Some("STN"),
         "Enters {raw}% of pots and reaches showdown often.",
-        "Value bet thinner and cut your bluffs against him."),
+        "Value bet top pair on all three streets; cut your river bluffs."),
     rule("pf.profile.loose_passive", "P12", F::Preflop, X, Some("LP"),
         "Enters {raw}% of pots, mostly by calling.",
-        "Isolate his limps and value bet him relentlessly."),
-    rule("pf.profile.lag", "P12", F::Preflop, T, Some("LAG"),
-        "Plays {raw}% of hands and raises most of them.",
-        "3-bet him for value wider and call down lighter."),
+        "Isolate his limps with broadways and pairs; value bet top pair thin."),
+    with(
+        rule("pf.profile.lag", "P12", F::Preflop, T, Some("LAG"),
+            "Plays {raw}% of hands and raises most of them.",
+            "3-bet him for value with 99+, AJs+, KQs and AQo; call down with top pair."),
+        &[(Variant::JamDepth, "Reshove 88+, AT+ and KQ over his opens; call down with top pair.")],
+    ),
     // ---- opens and steals (P01, P02)
     right(rule("pf.rfi.tight_early", "P01", F::Preflop, T, Some("NIT"),
         "Opens {raw}% from early and middle seats.",
-        "Fold marginal hands to his early opens.")),
-    right(rule("pf.rfi.loose_early", "P01", F::Preflop, X, Some("LSE"),
-        "Opens {raw}% from early and middle seats.",
-        "3-bet his early opens wider.")),
-    right(rule("pf.rfi.loose_late", "P02", F::Preflop, X, Some("ST+"),
-        "Opens {raw}% from the cutoff and button.",
-        "3-bet and defend wider against his late opens.")),
+        "Fold AJo, KQo and ATs to his early opens.")),
+    right(with(
+        rule("pf.rfi.loose_early", "P01", F::Preflop, X, Some("LSE"),
+            "Opens {raw}% from early and middle seats.",
+            "3-bet his early opens with 99+, AJs+, KQs and AQo."),
+        &[(Variant::JamDepth, "Reshove 99+ and AJ+ over his early opens.")],
+    )),
+    right(with(
+        rule("pf.rfi.loose_late", "P02", F::Preflop, X, Some("ST+"),
+            "Opens {raw}% from the cutoff and button.",
+            "3-bet his late opens wider for value: 88+, ATs+, KJs+, AQo."),
+        &[(Variant::JamDepth, "Reshove 66+, A9+ and KJ+ over his late opens.")],
+    )),
     right(rule("pf.rfi.tight_late", "P02", F::Preflop, T, Some("ST-"),
         "Opens only {raw}% from the cutoff and button.",
-        "Respect his late opens; 3-bet them mostly for value.")),
-    right(rule("pf.steal.high", "P02", F::Preflop, X, Some("ST+"),
-        "Steals {raw}% when folded to in late position.",
-        "3-bet his steals wider from the blinds.")),
+        "Defend tighter: fold KTo, QJo and A9o to his late opens.")),
+    right(with(
+        rule("pf.steal.high", "P02", F::Preflop, X, Some("ST+"),
+            "Steals {raw}% when folded to in late position.",
+            "Defend your big blind with any suited king vs his steals."),
+        &[(Variant::JamDepth, "Reshove 55+, A7+ and K9s+ over his steals from the blinds.")],
+    )),
     right(rule("pf.steal.low", "P02", F::Preflop, T, Some("ST-"),
         "Steals only {raw}% when folded to in late position.",
-        "Fold more blind hands to his steals.")),
+        "From the blinds, fold offsuit Kx and Qx to his steals.")),
     // Pro review (D107, P13): the small blind's open against the big blind.
-    right(rule("pf.rfi_sb.wide", "P13", F::Preflop, X, Some("SB+"),
-        "Opens {raw}% of his small blinds when folded to.",
-        "3-bet and defend your big blind wider against his small-blind opens.")),
+    right(with(
+        rule("pf.rfi_sb.wide", "P13", F::Preflop, X, Some("SB+"),
+            "Opens {raw}% of his small blinds when folded to.",
+            "3-bet his small-blind opens with 77+, A8s+, KTs+ and ATo+."),
+        &[(Variant::JamDepth, "Reshove 66+, A8+ and KJ+ over his small-blind opens.")],
+    )),
     // ---- blind defence (P03, P04)
     left(with(
         rule("pf.fold_to_steal.high", "P03", F::Preflop, X, Some("FTS"),
             "Folds his blinds to {raw}% of steals.",
-            "Steal wider when he is in the blinds."),
-        &[(Variant::LateStage, "Shove or min-raise wider when he is in the blinds.")],
+            "Steal any two suited from the button into his blinds."),
+        &[
+            (Variant::LateStage, "Min-raise any two from the button into his blinds."),
+            (Variant::Tournament, "Min-raise any two suited from late seats into his blinds."),
+        ],
     )),
-    left(rule("pf.fold_to_steal.low", "P03", F::Preflop, T, Some("DEF"),
-        "Defends his big blind against {raw}% of steals.",
-        "Steal tighter into him and value bet more postflop.")),
+    left(with(
+        rule("pf.fold_to_steal.low", "P03", F::Preflop, T, Some("DEF"),
+            "Defends his big blind against {raw}% of steals.",
+            "Cut K8o and Q8o from your steals; open 3x for value."),
+        &[(Variant::Tournament, "Cut K8o and Q8o from your steals; open 2.5x for value.")],
+    )),
     left(with(
         rule("pf.bb_vs_sb.overfold", "P04", F::Preflop, X, Some("FTS"),
             "Defends his big blind against small-blind opens only {raw}%.",
-            "Open your small blind wide against him."),
-        &[(Variant::LateStage, "Shove or min-raise your small blind wide against him.")],
+            "Raise any two from the small blind into him at 2.5x."),
+        &[
+            (Variant::LateStage, "Min-raise or shove any two from the small blind into him."),
+            (Variant::Tournament, "Min-raise any two from the small blind into him."),
+        ],
     )),
-    left(rule("pf.bb_vs_sb.overdefend", "P04", F::Preflop, T, Some("OVD"),
-        "Defends his big blind against small-blind opens {raw}%.",
-        "Open tighter from the small blind and value bet postflop.")),
+    left(with(
+        rule("pf.bb_vs_sb.overdefend", "P04", F::Preflop, T, Some("OVD"),
+            "Defends his big blind against small-blind opens {raw}%.",
+            "Cut K5o-type hands from your small-blind opens; raise 3.5x."),
+        &[(Variant::Tournament, "Limp K5o-type hands from the small blind; raise 3x for value.")],
+    )),
     // ---- 3-bets, 4-bets, squeezes (P05–P08)
-    left(rule("pf.3bet.high_ip", "P05", F::Preflop, X, Some("3B+"),
-        "3-bets in position {raw}% of the time.",
-        "4-bet him lighter and flat fewer opens he can 3-bet.")),
-    left(rule("pf.3bet.high_oop", "P05", F::Preflop, X, Some("3B+"),
-        "3-bets from out of position {raw}% of the time.",
-        "4-bet him lighter and call his 3-bets in position more.")),
+    left(with(
+        rule("pf.3bet.high_ip", "P05", F::Preflop, X, Some("3B+"),
+            "3-bets in position {raw}% of the time.",
+            "4-bet his 3-bets with QQ+, AK and A5s-A4s as bluffs."),
+        &[(Variant::JamDepth, "Jam over his 3-bets with 99+, AQ+ and AJs.")],
+    )),
+    left(with(
+        rule("pf.3bet.high_oop", "P05", F::Preflop, X, Some("3B+"),
+            "3-bets from out of position {raw}% of the time.",
+            "Call his 3-bets in position with 77-JJ, AQ, AJs and KQs."),
+        &[(Variant::JamDepth, "Jam 88+, AJ+ and KQs over his blind 3-bets.")],
+    )),
     left(rule("pf.3bet.low", "P05", F::Preflop, T, Some("3B-"),
         "Rarely 3-bets: {raw}%.",
-        "Give his 3-bets credit and open freely in front of him.")),
-    right(rule("pf.fold_to_3bet.high", "P06", F::Preflop, X, Some("F3B"),
-        "Folds to {raw}% of 3-bets.",
-        "3-bet his opens wider as a bluff.")),
-    right(rule("pf.fold_to_3bet.low", "P06", F::Preflop, T, Some("C3B"),
-        "Continues against {raw}% of 3-bets.",
-        "3-bet him for value only and size up.")),
-    right(rule("pf.4bet.high", "P07", F::Preflop, X, Some("4B+"),
-        "4-bets {raw}% of the time against 3-bets.",
-        "3-bet him with hands that can call a 4-bet; 5-bet shove lighter.")),
-    left(rule("pf.fold_to_4bet.high", "P07", F::Preflop, X, Some("F4B"),
-        "Folds to {raw}% of 4-bets after 3-betting.",
-        "4-bet bluff his 3-bets more.")),
-    left(rule("pf.squeeze.high", "P08", F::Preflop, X, Some("SQZ"),
-        "Squeezes {raw}% when there is an open and a caller.",
-        "Flat less with hands that hate a squeeze; 4-bet his squeezes lighter.")),
+        "Fold JJ and AQ to his 3-bets; open more suited hands.")),
+    right(with(
+        rule("pf.fold_to_3bet.high", "P06", F::Preflop, X, Some("F3B"),
+            "Folds to {raw}% of 3-bets.",
+            "3-bet his opens light with A2s-A5s, K9s+ and 65s+."),
+        &[(Variant::JamDepth, "Reshove A2s+, K9s+ and 55+ over his opens.")],
+    )),
+    right(with(
+        rule("pf.fold_to_3bet.low", "P06", F::Preflop, T, Some("C3B"),
+            "Continues against {raw}% of 3-bets.",
+            "3-bet his opens at 4x, for value only: no 65s-type bluffs."),
+        &[(Variant::JamDepth, "Reshove his opens for value only; no A2s-A5s jams.")],
+    )),
+    right(with(
+        rule("pf.4bet.high", "P07", F::Preflop, X, Some("4B+"),
+            "4-bets {raw}% of the time against 3-bets.",
+            "Jam TT+ and AQ+ over his 4-bets; fold your light 3-bets."),
+        &[(Variant::JamDepth, "Jam, don't 3-bet small; call his 4-bet jam with 99+ and AQ+.")],
+    )),
+    left(with(
+        rule("pf.fold_to_4bet.high", "P07", F::Preflop, X, Some("F4B"),
+            "Folds to {raw}% of 4-bets after 3-betting.",
+            "4-bet bluff his 3-bets with A2s-A5s, sized 2.2x."),
+        &[(Variant::JamDepth, "4-bet jam over his 3-bets with A2s+ and K9s+.")],
+    )),
+    left(with(
+        rule("pf.squeeze.high", "P08", F::Preflop, X, Some("SQZ"),
+            "Squeezes {raw}% when there is an open and a caller.",
+            "4-bet his squeezes with TT+ and AK; flat less with KJo."),
+        &[(Variant::JamDepth, "Jam 99+ and AQ+ over his squeezes; flat less with KJo.")],
+    )),
     // ---- limps and cold calls (P09–P11)
     right(rule("pf.limp.high", "P09", F::Preflop, X, Some("LMP"),
         "Open-limps {raw}% of hands.",
-        "Isolate his limps with a wide raising range.")),
+        "Isolate his limps with pairs, suited aces and broadways.")),
     left(rule("pf.iso.high", "P09", F::Preflop, T, Some("ISO"),
         "Raises over limpers {raw}% of the time.",
-        "Overlimp less in front of him; when you limp, plan to limp-reraise.")),
+        "Raise or fold over limpers; limp-reraise QQ+ and AK.")),
     right(rule("pf.limp_fold.high", "P10", F::Preflop, X, Some("LF"),
         "Folds to {raw}% of raises after limping.",
-        "Raise his limps with any two playable cards.")),
+        "Isolate his limps to 3x with any two suited cards.")),
     right(rule("pf.limp_reraise.seen", "P10", F::Preflop, T, Some("LRR"),
         "Has limp-reraised {hits} of {n} times after limping.",
-        "Isolate his limps with hands that can call a reraise.")),
+        "Fold all but QQ+ and AK to his limp-reraise.")),
     // Pro review (D107, P14): the sticky limper.
-    right(rule("pf.limp_call.high", "P14", F::Preflop, X, Some("LPC"),
-        "Calls {raw}% of raises after limping.",
-        "Isolate his limps bigger with hands that play well postflop, and bluff less once he calls.")),
-    left(rule("pf.cold_call.high", "P11", F::Preflop, X, Some("CC+"),
-        "Cold-calls {raw}% of opens.",
-        "Open bigger for value and squeeze more when he flats.")),
+    right(with(
+        rule("pf.limp_call.high", "P14", F::Preflop, X, Some("LPC"),
+            "Calls {raw}% of raises after limping.",
+            "Isolate his limps to 5x with broadways and pairs; bluff less."),
+        &[(Variant::Tournament, "Isolate his limps to 4x with broadways and pairs; bluff less.")],
+    )),
+    left(with(
+        rule("pf.cold_call.high", "P11", F::Preflop, X, Some("CC+"),
+            "Cold-calls {raw}% of opens.",
+            "Open 3x for value; squeeze his flats with 99+, AQ+ and A5s."),
+        &[
+            (Variant::JamDepth, "Squeeze-jam 88+ and AJ+ when he flats an open."),
+            (Variant::Tournament, "Open 2.5x for value; squeeze his flats with 99+, AQ+ and A5s."),
+        ],
+    )),
     // ---- stack depth (S01–S03)
     right(rule("stk.open_shove.wide", "S01", F::Stack, X, Some("SHV"),
         "Open-shoves {raw}% when folded to at 15bb or less.",
@@ -578,6 +679,10 @@ pub struct ShowdownTally {
 /// tests may build it directly.
 #[derive(Debug, Clone, Default)]
 pub struct RuleInput {
+    /// The format the stats were shrunk for (the replay's); `None` falls
+    /// back to the context's format, then cash. Per-format thresholds and
+    /// the tournament advice variant read it.
+    pub format: Option<FormatKey>,
     /// Recency-view stats (rules evaluate `shrunk`, confidence uses the raw
     /// opportunity count).
     pub stats: BTreeMap<StatKey, ShrunkStat>,
@@ -601,6 +706,11 @@ pub struct RuleInput {
 impl RuleInput {
     pub fn stat(&self, key: StatKey) -> Option<&ShrunkStat> {
         self.stats.get(&key)
+    }
+
+    /// The format thresholds and advice variants are chosen for.
+    pub fn format_key(&self) -> FormatKey {
+        self.format.or_else(|| self.context.as_ref().map(|c| c.format)).unwrap_or(FormatKey::Cash)
     }
 }
 
@@ -705,6 +815,7 @@ impl PlayerReplay {
         }
 
         RuleInput {
+            format: Some(self.format),
             stats,
             context,
             h2h,
@@ -891,6 +1002,25 @@ fn any_of<'a>(input: &'a RuleInput, keys: &[StatKey], dir: Dir) -> Option<&'a Sh
         })
 }
 
+/// The passing stat of two with the larger deviation ("a or b" with a
+/// threshold per leg).
+fn larger<'a>(a: Option<&'a ShrunkStat>, b: Option<&'a ShrunkStat>) -> Option<&'a ShrunkStat> {
+    match (a, b) {
+        (Some(x), Some(y)) => Some(if deviation(x) >= deviation(y) { x } else { y }),
+        (x, y) => x.or(y),
+    }
+}
+
+/// A per-format threshold delta, `[MTT, 6-max cash, Zoom, Spin & Go]`.
+fn by_format(format: FormatKey, deltas: [f64; 4]) -> f64 {
+    match format {
+        FormatKey::Mtt => deltas[0],
+        FormatKey::Cash => deltas[1],
+        FormatKey::Zoom => deltas[2],
+        FormatKey::Spin => deltas[3],
+    }
+}
+
 /// "max(a, b) ≤ …" / "min(a, b) ≥ …": every displayable stat passes (at
 /// least one). Shown as the combined rate; deviation is the smallest.
 fn all_of(input: &RuleInput, keys: &[StatKey], dir: Dir, complement: bool) -> Option<StatHit> {
@@ -918,11 +1048,23 @@ fn all_of(input: &RuleInput, keys: &[StatKey], dir: Dir, complement: bool) -> Op
 /// The context facts rules adapt to.
 struct Adapt<'a> {
     context: Option<&'a EngineContext>,
+    format: FormatKey,
 }
 
 impl Adapt<'_> {
     fn bucket(&self) -> Option<StackBucket> {
         self.context.and_then(|c| c.stack_bucket)
+    }
+
+    /// Section 5: above push/fold and at most [`JAM_DEPTH_MAX_BB`].
+    fn jam_depth(&self) -> bool {
+        self.context
+            .and_then(|c| c.effective_stack_bb)
+            .is_some_and(|eff| eff > PUSH_FOLD_MAX_BB && eff <= JAM_DEPTH_MAX_BB)
+    }
+
+    fn tournament(&self) -> bool {
+        matches!(self.format, FormatKey::Mtt | FormatKey::Spin)
     }
 
     fn knockout(&self) -> bool {
@@ -970,13 +1112,19 @@ impl Adapt<'_> {
             Variant::LateStage => self.late(),
             Variant::HeroCovered => self.knockout() && self.hero_covers() == Some(false),
             Variant::HeroCovers => self.knockout() && self.hero_covers() == Some(true),
+            Variant::JamDepth => self.jam_depth(),
+            Variant::Tournament => self.tournament(),
         };
+        // The first matching variant in the rule's list wins, so each list
+        // is written in precedence order (late stage, jam depth, format).
         let mut advice = def.advice.to_string();
         if let Some((variant, text)) = def.variants.iter().find(|(v, _)| wanted(*v)) {
             advice = text.to_string();
             adapted.push(match variant {
                 Variant::LateStage => "stage.late",
-                _ => "ko.variant",
+                Variant::JamDepth => "stack.jam_depth",
+                Variant::Tournament => "format.tournament",
+                Variant::Bounty | Variant::HeroCovered | Variant::HeroCovers => "ko.variant",
             });
         }
         if let (Some(side), Some(seat)) = (def.seat, self.context.and_then(|c| c.seat)) {
@@ -1081,7 +1229,7 @@ fn defended(stat: Option<&ShrunkStat>) -> Option<StatHit> {
 /// appear.
 pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
     use StatKey::*;
-    let mut out = Out { adapt: Adapt { context: input.context.as_ref() }, reads: Vec::new() };
+    let mut out = Out { adapt: Adapt { context: input.context.as_ref(), format: input.format_key() }, reads: Vec::new() };
 
     // ---- profile (P12): shrunk VPIP / PFR / WTSD against the format's
     // priors (D107). The deltas are the D106 6-max cash anchors (.15, .40,
@@ -1120,13 +1268,23 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
     out.stat("pf.rfi_sb.wide", single(one(input, RfiSb, Dir::Above(0.15))));
 
     // ---- blind defence (P03, P04)
+    // Audit 2026-10 (section 17): the small blind's leg needs .15, since a
+    // small blind folding ~85% to a button open is close to correct; the
+    // defence reads use per-format deltas, since antes make wide big-blind
+    // defence correct in tournaments.
+    let format = input.format_key();
+    let sb_folds = one(input, FoldToStealSb, Dir::Above(FOLD_TO_STEAL_SB_HIGH));
+    let bb_folds = one(input, FoldToStealBb, Dir::Above(0.12));
+    out.stat("pf.fold_to_steal.high", single(larger(sb_folds, bb_folds)));
     out.stat(
-        "pf.fold_to_steal.high",
-        single(any_of(input, &[FoldToStealSb, FoldToStealBb], Dir::Above(0.12))),
+        "pf.fold_to_steal.low",
+        defended(one(input, FoldToStealBb, Dir::Below(by_format(format, FOLD_TO_STEAL_LOW)))),
     );
-    out.stat("pf.fold_to_steal.low", defended(one(input, FoldToStealBb, Dir::Below(0.15))));
     out.stat("pf.bb_vs_sb.overfold", single(one(input, BbDefendVsSb, Dir::Below(0.15))));
-    out.stat("pf.bb_vs_sb.overdefend", single(one(input, BbDefendVsSb, Dir::Above(0.15))));
+    out.stat(
+        "pf.bb_vs_sb.overdefend",
+        single(one(input, BbDefendVsSb, Dir::Above(by_format(format, BB_VS_SB_OVERDEFEND)))),
+    );
 
     // ---- 3-bets, 4-bets, squeezes (P05–P08)
     out.stat("pf.3bet.high_ip", single(one(input, ThreeBetIp, Dir::Above(0.05))));
@@ -1142,7 +1300,7 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
     out.stat("pf.squeeze.high", single(one(input, Squeeze, Dir::Above(0.05))));
 
     // ---- limps and cold calls (P09–P11)
-    out.stat("pf.limp.high", single(one(input, Limp, Dir::Above(0.08))));
+    out.stat("pf.limp.high", single(one(input, Limp, Dir::Above(by_format(format, LIMP_HIGH)))));
     out.stat("pf.iso.high", single(one(input, IsoRaise, Dir::Above(0.15))));
     out.stat("pf.limp_fold.high", single(one(input, LimpFold, Dir::Above(0.20))));
     out.stat("pf.limp_call.high", single(one(input, LimpCall, Dir::Above(0.20))));
@@ -1350,7 +1508,33 @@ pub fn evaluate(input: &RuleInput) -> Vec<EngineRuleResult> {
         }
     }
 
+    drop_opposites(&mut out.reads);
     out.reads
+}
+
+/// Preflop reads whose advice points opposite ways (audit 2026-10, section
+/// 17). "a or b" reads fire on either leg, so a villain who is tight under
+/// the gun and loose in the hijack could get both "fold to his early opens"
+/// and "3-bet his early opens"; only the read with the higher score stays.
+pub const PREFLOP_OPPOSITES: [(&str, &str); 5] = [
+    ("pf.rfi.tight_early", "pf.rfi.loose_early"),
+    ("pf.rfi.tight_late", "pf.rfi.loose_late"),
+    ("pf.rfi.tight_late", "pf.steal.high"),
+    ("pf.rfi.loose_late", "pf.steal.low"),
+    ("pf.fold_to_steal.high", "pf.fold_to_steal.low"),
+];
+
+/// Removes the weaker read of every [`PREFLOP_OPPOSITES`] pair that fired
+/// together: the lower score goes, then the lower deviation; a tie keeps the
+/// pair's first read.
+fn drop_opposites(reads: &mut Vec<EngineRuleResult>) {
+    let at = |reads: &[EngineRuleResult], id: &str| reads.iter().position(|r| r.rule_id == id);
+    for (a, b) in PREFLOP_OPPOSITES {
+        let (Some(i), Some(j)) = (at(reads, a), at(reads, b)) else { continue };
+        let (x, y) = (&reads[i], &reads[j]);
+        let order = x.score.total_cmp(&y.score).then(x.deviation.total_cmp(&y.deviation));
+        reads.remove(if order.is_lt() { i } else { j });
+    }
 }
 
 fn bucket_text(bucket: SizeBucket) -> &'static str {

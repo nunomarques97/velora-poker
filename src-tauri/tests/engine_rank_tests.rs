@@ -367,7 +367,10 @@ fn strategic_build_payload_carries_engine_ranked_reads() {
     let engine = page.engine.as_ref().unwrap();
     assert!(engine.context.is_none());
     assert!(ids(&engine.reads).contains(&"pf.fold_to_3bet.high"));
-    assert!(engine.reads.iter().all(|r| r.advice.find(", and he sits").is_none()), "no seat advice without a table");
+    assert!(
+        engine.reads.iter().all(|r| !r.advice.contains(" your left)") && !r.advice.contains(" your right)")),
+        "no seat advice without a table"
+    );
 }
 
 #[test]

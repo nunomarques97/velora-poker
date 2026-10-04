@@ -14,7 +14,10 @@ use common::{import, player_id, Act, Table, HERO};
 use velora_poker_lib::description_rules::{ConfidenceTier, RuleCategory};
 use velora_poker_lib::engine::context::{BountyContext, SeatRelation};
 use velora_poker_lib::engine::pooling::shrink;
-use velora_poker_lib::engine::rules::{observation_template, SEAT_SUFFIX};
+use velora_poker_lib::engine::rules::{
+    observation_template, Variant, BB_VS_SB_OVERDEFEND, FOLD_TO_STEAL_LOW, FOLD_TO_STEAL_SB_HIGH,
+    HOVER_CARD_ADVICE_BUDGET, JAM_DEPTH_MAX_BB, LIMP_HIGH, PREFLOP_OPPOSITES, SEAT_SUFFIX,
+};
 use velora_poker_lib::engine::{
     evaluate_rules, latest_table_hand, player_rule_input, rule_def, stat_spec, templates,
     villain_context, EngineContext, EngineRuleResult, Family, FormFlag, FormatKey, H2hKey,
@@ -36,7 +39,7 @@ fn stat(format: FormatKey, key: StatKey, hits: u32, n: u32) -> ShrunkStat {
 }
 
 fn input(format: FormatKey, stats: &[(StatKey, u32, u32)]) -> RuleInput {
-    let mut input = RuleInput::default();
+    let mut input = RuleInput { format: Some(format), ..RuleInput::default() };
     for (key, hits, n) in stats {
         input.stats.insert(*key, stat(format, *key, *hits, *n));
     }
@@ -270,7 +273,7 @@ fn sb_open_rule_fires_at_threshold_and_not_below() {
     let reads = evaluate_rules(&cash(&[(RfiSb, 24, 40)]));
     let r = read(&reads, "pf.rfi_sb.wide").unwrap();
     assert_eq!(r.observation, "Opens 60% (24/40) of his small blinds when folded to.");
-    assert_eq!(r.advice, "3-bet and defend your big blind wider against his small-blind opens.");
+    assert_eq!(r.advice, "3-bet his small-blind opens with 77+, A8s+, KTs+ and ATo+.");
     assert_eq!((r.tag.as_deref(), r.scenario_id.as_str(), r.category), (Some("SB+"), "P13", RuleCategory::Exploit));
     // Spin & Go's SB prior is .45: the same 23/40 is (23 + 6.75)/55 = .54,
     // under .60.
@@ -284,18 +287,41 @@ fn sb_open_rule_fires_at_threshold_and_not_below() {
     v.context = Some(ctx);
     assert_eq!(
         read(&evaluate_rules(&v), "pf.rfi_sb.wide").unwrap().advice,
-        "3-bet and defend your big blind wider against his small-blind opens, and he sits directly on your right."
+        "3-bet his small-blind opens with 77+, A8s+, KTs+ and ATo+ (directly on your right)."
     );
 }
 
 // ------------------------------------------------ blind defence (P03, P04)
 
+/// The four formats in the order of the per-format delta arrays.
+const FORMATS: [FormatKey; 4] = [FormatKey::Mtt, FormatKey::Cash, FormatKey::Zoom, FormatKey::Spin];
+
 #[test]
 fn fold_to_steal_rules_fire_at_threshold_and_not_below() {
+    // Audit 2026-10 (section 17): the small blind's leg needs prior + .15
+    // (a small blind folding ~85% to a button open is close to correct),
+    // the big blind's stays at + .12; "defends" needs fold ≤ prior − .25 in
+    // MTT and − .20 elsewhere (with antes, wide big-blind defence is right).
+    for (format, low) in FORMATS.into_iter().zip(FOLD_TO_STEAL_LOW) {
+        assert_above(format, "pf.fold_to_steal.high", FoldToStealSb, 60, FOLD_TO_STEAL_SB_HIGH, &[]);
+        assert_above(format, "pf.fold_to_steal.high", FoldToStealBb, 30, 0.12, &[]);
+        assert_below(format, "pf.fold_to_steal.low", FoldToStealBb, 30, low, &[]);
+    }
+    assert_eq!(FOLD_TO_STEAL_LOW, [0.25, 0.20, 0.20, 0.20]);
+    assert_eq!(FOLD_TO_STEAL_SB_HIGH, 0.15);
+    // Cash small blind (prior .78, k 12): 29 of 30 folds shrink to
+    // (29 + 9.36)/42 = .913, which fired under D106 (≥ .90) and is under .93
+    // now; 30 of 30 is .937.
+    assert!(!fires(&cash(&[(FoldToStealSb, 29, 30)]), "pf.fold_to_steal.high"));
+    assert!(fires(&cash(&[(FoldToStealSb, 30, 30)]), "pf.fold_to_steal.high"));
+    // MTT big blind (prior .55, k 12): 9 of 30 folds (a 70% defence, correct
+    // with antes) shrink to (9 + 6.6)/42 = .371; D106 (≤ .40) called that
+    // "defends", the audit needs ≤ .30: 5 of 30 shrinks to (5 + 6.6)/42 =
+    // .276 and fires.
+    assert!(!fires(&input(FormatKey::Mtt, &[(FoldToStealBb, 9, 30)]), "pf.fold_to_steal.low"));
+    assert!(fires(&input(FormatKey::Mtt, &[(FoldToStealBb, 5, 30)]), "pf.fold_to_steal.low"));
     let c = FormatKey::Cash;
-    assert_above(c, "pf.fold_to_steal.high", FoldToStealSb, 30, 0.12, &[]);
-    assert_above(c, "pf.fold_to_steal.high", FoldToStealBb, 30, 0.12, &[]);
-    let h = assert_below(c, "pf.fold_to_steal.low", FoldToStealBb, 30, 0.15, &[]);
+    let h = last_below(c, FoldToStealBb, 30, FOLD_TO_STEAL_LOW[1]);
     // "Defends" shows the complement of the fold rate.
     let reads = evaluate_rules(&cash(&[(FoldToStealBb, h, 30)]));
     let r = read(&reads, "pf.fold_to_steal.low").unwrap();
@@ -308,9 +334,20 @@ fn fold_to_steal_rules_fire_at_threshold_and_not_below() {
 
 #[test]
 fn bb_vs_sb_rules_fire_at_threshold_and_not_below() {
-    let c = FormatKey::Cash;
-    assert_below(c, "pf.bb_vs_sb.overfold", BbDefendVsSb, 25, 0.15, &[]);
-    assert_above(c, "pf.bb_vs_sb.overdefend", BbDefendVsSb, 25, 0.15, &[]);
+    // Audit 2026-10 (section 17): "overdefends" needs prior + .25 in MTT and
+    // + .20 elsewhere; the overfold line is unchanged.
+    for (format, over) in FORMATS.into_iter().zip(BB_VS_SB_OVERDEFEND) {
+        assert_below(format, "pf.bb_vs_sb.overfold", BbDefendVsSb, 30, 0.15, &[]);
+        assert_above(format, "pf.bb_vs_sb.overdefend", BbDefendVsSb, 30, over, &[]);
+    }
+    assert_eq!(BB_VS_SB_OVERDEFEND, [0.25, 0.20, 0.20, 0.20]);
+    // Cash (prior .52, k 12): 22 of 30 defences (73%) shrink to
+    // (22 + 6.24)/42 = .672, which fired under D106 (≥ .67); a defence near
+    // 70% against small-blind opens is close to correct, so the audit needs
+    // ≥ .72: 24 of 30 is exactly .72.
+    assert!(!fires(&cash(&[(BbDefendVsSb, 22, 30)]), "pf.bb_vs_sb.overdefend"));
+    assert!(!fires(&cash(&[(BbDefendVsSb, 23, 30)]), "pf.bb_vs_sb.overdefend"));
+    assert!(fires(&cash(&[(BbDefendVsSb, 24, 30)]), "pf.bb_vs_sb.overdefend"));
 }
 
 // ----------------------------------------- 3-bets, 4-bets, squeezes (P05–P08)
@@ -360,9 +397,18 @@ fn squeeze_rule_fires_at_threshold_and_not_below() {
 
 #[test]
 fn limp_rules_fire_at_threshold_and_not_below() {
-    let c = FormatKey::Cash;
-    assert_above(c, "pf.limp.high", Limp, 50, 0.08, &[]);
-    assert_above(c, "pf.iso.high", IsoRaise, 20, 0.15, &[]);
+    // Audit 2026-10 (section 17): Spin & Go needs prior + .12 (the limp stat
+    // counts the small blind, and limping it is part of solid 3-max play);
+    // the other formats keep + .08.
+    for (format, delta) in FORMATS.into_iter().zip(LIMP_HIGH) {
+        assert_above(format, "pf.limp.high", Limp, 50, delta, &[]);
+    }
+    assert_eq!(LIMP_HIGH, [0.08, 0.08, 0.08, 0.12]);
+    // Spin (prior .12, k 20): 14 of 50 limps shrink to (14 + 2.4)/70 = .234,
+    // which fired under D106 (≥ .20) and is under .24 now; 15 of 50 is .249.
+    assert!(!fires(&input(FormatKey::Spin, &[(Limp, 14, 50)]), "pf.limp.high"));
+    assert!(fires(&input(FormatKey::Spin, &[(Limp, 15, 50)]), "pf.limp.high"));
+    assert_above(FormatKey::Cash, "pf.iso.high", IsoRaise, 20, 0.15, &[]);
 }
 
 #[test]
@@ -537,15 +583,18 @@ fn late_stage_turns_fold_to_steal_into_shove_advice() {
     v.late_fold_to_steal_bb = Some(stat(m, FoldToStealBb, 16, 20));
     v.context = Some(context(m, 30.0));
 
-    // Middle stage: plain steal advice, no late-stage read.
+    // Middle stage: the tournament steal advice, no late-stage read.
     let reads = evaluate_rules(&v);
-    assert_eq!(read(&reads, "pf.fold_to_steal.high").unwrap().advice, "Steal wider when he is in the blinds.");
+    assert_eq!(
+        read(&reads, "pf.fold_to_steal.high").unwrap().advice,
+        "Min-raise any two suited from late seats into his blinds."
+    );
     assert!(read(&reads, "stage.late.overfolds_blinds").is_none());
 
     v.context.as_mut().unwrap().stage = Some(Stage::Late);
     let reads = evaluate_rules(&v);
     let steal = read(&reads, "pf.fold_to_steal.high").unwrap();
-    assert_eq!(steal.advice, "Shove or min-raise wider when he is in the blinds.");
+    assert_eq!(steal.advice, "Min-raise any two from the button into his blinds.");
     assert!(steal.adapted_by.contains(&"stage.late"));
     let late = read(&reads, "stage.late.overfolds_blinds").expect("late-stage read");
     // Over late-stage hands only: 16/20, prior .55, k 12: (16 + 6.6)/32 = .706 ≥ .65.
@@ -625,29 +674,460 @@ fn seat_relation_reflected_in_advice() {
     let reads = evaluate_rules(&v);
     // A frequent 3-bettor directly on the left answers every open.
     let three = read(&reads, "pf.3bet.high_ip").unwrap();
-    assert_eq!(three.advice, "4-bet him lighter and flat fewer opens he can 3-bet, and he sits directly on your left.");
+    assert_eq!(three.advice, "4-bet his 3-bets with QQ+, AK and A5s-A4s as bluffs (directly on your left).");
     assert!(three.adapted_by.contains(&"ctx.seat_relation"));
     // His fold-to-3-bet matters when he opens in front of the hero.
-    assert_eq!(read(&reads, "pf.fold_to_3bet.high").unwrap().advice, "3-bet his opens wider as a bluff.");
+    assert_eq!(read(&reads, "pf.fold_to_3bet.high").unwrap().advice, "3-bet his opens light with A2s-A5s, K9s+ and 65s+.");
     // Postflop reads never carry the seat.
     assert_eq!(read(&reads, "post.cbet_flop.high").unwrap().advice, "Float and check-raise his flop c-bets more.");
 
     ctx.seat = Some(seat(4, 6));
     v.context = Some(ctx.clone());
     let reads = evaluate_rules(&v);
-    assert_eq!(read(&reads, "pf.3bet.high_ip").unwrap().advice, "4-bet him lighter and flat fewer opens he can 3-bet.");
+    assert_eq!(read(&reads, "pf.3bet.high_ip").unwrap().advice, "4-bet his 3-bets with QQ+, AK and A5s-A4s as bluffs.");
     assert_eq!(
         read(&reads, "pf.fold_to_3bet.high").unwrap().advice,
-        "3-bet his opens wider as a bluff, and he sits on your right."
+        "3-bet his opens light with A2s-A5s, K9s+ and 65s+ (on your right)."
     );
     ctx.seat = Some(seat(5, 6));
     v.context = Some(ctx);
     assert_eq!(
         read(&evaluate_rules(&v), "pf.fold_to_3bet.high").unwrap().advice,
-        "3-bet his opens wider as a bluff, and he sits directly on your right."
+        "3-bet his opens light with A2s-A5s, K9s+ and 65s+ (directly on your right)."
     );
     // The seat relation is a suffix, never a read of its own.
     assert!(!fires(&v, "ctx.seat_relation"));
+}
+
+// ------------------------------------- preflop advice audit (section 17)
+
+/// Stats on which one preflop rule fires in cash and in MTT alike.
+fn preflop_firing(id: &str) -> Vec<(StatKey, u32, u32)> {
+    match id {
+        "pf.profile.nit" => vec![(Vpip, 2, 100), (Pfr, 2, 100)],
+        "pf.profile.station" => vec![(Vpip, 60, 100), (Pfr, 5, 100), (Wtsd, 30, 60)],
+        "pf.profile.loose_passive" => vec![(Vpip, 60, 100), (Pfr, 5, 100), (Wtsd, 10, 60)],
+        "pf.profile.lag" => vec![(Vpip, 45, 100), (Pfr, 38, 100)],
+        "pf.rfi.tight_early" => vec![(RfiEp, 0, 40)],
+        "pf.rfi.loose_early" => vec![(RfiEp, 30, 40)],
+        "pf.rfi.loose_late" => vec![(RfiBtn, 36, 40)],
+        "pf.rfi.tight_late" => vec![(RfiBtn, 2, 40)],
+        "pf.steal.high" => vec![(Steal, 36, 40)],
+        "pf.steal.low" => vec![(Steal, 2, 40)],
+        "pf.rfi_sb.wide" => vec![(RfiSb, 36, 40)],
+        "pf.fold_to_steal.high" => vec![(FoldToStealBb, 30, 30)],
+        "pf.fold_to_steal.low" => vec![(FoldToStealBb, 0, 30)],
+        "pf.bb_vs_sb.overfold" => vec![(BbDefendVsSb, 0, 30)],
+        "pf.bb_vs_sb.overdefend" => vec![(BbDefendVsSb, 30, 30)],
+        "pf.3bet.high_ip" => vec![(ThreeBetIp, 20, 60)],
+        "pf.3bet.high_oop" => vec![(ThreeBetOop, 20, 60)],
+        "pf.3bet.low" => vec![(ThreeBetIp, 0, 100), (ThreeBetOop, 0, 100)],
+        "pf.fold_to_3bet.high" => vec![(FoldTo3betIp, 30, 30)],
+        "pf.fold_to_3bet.low" => vec![(FoldTo3betIp, 0, 30)],
+        "pf.4bet.high" => vec![(FourBet, 15, 40)],
+        "pf.fold_to_4bet.high" => vec![(FoldTo4bet, 20, 20)],
+        "pf.squeeze.high" => vec![(Squeeze, 15, 40)],
+        "pf.limp.high" => vec![(Limp, 25, 50)],
+        "pf.iso.high" => vec![(IsoRaise, 20, 20)],
+        "pf.limp_fold.high" => vec![(LimpFold, 20, 20)],
+        "pf.limp_reraise.seen" => vec![(LimpReraise, 5, 10)],
+        "pf.limp_call.high" => vec![(LimpCall, 20, 20)],
+        "pf.cold_call.high" => vec![(ColdCall, 20, 60)],
+        _ => panic!("no firing stats for {id}"),
+    }
+}
+
+/// Every preflop advice as shown, per context: cash at 100bb (the default
+/// text), MTT at 100bb in the middle stage (tournament sizing), cash at 30bb
+/// (jam depth) and MTT at 30bb in the late stage (late stage first, then jam
+/// depth, then tournament).
+const PREFLOP_ADVICE: [(&str, [&str; 4]); 29] = [
+    ("pf.profile.nit", [
+        "Steal his blinds with any two suited; fold AJo and KQo to his opens.",
+        "Min-raise his blinds with any two suited; fold AJo and KQo to his opens.",
+        "Steal his blinds with any two suited; fold AJo and KQo to his opens.",
+        "Min-raise any two into his blinds; call his shoves with TT+ and AQ+ only.",
+    ]),
+    ("pf.profile.station", ["Value bet top pair on all three streets; cut your river bluffs."; 4]),
+    ("pf.profile.loose_passive", ["Isolate his limps with broadways and pairs; value bet top pair thin."; 4]),
+    ("pf.profile.lag", [
+        "3-bet him for value with 99+, AJs+, KQs and AQo; call down with top pair.",
+        "3-bet him for value with 99+, AJs+, KQs and AQo; call down with top pair.",
+        "Reshove 88+, AT+ and KQ over his opens; call down with top pair.",
+        "Reshove 88+, AT+ and KQ over his opens; call down with top pair.",
+    ]),
+    ("pf.rfi.tight_early", ["Fold AJo, KQo and ATs to his early opens."; 4]),
+    ("pf.rfi.loose_early", [
+        "3-bet his early opens with 99+, AJs+, KQs and AQo.",
+        "3-bet his early opens with 99+, AJs+, KQs and AQo.",
+        "Reshove 99+ and AJ+ over his early opens.",
+        "Reshove 99+ and AJ+ over his early opens.",
+    ]),
+    ("pf.rfi.loose_late", [
+        "3-bet his late opens wider for value: 88+, ATs+, KJs+, AQo.",
+        "3-bet his late opens wider for value: 88+, ATs+, KJs+, AQo.",
+        "Reshove 66+, A9+ and KJ+ over his late opens.",
+        "Reshove 66+, A9+ and KJ+ over his late opens.",
+    ]),
+    ("pf.rfi.tight_late", ["Defend tighter: fold KTo, QJo and A9o to his late opens."; 4]),
+    ("pf.steal.high", [
+        "Defend your big blind with any suited king vs his steals.",
+        "Defend your big blind with any suited king vs his steals.",
+        "Reshove 55+, A7+ and K9s+ over his steals from the blinds.",
+        "Reshove 55+, A7+ and K9s+ over his steals from the blinds.",
+    ]),
+    ("pf.steal.low", ["From the blinds, fold offsuit Kx and Qx to his steals."; 4]),
+    ("pf.rfi_sb.wide", [
+        "3-bet his small-blind opens with 77+, A8s+, KTs+ and ATo+.",
+        "3-bet his small-blind opens with 77+, A8s+, KTs+ and ATo+.",
+        "Reshove 66+, A8+ and KJ+ over his small-blind opens.",
+        "Reshove 66+, A8+ and KJ+ over his small-blind opens.",
+    ]),
+    ("pf.fold_to_steal.high", [
+        "Steal any two suited from the button into his blinds.",
+        "Min-raise any two suited from late seats into his blinds.",
+        "Steal any two suited from the button into his blinds.",
+        "Min-raise any two from the button into his blinds.",
+    ]),
+    ("pf.fold_to_steal.low", [
+        "Cut K8o and Q8o from your steals; open 3x for value.",
+        "Cut K8o and Q8o from your steals; open 2.5x for value.",
+        "Cut K8o and Q8o from your steals; open 3x for value.",
+        "Cut K8o and Q8o from your steals; open 2.5x for value.",
+    ]),
+    ("pf.bb_vs_sb.overfold", [
+        "Raise any two from the small blind into him at 2.5x.",
+        "Min-raise any two from the small blind into him.",
+        "Raise any two from the small blind into him at 2.5x.",
+        "Min-raise or shove any two from the small blind into him.",
+    ]),
+    ("pf.bb_vs_sb.overdefend", [
+        "Cut K5o-type hands from your small-blind opens; raise 3.5x.",
+        "Limp K5o-type hands from the small blind; raise 3x for value.",
+        "Cut K5o-type hands from your small-blind opens; raise 3.5x.",
+        "Limp K5o-type hands from the small blind; raise 3x for value.",
+    ]),
+    ("pf.3bet.high_ip", [
+        "4-bet his 3-bets with QQ+, AK and A5s-A4s as bluffs.",
+        "4-bet his 3-bets with QQ+, AK and A5s-A4s as bluffs.",
+        "Jam over his 3-bets with 99+, AQ+ and AJs.",
+        "Jam over his 3-bets with 99+, AQ+ and AJs.",
+    ]),
+    ("pf.3bet.high_oop", [
+        "Call his 3-bets in position with 77-JJ, AQ, AJs and KQs.",
+        "Call his 3-bets in position with 77-JJ, AQ, AJs and KQs.",
+        "Jam 88+, AJ+ and KQs over his blind 3-bets.",
+        "Jam 88+, AJ+ and KQs over his blind 3-bets.",
+    ]),
+    ("pf.3bet.low", ["Fold JJ and AQ to his 3-bets; open more suited hands."; 4]),
+    ("pf.fold_to_3bet.high", [
+        "3-bet his opens light with A2s-A5s, K9s+ and 65s+.",
+        "3-bet his opens light with A2s-A5s, K9s+ and 65s+.",
+        "Reshove A2s+, K9s+ and 55+ over his opens.",
+        "Reshove A2s+, K9s+ and 55+ over his opens.",
+    ]),
+    ("pf.fold_to_3bet.low", [
+        "3-bet his opens at 4x, for value only: no 65s-type bluffs.",
+        "3-bet his opens at 4x, for value only: no 65s-type bluffs.",
+        "Reshove his opens for value only; no A2s-A5s jams.",
+        "Reshove his opens for value only; no A2s-A5s jams.",
+    ]),
+    ("pf.4bet.high", [
+        "Jam TT+ and AQ+ over his 4-bets; fold your light 3-bets.",
+        "Jam TT+ and AQ+ over his 4-bets; fold your light 3-bets.",
+        "Jam, don't 3-bet small; call his 4-bet jam with 99+ and AQ+.",
+        "Jam, don't 3-bet small; call his 4-bet jam with 99+ and AQ+.",
+    ]),
+    ("pf.fold_to_4bet.high", [
+        "4-bet bluff his 3-bets with A2s-A5s, sized 2.2x.",
+        "4-bet bluff his 3-bets with A2s-A5s, sized 2.2x.",
+        "4-bet jam over his 3-bets with A2s+ and K9s+.",
+        "4-bet jam over his 3-bets with A2s+ and K9s+.",
+    ]),
+    ("pf.squeeze.high", [
+        "4-bet his squeezes with TT+ and AK; flat less with KJo.",
+        "4-bet his squeezes with TT+ and AK; flat less with KJo.",
+        "Jam 99+ and AQ+ over his squeezes; flat less with KJo.",
+        "Jam 99+ and AQ+ over his squeezes; flat less with KJo.",
+    ]),
+    ("pf.limp.high", ["Isolate his limps with pairs, suited aces and broadways."; 4]),
+    ("pf.iso.high", ["Raise or fold over limpers; limp-reraise QQ+ and AK."; 4]),
+    ("pf.limp_fold.high", ["Isolate his limps to 3x with any two suited cards."; 4]),
+    ("pf.limp_reraise.seen", ["Fold all but QQ+ and AK to his limp-reraise."; 4]),
+    ("pf.limp_call.high", [
+        "Isolate his limps to 5x with broadways and pairs; bluff less.",
+        "Isolate his limps to 4x with broadways and pairs; bluff less.",
+        "Isolate his limps to 5x with broadways and pairs; bluff less.",
+        "Isolate his limps to 4x with broadways and pairs; bluff less.",
+    ]),
+    ("pf.cold_call.high", [
+        "Open 3x for value; squeeze his flats with 99+, AQ+ and A5s.",
+        "Open 2.5x for value; squeeze his flats with 99+, AQ+ and A5s.",
+        "Squeeze-jam 88+ and AJ+ when he flats an open.",
+        "Squeeze-jam 88+ and AJ+ when he flats an open.",
+    ]),
+];
+
+/// The four contexts of [`PREFLOP_ADVICE`], in its column order.
+fn preflop_contexts() -> [(FormatKey, EngineContext); 4] {
+    let mut mtt = context(FormatKey::Mtt, 100.0);
+    mtt.stage = Some(Stage::Middle);
+    let mut late = context(FormatKey::Mtt, 30.0);
+    late.stage = Some(Stage::Late);
+    [
+        (FormatKey::Cash, context(FormatKey::Cash, 100.0)),
+        (FormatKey::Mtt, mtt),
+        (FormatKey::Cash, context(FormatKey::Cash, 30.0)),
+        (FormatKey::Mtt, late),
+    ]
+}
+
+fn preflop_advice(id: &str, format: FormatKey, ctx: Option<EngineContext>) -> String {
+    let mut v = input(format, &preflop_firing(id));
+    v.context = ctx;
+    read(&evaluate_rules(&v), id).unwrap_or_else(|| panic!("{id} must fire in {format:?}")).advice.clone()
+}
+
+#[test]
+fn preflop_advice_follows_format_and_stack_depth() {
+    // Every preflop rule is pinned, and every text it can show is asserted.
+    let preflop: Vec<&str> = RULES.iter().filter(|r| r.family == Family::Preflop).map(|r| r.id).collect();
+    let pinned: Vec<&str> = PREFLOP_ADVICE.iter().map(|(id, _)| *id).collect();
+    assert_eq!(pinned, preflop);
+    let contexts = preflop_contexts();
+    for (id, expected) in PREFLOP_ADVICE {
+        for ((format, ctx), want) in contexts.iter().zip(expected) {
+            assert_eq!(preflop_advice(id, *format, Some(ctx.clone())), want, "{id} in {format:?} at {:?}bb", ctx.effective_stack_bb);
+        }
+        let def = rule_def(id);
+        for (variant, text) in def.variants {
+            assert!(expected.contains(text), "{id}: the {variant:?} text is never shown by the pinned contexts");
+        }
+    }
+}
+
+#[test]
+fn preflop_variants_switch_at_their_boundaries() {
+    // Jam depth is 15 < eff ≤ 40 (section 5); at 15bb or less preflop reads
+    // do not show at all.
+    assert_eq!(JAM_DEPTH_MAX_BB, 40.0);
+    let id = "pf.fold_to_3bet.high";
+    let jam = "Reshove A2s+, K9s+ and 55+ over his opens.";
+    let sized = "3-bet his opens light with A2s-A5s, K9s+ and 65s+.";
+    for (eff, want) in [(15.1, jam), (25.0, jam), (40.0, jam), (40.1, sized), (60.0, sized)] {
+        assert_eq!(preflop_advice(id, FormatKey::Cash, Some(context(FormatKey::Cash, eff))), want, "{eff}bb");
+    }
+    let mut v = input(FormatKey::Cash, &preflop_firing(id));
+    v.context = Some(context(FormatKey::Cash, 15.0));
+    assert!(!fires(&v, id), "push/fold suppresses preflop reads");
+    // Jam depth records why the text changed.
+    v.context = Some(context(FormatKey::Cash, 30.0));
+    assert!(read(&evaluate_rules(&v), id).unwrap().adapted_by.contains(&"stack.jam_depth"));
+
+    // The tournament text follows the format of the stats, with or without
+    // a table: MTT and Spin & Go, never cash or Zoom.
+    let id = "pf.cold_call.high";
+    let cash_text = "Open 3x for value; squeeze his flats with 99+, AQ+ and A5s.";
+    let tournament_text = "Open 2.5x for value; squeeze his flats with 99+, AQ+ and A5s.";
+    for (format, want) in
+        [(FormatKey::Cash, cash_text), (FormatKey::Zoom, cash_text), (FormatKey::Mtt, tournament_text), (FormatKey::Spin, tournament_text)]
+    {
+        assert_eq!(preflop_advice(id, format, None), want, "{format:?} without a table");
+        assert_eq!(preflop_advice(id, format, Some(context(format, 100.0))), want, "{format:?} at 100bb");
+    }
+    let mut v = input(FormatKey::Spin, &preflop_firing(id));
+    v.context = Some(context(FormatKey::Spin, 100.0));
+    assert!(read(&evaluate_rules(&v), id).unwrap().adapted_by.contains(&"format.tournament"));
+    // Precedence: jam depth before the tournament text.
+    assert_eq!(
+        preflop_advice(id, FormatKey::Mtt, Some(context(FormatKey::Mtt, 30.0))),
+        "Squeeze-jam 88+ and AJ+ when he flats an open."
+    );
+    // Every variant list is written in precedence order: late stage, jam
+    // depth, tournament (the first match wins).
+    let rank = |v: &Variant| match v {
+        Variant::LateStage => 0,
+        Variant::JamDepth => 1,
+        Variant::Tournament => 2,
+        _ => 3,
+    };
+    for def in RULES.iter().filter(|r| r.family == Family::Preflop) {
+        let order: Vec<u8> = def.variants.iter().map(|(v, _)| rank(v)).collect();
+        assert!(order.windows(2).all(|w| w[0] < w[1]), "{} variants out of order", def.id);
+    }
+}
+
+#[test]
+fn opposite_preflop_reads_never_fire_together() {
+    // Audit 2026-10 (section 17): "a or b" reads fire on either leg, so one
+    // villain could get both sides of a pair: "Fold AJo, KQo and ATs to his
+    // early opens" next to "3-bet his early opens with 99+…". Only the read
+    // with the higher score is kept.
+    let ids = |input: &RuleInput| -> Vec<String> {
+        evaluate_rules(input).iter().map(|r| r.rule_id.clone()).filter(|id| id.starts_with("pf.")).collect()
+    };
+    // Tight UTG (0/40: .044, deviation 2.3) and loose HJ (30/40: .603,
+    // deviation 6.5): the loose read wins.
+    let both = cash(&[(RfiEp, 0, 40), (RfiMp, 30, 40)]);
+    assert_eq!(ids(&both), ["pf.rfi.loose_early"]);
+    // Tight cutoff (2/40: .113, deviation 2.1) and loose button (36/40:
+    // .769, deviation 3.5).
+    let both = cash(&[(RfiCo, 2, 40), (RfiBtn, 36, 40)]);
+    assert_eq!(ids(&both), ["pf.rfi.loose_late"]);
+    // Tight cutoff and a wide steal (36/40: .711, deviation 4.0).
+    let both = cash(&[(RfiCo, 2, 40), (Steal, 36, 40)]);
+    assert_eq!(ids(&both), ["pf.steal.high"]);
+    // A wide button (36/40) and a rare steal (2/40: .136, deviation 2.4).
+    let both = cash(&[(RfiBtn, 36, 40), (Steal, 2, 40)]);
+    assert_eq!(ids(&both), ["pf.rfi.loose_late"]);
+    // Folds his small blind (30/30: .937, deviation 1.6) but defends his big
+    // blind (0/30: .171, deviation 3.6): "steal any two" and "cut K8o from
+    // your steals" cannot both stand; the big blind's read wins.
+    let both = cash(&[(FoldToStealSb, 30, 30), (FoldToStealBb, 0, 30)]);
+    assert_eq!(ids(&both), ["pf.fold_to_steal.low"]);
+    // The other side wins when it is the stronger read: tight UTG over 100
+    // opens (.021, deviation 2.8) and a hijack just over the line (13/40:
+    // .294, deviation 1.4).
+    let both = cash(&[(RfiEp, 0, 100), (RfiMp, 13, 40)]);
+    assert!(fires(&cash(&[(RfiMp, 13, 40)]), "pf.rfi.loose_early"));
+    assert_eq!(ids(&both), ["pf.rfi.tight_early"]);
+    // Each side alone still fires.
+    assert!(fires(&cash(&[(RfiEp, 0, 40)]), "pf.rfi.tight_early"));
+    assert!(fires(&cash(&[(FoldToStealSb, 30, 30)]), "pf.fold_to_steal.high"));
+    // Every declared pair names two preflop rules.
+    for (a, b) in PREFLOP_OPPOSITES {
+        assert!(rule_def(a).family == Family::Preflop && rule_def(b).family == Family::Preflop, "{a} / {b}");
+    }
+}
+
+#[test]
+fn reads_from_different_stats_give_advice_that_fits_together() {
+    // Review of audit-preflop: a reg who folds (30 + 8.25)/55 = .695 of his
+    // in-position 3-bets and 4-bets (14 + 1.4)/80 = .19 gets both reads.
+    // That is one consistent plan, not a contradiction: 3-bet him light and
+    // fold the light 3-bets to his 4-bet, jam the value hands over it. So
+    // both reads stay, but the 4-bet read must not tell the hero to drop the
+    // light 3-bets the fold-to-3-bet read recommends.
+    for (format, depth, fold_text, four_bet_text) in [
+        (
+            FormatKey::Cash,
+            100.0,
+            "3-bet his opens light with A2s-A5s, K9s+ and 65s+.",
+            "Jam TT+ and AQ+ over his 4-bets; fold your light 3-bets.",
+        ),
+        (
+            FormatKey::Cash,
+            30.0,
+            "Reshove A2s+, K9s+ and 55+ over his opens.",
+            "Jam, don't 3-bet small; call his 4-bet jam with 99+ and AQ+.",
+        ),
+    ] {
+        let mut v = input(format, &[(FoldTo3betIp, 30, 40), (FourBet, 14, 60)]);
+        v.context = Some(context(format, depth));
+        let reads = evaluate_rules(&v);
+        let fold = &read(&reads, "pf.fold_to_3bet.high").expect("fold to 3-bet fires").advice;
+        let four = &read(&reads, "pf.4bet.high").expect("4-bet fires").advice;
+        for word in ["skip", "only", "A5s", "A2s"] {
+            assert!(!four.contains(word), "{depth}bb: 4-bet advice drops the light 3-bets ({word}): {four}");
+        }
+        assert_eq!(fold, fold_text);
+        assert_eq!(four, four_bet_text);
+    }
+
+    // A limp-folder who limp-reraised 7 of 40 iso raises: limp-fold (33 +
+    // 4.4)/48 = .78 and limp-reraise (7 + .4)/48 = .154 both fire. His fold
+    // rate is measured over the same iso raises, reraises included, so
+    // isolating wide stays right; the limp-reraise read must not narrow the
+    // iso range ("only 88+" against "any two suited"), only say what to do
+    // when he reraises.
+    let reads = evaluate_rules(&cash(&[(LimpFold, 33, 40), (LimpReraise, 7, 40)]));
+    let iso = &read(&reads, "pf.limp_fold.high").expect("limp-fold fires").advice;
+    let lrr = &read(&reads, "pf.limp_reraise.seen").expect("limp-reraise fires").advice;
+    for word in ["Isolate", "only", "88+"] {
+        assert!(!lrr.contains(word), "limp-reraise advice narrows the iso range ({word}): {lrr}");
+    }
+    assert_eq!(iso, "Isolate his limps to 3x with any two suited cards.");
+    assert_eq!(lrr, "Fold all but QQ+ and AK to his limp-reraise.");
+
+    // Second review: a wide opener who rarely folds to 3-bets (a LAG reg)
+    // got "3-bet his late opens light: A2s-A5s…" next to "3-bet him only
+    // with TT+ and AQ+". A pro 3-bets him wider for value and drops the
+    // light 3-bets, so the opener reads name value ranges only and the
+    // continue read removes bluffs without capping the value range.
+    let cap = regex::Regex::new(r"(?:[2-9TJQKA]{2}\+|\bonly with\b)").unwrap();
+    let continues = (FoldTo3betIp, 0, 30);
+    for (opens, id, at_100, at_30) in [
+        (
+            (RfiBtn, 36, 40),
+            "pf.rfi.loose_late",
+            "3-bet his late opens wider for value: 88+, ATs+, KJs+, AQo.",
+            "Reshove 66+, A9+ and KJ+ over his late opens.",
+        ),
+        (
+            (RfiSb, 36, 40),
+            "pf.rfi_sb.wide",
+            "3-bet his small-blind opens with 77+, A8s+, KTs+ and ATo+.",
+            "Reshove 66+, A8+ and KJ+ over his small-blind opens.",
+        ),
+        (
+            (RfiEp, 30, 40),
+            "pf.rfi.loose_early",
+            "3-bet his early opens with 99+, AJs+, KQs and AQo.",
+            "Reshove 99+ and AJ+ over his early opens.",
+        ),
+    ] {
+        for (depth, want, c3b_want) in [
+            (100.0, at_100, "3-bet his opens at 4x, for value only: no 65s-type bluffs."),
+            (30.0, at_30, "Reshove his opens for value only; no A2s-A5s jams."),
+        ] {
+            let mut v = cash(&[opens, continues]);
+            v.context = Some(context(FormatKey::Cash, depth));
+            let reads = evaluate_rules(&v);
+            let wide = &read(&reads, id).unwrap_or_else(|| panic!("{id} fires")).advice;
+            let c3b = &read(&reads, "pf.fold_to_3bet.low").expect("fold to 3-bet low fires").advice;
+            for word in ["light", "A2s", "A5s"] {
+                assert!(!wide.contains(word), "{id} at {depth}bb bluffs a villain who continues ({word}): {wide}");
+            }
+            assert!(!cap.is_match(c3b), "{depth}bb: the continue read caps the value range: {c3b}");
+            assert_eq!((wide.as_str(), c3b.as_str()), (want, c3b_want), "{id} at {depth}bb");
+        }
+    }
+    // The LAG profile names the same value range as the early opener read.
+    let lag = cash(&[(Vpip, 45, 100), (Pfr, 38, 100), continues]);
+    let reads = evaluate_rules(&lag);
+    assert_eq!(
+        read(&reads, "pf.profile.lag").expect("lag fires").advice,
+        "3-bet him for value with 99+, AJs+, KQs and AQo; call down with top pair."
+    );
+    assert!(!cap.is_match(&read(&reads, "pf.fold_to_3bet.low").expect("continues").advice));
+
+    // A tight late opener who folds to 3-bets: "3-bet QQ+ and AK only" next
+    // to "3-bet his opens light". The tight-opener read says what to fold;
+    // the light 3-bets come from the fold-to-3-bet read.
+    let reads = evaluate_rules(&cash(&[(RfiBtn, 2, 40), (FoldTo3betIp, 30, 30)]));
+    let tight = &read(&reads, "pf.rfi.tight_late").expect("tight late fires").advice;
+    assert!(read(&reads, "pf.fold_to_3bet.high").is_some());
+    assert!(!tight.contains("3-bet") && !tight.contains("only"), "{tight}");
+    assert_eq!(tight, "Defend tighter: fold KTo, QJo and A9o to his late opens.");
+
+    // A big blind who rarely 3-bets but defends wide: "open wider in front
+    // of him" next to "cut K8o and Q8o from your steals" and "open your
+    // small blind tighter". Against a flatter, open more suited hands and cut
+    // offsuit trash.
+    let reads = evaluate_rules(&cash(&[
+        (ThreeBetIp, 0, 100),
+        (ThreeBetOop, 0, 100),
+        (FoldToStealBb, 0, 30),
+        (BbDefendVsSb, 30, 30),
+    ]));
+    let low = &read(&reads, "pf.3bet.low").expect("3-bet low fires").advice;
+    let defends = &read(&reads, "pf.fold_to_steal.low").expect("defends fires").advice;
+    let over = &read(&reads, "pf.bb_vs_sb.overdefend").expect("overdefend fires").advice;
+    assert!(!low.contains("wider"), "{low}");
+    assert!(!over.contains("tighter"), "{over}");
+    assert_eq!(low, "Fold JJ and AQ to his 3-bets; open more suited hands.");
+    assert_eq!(defends, "Cut K8o and Q8o from your steals; open 3x for value.");
+    assert_eq!(over, "Cut K5o-type hands from your small-blind opens; raise 3.5x.");
 }
 
 // ---------------------------------------------------------- postflop (F01–F12)
@@ -1221,6 +1701,100 @@ fn advice_never_restates_observation() {
     }
 }
 
+/// The seat suffix at its longest: "directly on" and "right".
+fn longest_seat_suffix() -> String {
+    SEAT_SUFFIX.replace("{where}", "directly on").replace("{side}", "right")
+}
+
+/// Every advice text a rule can show: the default and each variant, with
+/// placeholders at their longest value and, for a rule with a seat side, the
+/// longest seat suffix.
+fn advice_as_shown(def: &velora_poker_lib::engine::RuleDef) -> Vec<String> {
+    std::iter::once(def.advice)
+        .chain(def.variants.iter().map(|(_, t)| *t))
+        .map(|text| {
+            let text = text.replace("{bucket}", "overbet-sized");
+            match def.seat {
+                Some(_) => format!("{}{}", text.trim_end_matches('.'), longest_seat_suffix()),
+                None => text,
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn every_advice_fits_the_hover_card() {
+    // Section 17.1: at the medium table (800x570) `hoverCardMetrics` gives a
+    // 248px card at 11px; its 7px padding and 1px border leave 232px, and
+    // the advice block is clamped to two lines. 2 × 232 − 40px for a pushed
+    // word = 424px at 4.9px per character (measured): 86 characters.
+    assert_eq!(HOVER_CARD_ADVICE_BUDGET, 86);
+    // The suffix measured here is the one the engine appends.
+    let mut v = cash(&[(RfiSb, 30, 40)]);
+    let mut ctx = context(FormatKey::Cash, 100.0);
+    ctx.seat = Some(seat(5, 6));
+    v.context = Some(ctx);
+    let shown = read(&evaluate_rules(&v), "pf.rfi_sb.wide").unwrap().advice.clone();
+    assert_eq!(advice_as_shown(rule_def("pf.rfi_sb.wide"))[0], shown);
+    assert!(shown.ends_with(&longest_seat_suffix()), "{shown}");
+
+    let mut checked = 0;
+    for def in RULES.iter().filter(|r| r.id != "ctx.seat_relation") {
+        for text in advice_as_shown(def) {
+            assert!(!text.contains('{'), "{}: unrendered placeholder in {text}", def.id);
+            let len = text.chars().count();
+            assert!(len <= HOVER_CARD_ADVICE_BUDGET, "{} advice is {len} characters, over {HOVER_CARD_ADVICE_BUDGET}: {text}", def.id);
+            checked += 1;
+        }
+    }
+    assert!(checked > RULES.len(), "every rule and variant: {checked}");
+}
+
+/// Families whose advice must name a concrete lever (section 17.1). Each
+/// audit task adds the family it rewrites, until the list holds them all.
+const LEVER_FAMILIES: [Family; 1] = [Family::Preflop];
+
+/// The concrete levers an advice names: hand classes (`A2s-A5s`, `QQ+`,
+/// `Kx`, suited aces, broadways, top pair), sizing (`3x`, min-raise, jam,
+/// small bets, pot fractions) or the hero's seat (from the button, your big
+/// blind, in position). Empty when the advice names none ("3-bet more").
+fn concrete_levers(text: &str) -> Vec<String> {
+    let hands = regex::Regex::new(r"\b(?:[2-9TJQKA]{2}[so]?\+?(?:-[2-9TJQKA]{2}[so]?)?|[AKQJT]x[so]?)\b").unwrap();
+    let words = regex::Regex::new(
+        r"(?i)\b(?:suited|offsuit|broadways?|pairs?|aces|kings|connectors|any two|premiums|top pair|draws|\d+(?:\.\d+)?x|min-raise|jam|shove|reshove|all-in|squeeze-jam|small (?:bets?|sizes?|sizing|c-bets?)|overbets?|\d/\d pot|from the (?:button|cutoff|small blind|big blind|blinds)|from late seats|your (?:small|big) blind|in position|out of position)\b",
+    )
+    .unwrap();
+    hands.find_iter(text).chain(words.find_iter(text)).map(|m| m.as_str().to_string()).collect()
+}
+
+#[test]
+fn every_advice_names_a_concrete_lever() {
+    // The guard itself: the generic texts the audit removed name no lever.
+    for generic in [
+        "3-bet more.",
+        "Steal wider when he is in the blinds.",
+        "Open bigger for value and squeeze more when he flats.",
+        "4-bet bluff his 3-bets more.",
+        "Give his raises credit and steal his blinds often.",
+        // "small" counts only as a size, never inside "small-blind".
+        "Attack his small-blind opens more.",
+    ] {
+        assert!(concrete_levers(generic).is_empty(), "{generic}: {:?}", concrete_levers(generic));
+    }
+    for concrete in ["3-bet him wider with suited wheel aces from the button.", "Jam 99+.", "Open 2.5x.", "Fold Kx."] {
+        assert!(!concrete_levers(concrete).is_empty(), "{concrete}");
+    }
+
+    let mut checked = 0;
+    for def in RULES.iter().filter(|r| LEVER_FAMILIES.contains(&r.family)) {
+        for text in std::iter::once(def.advice).chain(def.variants.iter().map(|(_, t)| *t)) {
+            assert!(!concrete_levers(text).is_empty(), "{} advice names no hand class, size or seat: {text}", def.id);
+            checked += 1;
+        }
+    }
+    assert!(checked >= RULES.iter().filter(|r| r.family == Family::Preflop).count());
+}
+
 #[test]
 fn only_showdown_reads_speak_about_value_or_bluffs() {
     // player-descriptions.md hard rule: no range-composition claim unless a
@@ -1313,7 +1887,7 @@ fn imported_hands_fire_fold_to_three_bet_with_seat_and_counts() {
     let reads = evaluate_rules(&input);
     let r = read(&reads, "pf.fold_to_3bet.high").expect("folds every 3-bet");
     assert_eq!(r.observation, "Folds to 100% (30/30) of 3-bets.");
-    assert_eq!(r.advice, "3-bet his opens wider as a bluff, and he sits on your right.");
+    assert_eq!(r.advice, "3-bet his opens light with A2s-A5s, K9s+ and 65s+ (on your right).");
     let e = &r.evidence[0];
     assert_eq!((e.stat_name.as_str(), e.hits, e.opportunities, e.value), ("fold_to_3bet_oop", 30, 30, Some(100.0)));
     // Recency-weighted shrink: under the plain (30 + 9.3)/45 = 87.3%, above the threshold.
