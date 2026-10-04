@@ -7,7 +7,11 @@
 //   - a scenario id or a rule id is duplicated,
 //   - a row marked `implemented` names a rule id that does not appear as a
 //     string literal ("rule.id") under src-tauri/src, or a test that does not
-//     exist as `fn <name>` under src-tauri.
+//     exist as `fn <name>` under src-tauri,
+//   - the rule-quality matrix (section 17.4, between the `rule-matrix:start`
+//     and `rule-matrix:end` markers) does not list every rule id of `RULES`
+//     in src-tauri/src/engine/rules.rs exactly once, or lists a row id that
+//     is neither a rule nor a string literal under src-tauri/src.
 //
 // Usage:
 //   node scripts/check-engine-spec.mjs                 structure + implemented rows
@@ -23,6 +27,7 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SPEC_PATH = join(root, "docs", "specs", "opponent-engine.md");
 const TAURI_DIR = join(root, "src-tauri");
+const RULES_PATH = join(TAURI_DIR, "src", "engine", "rules.rs");
 const SKIP_DIRS = new Set(["target", "gen", "node_modules", ".git"]);
 
 export const FORMATS = ["MTT", "6-max cash", "Zoom", "Spin & Go"];
@@ -41,6 +46,8 @@ const COLUMNS = [
 const STATUSES = ["planned", "implemented"];
 const START = "<!-- catalogue:start -->";
 const END = "<!-- catalogue:end -->";
+const MATRIX_START = "<!-- rule-matrix:start -->";
+const MATRIX_END = "<!-- rule-matrix:end -->";
 
 const ID_RE = /^[A-Z][A-Z0-9]*[0-9]$/;
 const RULE_RE = /^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$/;
@@ -191,9 +198,71 @@ export function validateRows(rows, sources, { requireAll = false } = {}) {
   return errors;
 }
 
+/** The first-cell rule ids of the rule-quality matrix. Returns { ids, errors }. */
+export function parseRuleMatrix(text) {
+  const start = text.indexOf(MATRIX_START);
+  const end = text.indexOf(MATRIX_END);
+  if (start < 0 || end < 0 || end < start) {
+    return { ids: [], errors: [`rule-quality matrix markers ${MATRIX_START} / ${MATRIX_END} not found in order`] };
+  }
+  const ids = [];
+  for (const line of text.slice(start + MATRIX_START.length, end).split(/\r?\n/)) {
+    const m = /^\|\s*`([^`]+)`\s*\|/.exec(line.trim());
+    if (m) ids.push(m[1].trim());
+  }
+  return { ids, errors: ids.length === 0 ? ["rule-quality matrix has no rule rows"] : [] };
+}
+
+/**
+ * The rule ids of `RULES` in rules.rs: each `rule("id", …)` or
+ * `rule(CONST, …)`, with a constant resolved through its
+ * `const CONST: &str = "…";` in any source under src-tauri/src.
+ */
+export function codeRuleIds(rulesFile, ruleSources) {
+  const errors = [];
+  const open = rulesFile.indexOf("pub const RULES: &[RuleDef] = &[");
+  const close = open < 0 ? -1 : rulesFile.indexOf("\n];", open);
+  if (open < 0 || close < 0) return { ids: [], errors: ["RULES not found in src-tauri/src/engine/rules.rs"] };
+  const ids = [];
+  for (const m of rulesFile.slice(open, close).matchAll(/\brule\(\s*(?:"([^"]+)"|([A-Z][A-Z0-9_]*))\s*,/g)) {
+    if (m[1]) {
+      ids.push(m[1]);
+      continue;
+    }
+    const constRe = new RegExp(`\\bconst\\s+${m[2]}\\s*:\\s*&(?:'static\\s+)?str\\s*=\\s*"([^"]+)"`);
+    const found = ruleSources.map((src) => constRe.exec(src)).find(Boolean);
+    if (found) ids.push(found[1]);
+    else errors.push(`RULES uses ${m[2]}, which resolves to no string constant under src-tauri/src`);
+  }
+  if (ids.length === 0 && errors.length === 0) errors.push("RULES holds no rule");
+  return { ids, errors };
+}
+
+/** Every rule id once in the matrix; any other row id must exist in the code. */
+export function validateMatrix(matrixIds, ruleIds, ruleSources) {
+  const errors = [];
+  for (const id of ruleIds) {
+    const count = matrixIds.filter((m) => m === id).length;
+    if (count !== 1) errors.push(`rule-quality matrix lists rule id "${id}" ${count} times (expected exactly once)`);
+  }
+  for (const id of new Set(matrixIds)) {
+    if (ruleIds.includes(id)) continue;
+    if (!ruleSources.some((src) => src.includes(`"${id}"`))) {
+      errors.push(`rule-quality matrix row "${id}" is neither a rule of RULES nor a string literal under src-tauri/src`);
+    } else if (matrixIds.filter((m) => m === id).length > 1) {
+      errors.push(`rule-quality matrix lists "${id}" more than once`);
+    }
+  }
+  return errors;
+}
+
 export function checkSpec(text, sources, options) {
   const { rows, errors } = parseCatalogue(text);
-  return { rows, errors: [...errors, ...validateRows(rows, sources, options)] };
+  const matrix = parseRuleMatrix(text);
+  const code = codeRuleIds(sources.rulesFile ?? "", sources.ruleSources);
+  const matrixErrors = [...matrix.errors, ...code.errors];
+  if (matrixErrors.length === 0) matrixErrors.push(...validateMatrix(matrix.ids, code.ids, sources.ruleSources));
+  return { rows, errors: [...errors, ...validateRows(rows, sources, options), ...matrixErrors] };
 }
 
 function collectRustFiles(dir, out = []) {
@@ -217,20 +286,25 @@ function loadSources() {
     testSources.push(content);
     if (!relative(srcDir, file).startsWith("..")) ruleSources.push(content);
   }
-  return { ruleSources, testSources };
+  return { ruleSources, testSources, rulesFile: readFileSync(RULES_PATH, "utf8") };
 }
 
 // ---------------------------------------------------------------------------
 // Self-test: embedded samples. Every broken sample must be rejected; the valid
 // samples must pass, so a checker that rejects everything cannot pass either.
 
-function sampleSpec(rows, { header = COLUMNS, markers = true } = {}) {
+const DEFAULT_MATRIX = ["pf.sample.one", "pf.sample.two"];
+
+function sampleSpec(rows, { header = COLUMNS, markers = true, matrix = DEFAULT_MATRIX, matrixMarkers = true } = {}) {
   const table = [
     `| ${header.join(" | ")} |`,
     `|${header.map(() => "---").join("|")}|`,
     ...rows,
   ].join("\n");
-  return markers ? `# Sample\n\n${START}\n${table}\n${END}\n` : `# Sample\n\n${table}\n`;
+  const catalogue = markers ? `${START}\n${table}\n${END}\n` : `${table}\n`;
+  const matrixTable = ["| Rule id | Verdict |", "|---|---|", ...matrix.map((id) => `| \`${id}\` | kept |`)].join("\n");
+  const matrixPart = matrixMarkers ? `${MATRIX_START}\n${matrixTable}\n${MATRIX_END}\n` : `${matrixTable}\n`;
+  return `# Sample\n\n${catalogue}\n## Matrix\n\n${matrixPart}`;
 }
 
 const ALL_CONTEXTS = REQUIRED_CONTEXTS.map((c) => `\`${c}\``).join(", ");
@@ -245,14 +319,25 @@ const row = ({
   status = "planned",
 } = {}) => `| ${id} | ${formats} | ${context} | ${exploit} | ${stats} | ${rules} | ${tests} | ${status} |`;
 
+// RULES with a literal id and one through a constant, as rules.rs does with
+// the seat-relation rule; the constant is resolved from `ruleSources`.
+const SAMPLE_RULES_FILE = [
+  "pub const RULES: &[RuleDef] = &[",
+  '    rule("pf.sample.one", "A01", F::Preflop, T, None, "Obs.", "Advice."),',
+  '    left(rule(SAMPLE_TWO, "A02", F::Stage, T, None, "Obs.", "Advice.")),',
+  "];",
+].join("\n");
+const SAMPLE_CONST = 'pub const SAMPLE_TWO: &str = "pf.sample.two";';
 const GOOD_SOURCES = {
-  ruleSources: ['pub const RULE: &str = "pf.sample.one";\nconst B: &str = "pf.sample.two";'],
+  ruleSources: [`pub const RULE: &str = "pf.sample.one";\nconst B: &str = "pf.sample.two";\n${SAMPLE_CONST}`],
   testSources: ["#[test]\nfn sample_test_one() {}\n#[test]\nfn sample_test_two() {}\n"],
+  rulesFile: SAMPLE_RULES_FILE,
 };
-const EMPTY_SOURCES = { ruleSources: [], testSources: [] };
+const EMPTY_SOURCES = { ruleSources: [SAMPLE_CONST], testSources: [], rulesFile: SAMPLE_RULES_FILE };
 const NEAR_MISS_SOURCES = {
-  ruleSources: ['const A: &str = "pf.sample.one_more";\n// pf.sample.one without quotes'],
+  ruleSources: [`const A: &str = "pf.sample.one_more";\n// pf.sample.one without quotes\n${SAMPLE_CONST}`],
   testSources: ["fn sample_test_one_extra() {}\n// fn sample_test_one is a comment mention? no paren\n"],
+  rulesFile: SAMPLE_RULES_FILE,
 };
 
 const SAMPLES = [
@@ -299,6 +384,35 @@ const SAMPLES = [
     sources: { ruleSources: [], testSources: [...GOOD_SOURCES.testSources, 'const R: &str = "pf.sample.one";'] },
   },
   { name: "--require-all with a planned row", text: sampleSpec([row()]), sources: EMPTY_SOURCES, options: { requireAll: true } },
+  {
+    name: "matrix with a derivation row that is a literal in the code",
+    expect: "pass",
+    text: sampleSpec([row()], { matrix: [...DEFAULT_MATRIX, "pf.sample.one_more"] }),
+    sources: { ...EMPTY_SOURCES, ruleSources: [SAMPLE_CONST, 'const D: &str = "pf.sample.one_more";'] },
+  },
+  { name: "missing rule-matrix markers", text: sampleSpec([row()], { matrixMarkers: false }), sources: EMPTY_SOURCES },
+  { name: "matrix lacking a rule id of RULES", text: sampleSpec([row()], { matrix: ["pf.sample.one"] }), sources: EMPTY_SOURCES },
+  {
+    name: "matrix lacking the rule whose id is a constant",
+    text: sampleSpec([row()], { matrix: ["pf.sample.one", "pf.sample.three"] }),
+    sources: EMPTY_SOURCES,
+  },
+  {
+    name: "matrix listing a rule id twice",
+    text: sampleSpec([row()], { matrix: [...DEFAULT_MATRIX, "pf.sample.one"] }),
+    sources: EMPTY_SOURCES,
+  },
+  {
+    name: "matrix row that is no rule and no code literal",
+    text: sampleSpec([row()], { matrix: [...DEFAULT_MATRIX, "pf.sample.ghost"] }),
+    sources: EMPTY_SOURCES,
+  },
+  {
+    name: "RULES constant that resolves to no string",
+    text: sampleSpec([row()]),
+    sources: { ...EMPTY_SOURCES, ruleSources: [] },
+  },
+  { name: "rules.rs without RULES", text: sampleSpec([row()]), sources: { ...EMPTY_SOURCES, rulesFile: "fn main() {}" } },
 ];
 
 function selfTest() {
@@ -329,7 +443,8 @@ function main(argv) {
 
   const requireAll = argv.includes("--require-all");
   const text = readFileSync(SPEC_PATH, "utf8");
-  const { rows, errors } = checkSpec(text, loadSources(), { requireAll });
+  const sources = loadSources();
+  const { rows, errors } = checkSpec(text, sources, { requireAll });
   if (errors.length > 0) {
     console.error(`check-engine-spec: ${errors.length} problem(s) in ${relative(root, SPEC_PATH)}`);
     for (const e of errors) console.error(`  - ${e}`);
@@ -338,7 +453,8 @@ function main(argv) {
   const implemented = rows.filter((r) => r.status === "implemented").length;
   console.log(
     `check-engine-spec: OK — ${rows.length} scenarios, ${implemented} implemented, ` +
-      `${rows.length - implemented} planned${requireAll ? " (--require-all)" : ""}`,
+      `${rows.length - implemented} planned${requireAll ? " (--require-all)" : ""}; ` +
+      `rule-quality matrix covers all ${codeRuleIds(sources.rulesFile, sources.ruleSources).ids.length} rules`,
   );
   return 0;
 }

@@ -16,8 +16,8 @@ use velora_poker_lib::engine::context::{BountyContext, SeatRelation};
 use velora_poker_lib::engine::pooling::shrink;
 use velora_poker_lib::engine::rules::{
     observation_template, Variant, BB_VS_SB_OVERDEFEND, FOLD_TO_STEAL_LOW, FOLD_TO_STEAL_SB_HIGH,
-    HOVER_CARD_ADVICE_BUDGET, JAM_DEPTH_MAX_BB, LIMP_HIGH, POSTFLOP_OPPOSITES, PREFLOP_OPPOSITES, SEAT_SUFFIX,
-    STAGE_EARLY_LIMP,
+    H2H_OPPOSITES, HOVER_CARD_ADVICE_BUDGET, JAM_DEPTH_MAX_BB, LIMP_HIGH, POSTFLOP_OPPOSITES, PREFLOP_OPPOSITES,
+    SEAT_SUFFIX, SHOWDOWN_OPPOSITES, STAGE_EARLY_LIMP,
 };
 use velora_poker_lib::engine::{
     evaluate_rules, latest_table_hand, player_rule_input, rule_def, stat_spec, templates,
@@ -1693,7 +1693,7 @@ fn sizing_tell_rules_need_four_and_cite_counts() {
     let reads = evaluate_rules(&v);
     let r = read(&reads, "sd.tell.big_is_value").expect("3 of 4 overbets shown as value");
     assert_eq!(r.observation, "Showed value in 3 of 4 overbet-sized bets.");
-    assert_eq!(r.advice, "Fold more bluff-catchers to his overbet-sized bets.");
+    assert_eq!(r.advice, "Fold weak top pair and worse to his overbet-sized bets; call with two pair or better.");
     assert_eq!(r.evidence[0].hits, 3);
     assert_eq!(r.evidence[0].opportunities, 4);
     assert_eq!(r.evidence[0].shrunk, None);
@@ -1781,6 +1781,311 @@ fn recent_form_rules_fire_only_with_full_samples() {
     assert!(evaluate_rules(&v).is_empty());
     v.recent_form = Some(form(12, 9, 39, Some(FormFlag::Tilt), 4.0));
     assert!(evaluate_rules(&v).is_empty());
+}
+
+// ------------------- head-to-head, showdown and recency audit (section 17.7)
+
+/// One input on which an `h2h.*`, `sd.*` or `rec.*` rule fires, in any
+/// format: the head-to-head stats are shrunk toward the villain's own value,
+/// the showdown and form reads carry their own samples.
+fn h2h_sd_rec_firing(format: FormatKey, id: &str) -> RuleInput {
+    let mut v = input(format, &[]);
+    match id {
+        // (6 + 25 × .08)/37 = .22 ≥ .08 + .05.
+        "h2h.3bet_vs_hero.high" => v.h2h.push(h2h(H2hKey::ThreeBetVsHeroOpen, 6, 12, 0.08)),
+        "h2h.fold_to_hero_3bet.high" => v.h2h.push(h2h(H2hKey::FoldToHeroThreeBet, 18, 20, 0.40)),
+        "h2h.fold_to_hero_cbet.high" => v.h2h.push(h2h(H2hKey::FoldToHeroCbet, 18, 20, 0.40)),
+        "h2h.steal_vs_hero.high" => v.h2h.push(h2h(H2hKey::StealVsHero, 18, 20, 0.40)),
+        "h2h.defend_vs_hero_steal.high" => v.h2h.push(h2h(H2hKey::DefendVsHeroSteal, 18, 20, 0.40)),
+        "sd.tell.big_is_value" => v.sizing = vec![tell(SizeBucket::Overbet, 4, 0, 0)],
+        "sd.tell.big_is_bluff" => v.sizing = vec![tell(SizeBucket::AllIn, 1, 3, 0)],
+        "sd.tell.small_is_value" => v.sizing = vec![tell(SizeBucket::Small, 4, 0, 0)],
+        "sd.shows_bluffs" => v.river_showdowns = ShowdownTally { value: 3, bluff: 3, neither: 0, n: 6 },
+        "rec.tilt" => v.recent_form = Some(form(12, 9, 49, Some(FormFlag::Tilt), 3.3)),
+        "rec.looser" => v.recent_form = Some(form(12, 8, 49, Some(FormFlag::Looser), 2.67)),
+        "rec.tighter" => v.recent_form = Some(form(12, 0, 60, Some(FormFlag::Tighter), -2.9)),
+        other => panic!("no firing input for {other}"),
+    }
+    v
+}
+
+/// Every head-to-head, showdown and recency advice as shown after the audit
+/// (section 17.7), in three contexts: cash at 100bb, MTT at 30bb (jam depth)
+/// and MTT at 12bb (push/fold, where head-to-head reads are not evaluated:
+/// an empty text).
+const H2H_SD_REC_ADVICE: [(&str, [&str; 3]); 12] = [
+    ("h2h.3bet_vs_hero.high", [
+        "Cut KTo-type opens in front of him; 4-bet his 3-bets with QQ+, AK and A5s-A4s.",
+        "Jam 99+, AJ+ and KQs over his 3-bets of your opens.",
+        "",
+    ]),
+    ("h2h.fold_to_hero_3bet.high", [
+        "3-bet his opens light at 3x in position: A2s-A5s, K9s+ and 65s+.",
+        "Reshove A2s+, K9s+, 55+ and QJs over his opens.",
+        "",
+    ]),
+    ("h2h.fold_to_hero_cbet.high", [
+        "C-bet him with any two at 1/3 pot on the flop, wet boards included.",
+        "C-bet him with any two at 1/3 pot on the flop, wet boards included.",
+        "",
+    ]),
+    ("h2h.steal_vs_hero.high", [
+        "3-bet his steals from your blinds with 77+, A8s+, KTs+, ATo+ and A5s.",
+        "From your blinds, reshove 44+, A5+, K9s+ and QJs over his steals.",
+        "",
+    ]),
+    ("h2h.defend_vs_hero_steal.high", [
+        "Steal into him only with pairs, suited aces and broadways; value bet top pair.",
+        "Steal into him only with pairs, suited aces and broadways; value bet top pair.",
+        "",
+    ]),
+    ("sd.tell.big_is_value", [
+        "Fold weak top pair and worse to his overbet-sized bets; call with two pair or better.",
+        "Fold weak top pair and worse to his overbet-sized bets; call with two pair or better.",
+        "Fold weak top pair and worse to his overbet-sized bets; call with two pair or better.",
+    ]),
+    ("sd.tell.big_is_bluff", [
+        "Call his all-in bets down with second pair or better; never fold top pair.",
+        "Call his all-in bets down with second pair or better; never fold top pair.",
+        "Call his all-in bets down with second pair or better; never fold top pair.",
+    ]),
+    ("sd.tell.small_is_value", [
+        "Fold second pair or worse to his small bets; raise two pair or better.",
+        "Fold second pair or worse to his small bets; raise two pair or better.",
+        "Fold second pair or worse to his small bets; raise two pair or better.",
+    ]),
+    ("sd.shows_bluffs", [
+        "Call his river bets with any pair; check top pair to him to let him bluff.",
+        "Call his river bets with any pair; check top pair to him to let him bluff.",
+        "Call his river bets with any pair; check top pair to him to let him bluff.",
+    ]),
+    ("rec.tilt", [
+        "While this lasts, value bet top pair three streets; call his bets with second pair.",
+        "While this lasts, value bet top pair three streets; call his bets with second pair.",
+        "While this lasts, call his shoves with 22+, A7+ and KTs+; shove for value only.",
+    ]),
+    ("rec.looser", [
+        "While this lasts, 3-bet his opens with 99+, AJ+ and KQ; value bet top pair thin.",
+        "While this lasts, reshove 88+, AT+ and KQ over his opens.",
+        "While this lasts, call his shoves with 33+, A8+ and KTs+.",
+    ]),
+    ("rec.tighter", [
+        "While this lasts, fold AJo and KQo to his opens; steal his blinds with any suited.",
+        "While this lasts, fold AJo and KQo to his opens; steal his blinds with any suited.",
+        "While this lasts, call his shoves only with 88+ and AJ+; shove any ace into him.",
+    ]),
+];
+
+fn h2h_sd_rec_contexts() -> [(FormatKey, EngineContext); 3] {
+    [
+        (FormatKey::Cash, context(FormatKey::Cash, 100.0)),
+        (FormatKey::Mtt, context(FormatKey::Mtt, 30.0)),
+        (FormatKey::Mtt, context(FormatKey::Mtt, 12.0)),
+    ]
+}
+
+#[test]
+fn h2h_showdown_and_recency_advice_texts_are_pinned() {
+    let audited: Vec<&str> = RULES
+        .iter()
+        .filter(|r| matches!(r.family, Family::H2h | Family::Showdown | Family::Recency))
+        .map(|r| r.id)
+        .collect();
+    assert_eq!(audited, H2H_SD_REC_ADVICE.map(|(id, _)| id).to_vec(), "every audited rule is pinned");
+    for (id, texts) in H2H_SD_REC_ADVICE {
+        let mut variants_seen = std::collections::BTreeSet::new();
+        for ((format, ctx), want) in h2h_sd_rec_contexts().into_iter().zip(texts) {
+            let mut v = h2h_sd_rec_firing(format, id);
+            v.context = Some(ctx.clone());
+            let reads = evaluate_rules(&v);
+            match read(&reads, id) {
+                Some(r) => {
+                    assert_eq!(r.advice, want, "{id} at {:.0}bb {format:?}", ctx.effective_stack_bb.unwrap());
+                    variants_seen.insert(r.advice.clone());
+                }
+                None => assert_eq!(want, "", "{id} must fire at {:.0}bb {format:?}", ctx.effective_stack_bb.unwrap()),
+            }
+        }
+        // Every variant text is reachable from one of the three contexts.
+        let def = rule_def(id);
+        for (_, text) in def.variants {
+            let rendered = text.replace("{bucket}", if id == "sd.tell.big_is_bluff" { "all-in" } else { "overbet-sized" });
+            assert!(variants_seen.contains(&rendered), "{id} variant not reached: {text}");
+        }
+    }
+}
+
+#[test]
+fn recent_form_advice_is_scoped_to_the_window() {
+    // Section 17.7: a recent-form read holds while the window lasts, so
+    // every text says so and names what to change (hand classes or sizes).
+    for def in RULES.iter().filter(|r| r.family == Family::Recency) {
+        for text in std::iter::once(def.advice).chain(def.variants.iter().map(|(_, t)| *t)) {
+            assert!(text.starts_with("While this lasts, "), "{} is not scoped to the window: {text}", def.id);
+            assert!(!concrete_levers(text).is_empty(), "{} names no lever: {text}", def.id);
+        }
+    }
+    // The old texts named no lever ("wider", "more credit").
+    for old in [
+        "Value bet wider and give his aggression less credit while this lasts.",
+        "Isolate and value bet him wider while this lasts.",
+        "Give his recent entries more credit.",
+    ] {
+        assert!(concrete_levers(old).is_empty(), "{old}: {:?}", concrete_levers(old));
+    }
+}
+
+/// Head-to-head reads and the general read on another stat that points the
+/// opposite way (section 17.7). The head-to-head read always stays.
+const H2H_PAIRS: [(&str, &str); 5] = [
+    ("h2h.3bet_vs_hero.high", "pf.3bet.low"),
+    ("h2h.fold_to_hero_3bet.high", "pf.fold_to_3bet.low"),
+    ("h2h.fold_to_hero_cbet.high", "post.fold_cbet_flop.low"),
+    ("h2h.steal_vs_hero.high", "pf.steal.low"),
+    ("h2h.defend_vs_hero_steal.high", "pf.fold_to_steal.high"),
+];
+
+fn general_firing(id: &str) -> Vec<(StatKey, u32, u32)> {
+    if id.starts_with("post.") { postflop_firing(id) } else { preflop_firing(id) }
+}
+
+#[test]
+fn opposite_h2h_reads_keep_the_head_to_head_read() {
+    // "Fold JJ and AQ to his 3-bets" next to "4-bet his 3-bets with QQ+"
+    // when he 3-bets the hero's opens far more than anyone else's; "C-bet
+    // flops at 2/3 pot with top pair+ … check back overcards" next to
+    // "C-bet him with any two at 1/3 pot" when he folds to the hero's
+    // c-bets. The head-to-head stat is already shrunk toward his overall
+    // value, so when it still fires it is the evidence about the hero's own
+    // spots and it stays, whatever the scores.
+    assert_eq!(H2H_OPPOSITES, H2H_PAIRS);
+    let mut general_scored_higher = 0;
+    for (h2h_id, general) in H2H_PAIRS {
+        let alone_h2h = evaluate_rules(&h2h_sd_rec_firing(FormatKey::Cash, h2h_id));
+        let alone_general = evaluate_rules(&cash(&general_firing(general)));
+        let sh = read(&alone_h2h, h2h_id).unwrap_or_else(|| panic!("{h2h_id} fires alone")).score;
+        let sg = read(&alone_general, general).unwrap_or_else(|| panic!("{general} fires alone")).score;
+        if sg > sh {
+            general_scored_higher += 1;
+        }
+        let mut both = h2h_sd_rec_firing(FormatKey::Cash, h2h_id);
+        for (key, hits, n) in general_firing(general) {
+            both.stats.insert(key, stat(FormatKey::Cash, key, hits, n));
+        }
+        let reads = evaluate_rules(&both);
+        assert!(read(&reads, h2h_id).is_some(), "{h2h_id} stays: {:?}", ids(&reads));
+        assert!(read(&reads, general).is_none(), "{general} fired next to {h2h_id}: {:?}", ids(&reads));
+    }
+    assert!(general_scored_higher > 0, "at least one pair proves the head-to-head read wins on evidence, not score");
+}
+
+/// Showdown reads and the frequency read that points the opposite way
+/// (section 17.7). The showdown read always stays.
+const SHOWDOWN_PAIRS: [(&str, &str); 2] = [
+    ("sd.shows_bluffs", "post.river_bet.low"),
+    ("sd.shows_bluffs", "post.cbet_river.low"),
+];
+
+#[test]
+fn shown_river_bluffs_overrule_river_frequency_reads() {
+    // "Fold one pair to his river bets" infers strength from a low betting
+    // frequency, which only proves a narrow range (section 8.1); 3 bluffs in
+    // 6 river bets that reached showdown are counts of what he bet. The
+    // shown bluffs win, whatever the scores.
+    assert_eq!(SHOWDOWN_OPPOSITES, SHOWDOWN_PAIRS);
+    for (sd, frequency) in SHOWDOWN_PAIRS {
+        let mut v = h2h_sd_rec_firing(FormatKey::Cash, sd);
+        for (key, hits, n) in postflop_firing(frequency) {
+            v.stats.insert(key, stat(FormatKey::Cash, key, hits, n));
+        }
+        let alone = evaluate_rules(&cash(&postflop_firing(frequency)));
+        assert!(read(&alone, frequency).is_some(), "{frequency} fires alone");
+        let reads = evaluate_rules(&v);
+        assert!(read(&reads, sd).is_some(), "{sd} stays: {:?}", ids(&reads));
+        assert!(read(&reads, frequency).is_none(), "{frequency} fired next to {sd}: {:?}", ids(&reads));
+    }
+}
+
+#[test]
+fn head_to_head_and_general_reads_on_one_villain_fit_together() {
+    // The same leak against everyone and, more strongly, against the hero:
+    // both reads fire, and the head-to-head note adds a lever instead of
+    // repeating the general one (17.7), at 100bb and at jam depth.
+    for (h2h_id, general) in [
+        ("h2h.3bet_vs_hero.high", "pf.3bet.high_ip"),
+        ("h2h.fold_to_hero_3bet.high", "pf.fold_to_3bet.high"),
+        ("h2h.fold_to_hero_cbet.high", "post.fold_cbet_flop.high"),
+        ("h2h.steal_vs_hero.high", "pf.steal.high"),
+        ("h2h.defend_vs_hero_steal.high", "pf.fold_to_steal.low"),
+    ] {
+        for eff in [100.0, 30.0] {
+            let mut v = h2h_sd_rec_firing(FormatKey::Cash, h2h_id);
+            for (key, hits, n) in general_firing(general) {
+                v.stats.insert(key, stat(FormatKey::Cash, key, hits, n));
+            }
+            v.context = Some(context(FormatKey::Cash, eff));
+            let reads = evaluate_rules(&v);
+            let a = &read(&reads, h2h_id).unwrap_or_else(|| panic!("{h2h_id} fires at {eff}bb")).advice;
+            let b = &read(&reads, general).unwrap_or_else(|| panic!("{general} fires at {eff}bb")).advice;
+            assert_ne!(a, b, "{h2h_id} repeats {general} at {eff}bb");
+        }
+    }
+    // A villain who folds to the hero's 3-bets and 4-bets light: "fold your
+    // light 3-bets" to his 4-bet fits the head-to-head plan (3-bet light,
+    // sized small) instead of contradicting it.
+    let mut v = h2h_sd_rec_firing(FormatKey::Cash, "h2h.fold_to_hero_3bet.high");
+    v.stats.insert(FourBet, stat(FormatKey::Cash, FourBet, 15, 40));
+    let reads = evaluate_rules(&v);
+    assert!(read(&reads, "pf.4bet.high").is_some() && read(&reads, "h2h.fold_to_hero_3bet.high").is_some());
+    assert!(!read(&reads, "h2h.fold_to_hero_3bet.high").unwrap().advice.contains("4-bet"));
+}
+
+#[test]
+fn showdown_tells_keep_their_counts_and_size_scope() {
+    // Section 17.7: a showdown read is the only one allowed to speak about
+    // value or bluffs, so its observation keeps citing the counts, and every
+    // tell advice is scoped to the size (or street) the counts are about.
+    for (id, bucket) in [
+        ("sd.tell.big_is_value", "overbet-sized"),
+        ("sd.tell.big_is_bluff", "all-in"),
+        ("sd.tell.small_is_value", "small"),
+        ("sd.shows_bluffs", "river"),
+    ] {
+        let reads = evaluate_rules(&h2h_sd_rec_firing(FormatKey::Cash, id));
+        let r = read(&reads, id).unwrap_or_else(|| panic!("{id} fires"));
+        assert!(r.observation.contains(" of "), "{id} observation cites counts: {}", r.observation);
+        assert!(r.observation.contains(bucket) && r.advice.contains(bucket), "{id} names {bucket}: {} / {}", r.observation, r.advice);
+        let def = rule_def(id);
+        if id.starts_with("sd.tell.") {
+            assert!(def.advice.contains("{bucket}"), "{id} advice is scoped to the bucket");
+        }
+        assert!(!concrete_levers(def.advice).is_empty(), "{id} names a hand class: {}", def.advice);
+    }
+}
+
+#[test]
+fn rule_quality_matrix_lists_every_rule_once() {
+    // Section 17.4 has one row per rule id in RULES, plus the effective-stack
+    // derivation behind the stack tag. docs/ is local-only, so a checkout
+    // without it skips (check-engine-spec checks the same).
+    let spec_path = concat!(env!("CARGO_MANIFEST_DIR"), "/../docs/specs/opponent-engine.md");
+    let Ok(spec) = std::fs::read_to_string(spec_path) else {
+        eprintln!("skipping the matrix check: {spec_path} is not present");
+        return;
+    };
+    let start = spec.find("### 17.4").expect("section 17.4");
+    let end = start + spec[start..].find("\n### 17.5").expect("section 17.5 after 17.4");
+    let rows: Vec<&str> = spec[start..end]
+        .lines()
+        .filter_map(|l| l.strip_prefix("| `").and_then(|l| l.split('`').next()))
+        .collect();
+    for def in RULES {
+        let count = rows.iter().filter(|r| **r == def.id).count();
+        assert_eq!(count, 1, "{} has {count} rows in the 17.4 matrix", def.id);
+    }
+    for row in &rows {
+        assert!(RULES.iter().any(|r| r.id == *row) || *row == "ctx.effective_stack", "17.4 row {row} is no rule");
+    }
 }
 
 // ------------------------------------------- read sample (section 13, chip)
@@ -2087,9 +2392,35 @@ fn every_advice_fits_the_hover_card() {
 }
 
 /// Families whose advice must name a concrete lever (section 17.1). Each
-/// audit task adds the family it rewrites, until the list holds them all.
-const LEVER_FAMILIES: [Family; 6] =
-    [Family::Preflop, Family::Stack, Family::Context, Family::Stage, Family::Bounty, Family::Postflop];
+/// audit task added the family it rewrote; since the head-to-head, showdown
+/// and recency pass (17.7) the list holds every family.
+const LEVER_FAMILIES: [Family; 9] = [
+    Family::Preflop,
+    Family::Stack,
+    Family::Context,
+    Family::Stage,
+    Family::Bounty,
+    Family::Postflop,
+    Family::H2h,
+    Family::Showdown,
+    Family::Recency,
+];
+
+/// Position of a family in its enum. The match is exhaustive, so a new
+/// `Family` variant does not compile until the lever guard is extended.
+fn family_index(family: Family) -> usize {
+    match family {
+        Family::Preflop => 0,
+        Family::Stack => 1,
+        Family::Context => 2,
+        Family::Stage => 3,
+        Family::Bounty => 4,
+        Family::Postflop => 5,
+        Family::H2h => 6,
+        Family::Showdown => 7,
+        Family::Recency => 8,
+    }
+}
 
 /// The concrete levers an advice names: hand classes (`A2s-A5s`, `QQ+`,
 /// `Kx`, suited aces, broadways, top pair), sizing (`3x`, min-raise, jam,
@@ -2144,6 +2475,24 @@ fn every_advice_names_a_concrete_lever() {
     ] {
         assert!(concrete_levers(generic).is_empty(), "{generic}: {:?}", concrete_levers(generic));
     }
+    // The head-to-head, showdown and recency pass's old texts (section 17.7)
+    // name none either; the showdown texts are checked as written, so the
+    // `{bucket}` placeholder ("overbet-sized") never counts as a size.
+    for generic in [
+        "4-bet him lighter and open tighter in front of him.",
+        "3-bet his opens wider.",
+        "C-bet him at high frequency.",
+        "3-bet his steals wider when you are in the blinds.",
+        "Steal tighter into him and value bet more postflop.",
+        "Fold more bluff-catchers to his {bucket} bets.",
+        "Call his {bucket} bets down wider.",
+        "Call his river bets wider.",
+        "Value bet wider and give his aggression less credit while this lasts.",
+        "Isolate and value bet him wider while this lasts.",
+        "Give his recent entries more credit.",
+    ] {
+        assert!(concrete_levers(generic).is_empty(), "{generic}: {:?}", concrete_levers(generic));
+    }
 
     let mut checked = 0;
     // The seat suffix is appended to other advice, never shown alone.
@@ -2155,9 +2504,15 @@ fn every_advice_names_a_concrete_lever() {
     }
     let covered = RULES.iter().filter(|r| LEVER_FAMILIES.contains(&r.family) && r.id != "ctx.seat_relation").count();
     assert!(checked >= covered);
-    for family in [Family::Stack, Family::Context, Family::Stage, Family::Bounty, Family::Postflop] {
+    // The covered list is every family, each once, and every family has
+    // rules, so the guard covers every rule but the seat suffix.
+    let mut indices: Vec<usize> = LEVER_FAMILIES.iter().map(|f| family_index(*f)).collect();
+    indices.sort_unstable();
+    assert_eq!(indices, (0..9).collect::<Vec<_>>(), "LEVER_FAMILIES must list every Family exactly once");
+    for family in LEVER_FAMILIES {
         assert!(RULES.iter().any(|r| r.family == family && r.id != "ctx.seat_relation"), "{family:?} has rules");
     }
+    assert_eq!(covered, RULES.len() - 1, "every rule but the seat suffix is covered");
 }
 
 #[test]

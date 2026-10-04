@@ -16,11 +16,12 @@
 //! - 510: Vic checks down and mucks unseen; Bob shows and wins.
 
 use velora_poker_lib::engine::{
-    board_plays, evaluate, extract_showdowns, hole_strength, load_player_hands,
+    board_plays, evaluate, evaluate_rules, extract_showdowns, hole_strength, load_player_hands,
     load_showdown_boards, parse_board, parse_cards, parse_total_pot, player_showdowns, replay_pot,
     showdown_record, sizing_tally, sizing_tells, Card, Category, HoleStrength, ShowdownRecord,
     ShowdownResult, SizeBucket, ValueClass, SIZING_TELL_MIN_SAMPLE,
 };
+use velora_poker_lib::engine::{player_rule_input, stat_spec, FormatKey, RuleInput, ShowdownTally, SizingTell};
 use velora_poker_lib::parser::{ActionType, Street};
 use velora_poker_lib::{db, import};
 
@@ -359,4 +360,47 @@ fn below_minimum_sizing_sample_emits_nothing() {
     assert!(sizing_tally(&records(&conn, "Bob")).is_empty());
     // Two of Otto's three bluffs are not enough either.
     assert!(sizing_tells(&records(&conn, "Otto")[..2]).is_empty());
+}
+
+// --- M04, M05: tell rules on extracted showdowns (audit 2026-10, 17.7) -----
+
+/// The rule input of a fixture player through the engine's own path, with
+/// his showdown tallies scaled by `times`: the same lines seen that many
+/// times, as a longer session would give.
+fn tell_input(conn: &rusqlite::Connection, name: &str, times: u32) -> RuleInput {
+    let prior = |format: FormatKey, key| stat_spec(key).builtin_prior(format);
+    let mut input = player_rule_input(conn, player_id(conn, name), None, &prior).expect("rule input");
+    for tell in &mut input.sizing {
+        *tell = SizingTell { bucket: tell.bucket, value: tell.value * times, bluff: tell.bluff * times, neither: tell.neither * times, n: tell.n * times };
+    }
+    let river = input.river_showdowns;
+    input.river_showdowns = ShowdownTally { value: river.value * times, bluff: river.bluff * times, neither: river.neither * times, n: river.n * times };
+    input
+}
+
+#[test]
+fn tell_rules_on_extracted_showdowns_cite_counts_and_size() {
+    let conn = setup();
+    // Otto's three overbet river bluffs and Vic's three small river value
+    // bets are below the rule sample (four tells, six river showdowns).
+    for name in ["Otto", "Vic"] {
+        let reads = evaluate_rules(&tell_input(&conn, name, 1));
+        assert!(reads.iter().all(|r| !r.rule_id.starts_with("sd.")), "{name}: {:?}", reads.iter().map(|r| &r.rule_id).collect::<Vec<_>>());
+    }
+    // Twice the sample: the tells fire, cite the extracted counts and name
+    // the hand classes against that size.
+    let reads = evaluate_rules(&tell_input(&conn, "Otto", 2));
+    let find = |id: &str| reads.iter().find(|r| r.rule_id == id).unwrap_or_else(|| panic!("{id} fires"));
+    let bluff = find("sd.tell.big_is_bluff");
+    assert_eq!(bluff.observation, "Was bluffing in 6 of 6 shown overbet-sized bets.");
+    assert_eq!(bluff.advice, "Call his overbet-sized bets down with second pair or better; never fold top pair.");
+    let river = find("sd.shows_bluffs");
+    assert_eq!(river.observation, "Was bluffing in 6 of 6 river bets that reached showdown.");
+    assert_eq!(river.advice, "Call his river bets with any pair; check top pair to him to let him bluff.");
+
+    let reads = evaluate_rules(&tell_input(&conn, "Vic", 2));
+    let small = reads.iter().find(|r| r.rule_id == "sd.tell.small_is_value").expect("small value tell fires");
+    assert_eq!(small.observation, "Showed value in 6 of 6 small bets.");
+    assert_eq!(small.advice, "Fold second pair or worse to his small bets; raise two pair or better.");
+    assert_eq!((small.evidence[0].hits, small.evidence[0].opportunities), (6, 6));
 }

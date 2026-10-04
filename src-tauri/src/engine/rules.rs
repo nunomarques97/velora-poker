@@ -499,46 +499,74 @@ pub const RULES: &[RuleDef] = &[
     rule("post.wwsf_high", "F12", F::Postflop, T, Some("WWS"),
         "Wins {raw}% of pots after seeing the flop.",
         "Bluff him less on turns and rivers; call his flop bets with any pair."),
-    // ---- head-to-head (H01–H03)
-    rule("h2h.3bet_vs_hero.high", "H01", F::H2h, X, Some("H2H"),
-        "3-bets your opens {raw}% ({hits}/{n}).",
-        "4-bet him lighter and open tighter in front of him."),
-    rule("h2h.fold_to_hero_3bet.high", "H02", F::H2h, X, Some("F3B"),
-        "Folds to your 3-bets {raw}% ({hits}/{n}).",
-        "3-bet his opens wider."),
+    // ---- head-to-head (H01–H03). Audit 2026-10 (section 17.7): each
+    // note names the hand classes or size for the hero's own spots against
+    // him, adds a lever to the general read on the same leak, and reshoves
+    // at 15–40bb.
+    with(
+        rule("h2h.3bet_vs_hero.high", "H01", F::H2h, X, Some("H2H"),
+            "3-bets your opens {raw}% ({hits}/{n}).",
+            "Cut KTo-type opens in front of him; 4-bet his 3-bets with QQ+, AK and A5s-A4s."),
+        &[(Variant::JamDepth, "Jam 99+, AJ+ and KQs over his 3-bets of your opens.")],
+    ),
+    with(
+        rule("h2h.fold_to_hero_3bet.high", "H02", F::H2h, X, Some("F3B"),
+            "Folds to your 3-bets {raw}% ({hits}/{n}).",
+            "3-bet his opens light at 3x in position: A2s-A5s, K9s+ and 65s+."),
+        &[(Variant::JamDepth, "Reshove A2s+, K9s+, 55+ and QJs over his opens.")],
+    ),
     rule("h2h.fold_to_hero_cbet.high", "H02", F::H2h, X, Some("FCB"),
         "Folds to your flop c-bets {raw}% ({hits}/{n}).",
-        "C-bet him at high frequency."),
-    rule("h2h.steal_vs_hero.high", "H03", F::H2h, X, Some("TGT"),
-        "Steals into your blinds {raw}% ({hits}/{n}).",
-        "3-bet his steals wider when you are in the blinds."),
+        "C-bet him with any two at 1/3 pot on the flop, wet boards included."),
+    with(
+        rule("h2h.steal_vs_hero.high", "H03", F::H2h, X, Some("TGT"),
+            "Steals into your blinds {raw}% ({hits}/{n}).",
+            "3-bet his steals from your blinds with 77+, A8s+, KTs+, ATo+ and A5s."),
+        &[(Variant::JamDepth, "From your blinds, reshove 44+, A5+, K9s+ and QJs over his steals.")],
+    ),
     rule("h2h.defend_vs_hero_steal.high", "H03", F::H2h, T, Some("DEF"),
         "Defends against your steals {raw}% ({hits}/{n}).",
-        "Steal tighter into him and value bet more postflop."),
+        "Steal into him only with pairs, suited aces and broadways; value bet top pair."),
     // ---- showdown-backed (M04, M05): the only reads that may speak about
-    // value and bluffs, always with their counts.
+    // value and bluffs, always with their counts. Audit 2026-10: the advice
+    // names the hand classes that fold, call or raise against the size (or
+    // street) the counts are about.
     rule("sd.tell.big_is_value", "M04", F::Showdown, X, Some("SDV"),
         "Showed value in {valueCount} of {n} {bucket} bets.",
-        "Fold more bluff-catchers to his {bucket} bets."),
+        "Fold weak top pair and worse to his {bucket} bets; call with two pair or better."),
     rule("sd.tell.big_is_bluff", "M04", F::Showdown, X, Some("SDB"),
         "Was bluffing in {bluffCount} of {n} shown {bucket} bets.",
-        "Call his {bucket} bets down wider."),
+        "Call his {bucket} bets down with second pair or better; never fold top pair."),
     rule("sd.tell.small_is_value", "M04", F::Showdown, X, Some("SDV"),
         "Showed value in {valueCount} of {n} {bucket} bets.",
-        "Raise or fold against his small bets; stop paying them off light."),
+        "Fold second pair or worse to his {bucket} bets; raise two pair or better."),
     rule("sd.shows_bluffs", "M05", F::Showdown, X, Some("SVB"),
         "Was bluffing in {bluffCount} of {n} river bets that reached showdown.",
-        "Call his river bets wider."),
-    // ---- recent form (R02)
-    rule("rec.tilt", "R02", F::Recency, X, Some("TILT"),
-        "Played {x} of his last {n} hands after a big lost pot (usual {p0}%).",
-        "Value bet wider and give his aggression less credit while this lasts."),
-    rule("rec.looser", "R02", F::Recency, T, Some("LSE"),
-        "Played {x} of his last {n} hands (usual {p0}%).",
-        "Isolate and value bet him wider while this lasts."),
-    rule("rec.tighter", "R02", F::Recency, T, Some("NIT"),
-        "Played only {x} of his last {n} hands (usual {p0}%).",
-        "Give his recent entries more credit."),
+        "Call his river bets with any pair; check top pair to him to let him bluff."),
+    // ---- recent form (R02). Audit 2026-10: what to change while the
+    // window lasts, by hand class; at push/fold the change is in shove and
+    // call ranges, at 15–40bb a 3-bet is a reshove.
+    with(
+        rule("rec.tilt", "R02", F::Recency, X, Some("TILT"),
+            "Played {x} of his last {n} hands after a big lost pot (usual {p0}%).",
+            "While this lasts, value bet top pair three streets; call his bets with second pair."),
+        &[(Variant::PushFold, "While this lasts, call his shoves with 22+, A7+ and KTs+; shove for value only.")],
+    ),
+    with(
+        rule("rec.looser", "R02", F::Recency, T, Some("LSE"),
+            "Played {x} of his last {n} hands (usual {p0}%).",
+            "While this lasts, 3-bet his opens with 99+, AJ+ and KQ; value bet top pair thin."),
+        &[
+            (Variant::PushFold, "While this lasts, call his shoves with 33+, A8+ and KTs+."),
+            (Variant::JamDepth, "While this lasts, reshove 88+, AT+ and KQ over his opens."),
+        ],
+    ),
+    with(
+        rule("rec.tighter", "R02", F::Recency, T, Some("NIT"),
+            "Played only {x} of his last {n} hands (usual {p0}%).",
+            "While this lasts, fold AJo and KQo to his opens; steal his blinds with any suited."),
+        &[(Variant::PushFold, "While this lasts, call his shoves only with 88+ and AJ+; shove any ace into him.")],
+    ),
 ];
 
 /// The definition of a rule id.
@@ -1576,9 +1604,35 @@ pub const POSTFLOP_OPPOSITES: [(&str, &str); 5] = [
     ("post.station", "post.river_raise.high"),
 ];
 
+/// A head-to-head read and a general read on another stat whose advice
+/// points the opposite way (audit 2026-10, section 17.7), e.g. "4-bet his
+/// 3-bets with QQ+" against "Fold JJ and AQ to his 3-bets" on a villain who
+/// 3-bets the hero far more than anyone else. The head-to-head stat is
+/// already shrunk toward his overall value (section 4.1), so when it still
+/// fires it is the evidence about the hero's own spots: the first read of
+/// each pair always stays.
+pub const H2H_OPPOSITES: [(&str, &str); 5] = [
+    ("h2h.3bet_vs_hero.high", "pf.3bet.low"),
+    ("h2h.fold_to_hero_3bet.high", "pf.fold_to_3bet.low"),
+    ("h2h.fold_to_hero_cbet.high", "post.fold_cbet_flop.low"),
+    ("h2h.steal_vs_hero.high", "pf.steal.low"),
+    ("h2h.defend_vs_hero_steal.high", "pf.fold_to_steal.high"),
+];
+
+/// Shown river bluffs against a river read inferred from frequency (audit
+/// 2026-10, section 17.7): a low betting frequency only proves a narrow
+/// range (section 8.1), while the showdown read counts what he bet. The
+/// first read of each pair always stays.
+pub const SHOWDOWN_OPPOSITES: [(&str, &str); 2] = [
+    ("sd.shows_bluffs", "post.river_bet.low"),
+    ("sd.shows_bluffs", "post.cbet_river.low"),
+];
+
 /// Removes the weaker read of every [`PREFLOP_OPPOSITES`] and
 /// [`POSTFLOP_OPPOSITES`] pair that fired together: the lower score goes,
-/// then the lower deviation; a tie keeps the pair's first read.
+/// then the lower deviation; a tie keeps the pair's first read. Of every
+/// [`H2H_OPPOSITES`] and [`SHOWDOWN_OPPOSITES`] pair, the general read
+/// goes, whatever the scores.
 fn drop_opposites(reads: &mut Vec<EngineRuleResult>) {
     let at = |reads: &[EngineRuleResult], id: &str| reads.iter().position(|r| r.rule_id == id);
     for (a, b) in PREFLOP_OPPOSITES.into_iter().chain(POSTFLOP_OPPOSITES) {
@@ -1586,6 +1640,11 @@ fn drop_opposites(reads: &mut Vec<EngineRuleResult>) {
         let (x, y) = (&reads[i], &reads[j]);
         let order = x.score.total_cmp(&y.score).then(x.deviation.total_cmp(&y.deviation));
         reads.remove(if order.is_lt() { i } else { j });
+    }
+    for (specific, general) in H2H_OPPOSITES.into_iter().chain(SHOWDOWN_OPPOSITES) {
+        if let (Some(_), Some(j)) = (at(reads, specific), at(reads, general)) {
+            reads.remove(j);
+        }
     }
 }
 
