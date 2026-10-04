@@ -21,7 +21,7 @@
                            build): chip tags, hover card, drawer reads
         action=drag|cancel|click|external   optional scripted interaction
                hover|hoverall|leave|nativeleave|esc|focus|hoverdrag|hoverclick|
-               refresh|drop|outoforder          hover-card actions (engine=1)
+               refresh|drop|outoforder|burst    hover-card actions (engine=1)
         seat=<key>         seat key the action targets (default 2)
         dx=<px>&dy=<px>    drag distance (default 40, 14)
         scroll=end         with action=click: scroll the drawer to its end
@@ -343,6 +343,7 @@
           saves: [],
           hotZones: [],
           playerDelays: [], // ms, one per coming get_active_table_players call
+          playerCalls: 0, // get_active_table_players calls so far
           listeners: new Map(), // event -> Map(eventId -> callbackId)
           callbacks: new Map(),
           emit(event, payload) {
@@ -382,6 +383,7 @@
                 // The answer is what the table held when asked; `playerDelays`
                 // holds it back, so an older answer can arrive after a newer one.
                 const snapshot = structuredClone(players);
+                qa.playerCalls += 1;
                 const delay = qa.playerDelays.shift() ?? 0;
                 if (delay) await new Promise((r) => setTimeout(r, delay));
                 return snapshot;
@@ -721,7 +723,7 @@
           const auto = document.querySelector("aside")?.textContent.includes("Auto") ? 1 : 0;
           return `before=${before} panel=${panel} after=${after} enterWithDrawer=${cardOpen()} autoLabel=${auto}`;
         }
-        if (action === "refresh" || action === "drop" || action === "outoforder") {
+        if (action === "refresh" || action === "drop" || action === "outoforder" || action === "burst") {
           enter(btn);
           await settle();
           const before = cardOpen();
@@ -740,13 +742,31 @@
             await sleep(300);
             return `before=${before} after=${cardOpen()}`;
           }
+          if (action === "burst") {
+            // One hands-imported per hand at every table: events arriving while a
+            // refresh is in flight collapse into one trailing refresh that reads
+            // the newest state, instead of one queued refresh per event.
+            qa.playerDelays.push(300, 0);
+            const calls = qa.playerCalls;
+            qa.emit("hands-imported", 1);
+            await sleep(20);
+            p.engine.topReads[0] = { ...p.engine.topReads[0], observation: "Newest read after the burst." };
+            for (let i = 0; i < 10; i++) qa.emit("hands-imported", 1);
+            await sleep(100);
+            const inFlight = qa.playerCalls - calls;
+            await sleep(700);
+            const updated = cardText().includes("Newest read after the burst.") ? 1 : 0;
+            return `before=${before} inFlight=${inFlight} total=${qa.playerCalls - calls} updated=${updated} open=${cardOpen()}`;
+          }
           // Two refreshes; the older one's answer arrives last and must be ignored.
+          // hands-imported runs one refresh at a time, so the second one comes
+          // from another trigger (a saved seat position) while the first is in flight.
           qa.playerDelays.push(500, 0);
           p.engine.topReads[0] = { ...p.engine.topReads[0], observation: "Stale read from the older refresh." };
           qa.emit("hands-imported", 1);
           await sleep(20);
           p.engine.topReads[0] = { ...p.engine.topReads[0], observation: "Newest read from the latest refresh." };
-          qa.emit("hands-imported", 1);
+          qa.emit("seat-templates-changed", null);
           await sleep(200);
           const mid = cardText().includes("Newest read") ? "new" : cardText().includes("Stale read") ? "stale" : "none";
           await sleep(600);

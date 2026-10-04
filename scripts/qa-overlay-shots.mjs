@@ -262,6 +262,9 @@ async function engineChecks(base) {
     r = await act("outoforder");
     check(r.before === "1" && r.mid === "new" && r.end === "new" && r.open === "1",
       `${tag} an older refresh answering last is ignored`, JSON.stringify(r));
+    r = await act("burst");
+    check(r.before === "1" && r.inFlight === "1" && r.total === "2" && r.updated === "1" && r.open === "1",
+      `${tag} a burst of new hands during a refresh collapses into one more refresh with the newest read`, JSON.stringify(r));
   }
   await shot(base, SIZES[1], { max: "6", engine: "1", action: "click", seat: String(DRAG.seat) }, "hud-engine-drawer-6max-800x570.png");
   await shot(base, SIZES[1], { max: "6", engine: "1", action: "click", seat: String(DRAG.seat), scroll: "end" },

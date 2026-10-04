@@ -1,4 +1,4 @@
-// Minimal typings for the Node built-ins the layout tests use, so the suite
+// Minimal typings for the Node built-ins (and timers) the layout tests use, so the suite
 // type-checks without adding @types/node. Only what the tests call.
 
 declare module "node:test" {
@@ -18,3 +18,7 @@ declare module "node:assert/strict" {
   const assert: Assert;
   export default assert;
 }
+
+// Timers (singleFlight's stale-run timeout); the app build gets them from DOM.
+declare function setTimeout(handler: () => void, timeout?: number): number;
+declare function clearTimeout(id: number | undefined): void;

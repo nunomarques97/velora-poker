@@ -174,9 +174,11 @@ function TableOverlay({ tableId }: { tableId: number }) {
   const showPillRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
 
+  // Returns its promise so a burst of hands-imported events waits for it
+  // (`onHandsImported` runs one refresh at a time).
   const refresh = useCallback(() => {
     const seq = ++refreshSeq.current;
-    Promise.all([
+    return Promise.all([
       getActiveTablePlayers(tableId),
       getActiveHudProfile(),
       getActiveTableMaxPlayers(tableId),

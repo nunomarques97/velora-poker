@@ -30,6 +30,16 @@
 //   --shot-every <n>    screenshot round every n hands written (default 50)
 //   --launch-timeout <s> wait for the app's main window (default 900)
 //   --keep-main         leave the app's main window up (default: minimized)
+//   --observe           no mouse, keyboard or screenshots: the session runs and
+//                       records the windows only (also on a locked session,
+//                       where nothing on screen can be checked)
+//   --inspect <port>    also open the app's WebView2 DevTools port on loopback
+//                       (its own temporary environment only) and, every round,
+//                       read each overlay's chips from its DOM, render each
+//                       table with its HUD on top (PrintWindow + the page's
+//                       own capture, no screen involved), hover a chip, open
+//                       a drawer once, show the side panel and search it.
+//                       Works on a locked session too.
 
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -45,6 +55,7 @@ import {
   e2ePaths,
   ROOT_MARKER,
 } from "./lib/e2e-guard.mjs";
+import { CdpPage, inspectArguments, listPages, OVERLAY_STATE, PANEL_STATE, pageKind, panelSearch } from "./lib/cdp.mjs";
 import { assertPlainArgs, killTree, runUnderVcvars, spawnUnderVcvars, VCVARS } from "./lib/msvc.mjs";
 import { loadProfiles } from "./lib/session.mjs";
 import {
@@ -79,6 +90,8 @@ const FLAGS = {
   "shot-every": "int",
   "launch-timeout": "int",
   "keep-main": "bool",
+  observe: "bool",
+  inspect: "int",
 };
 
 export function parseArgs(argv) {
@@ -96,6 +109,8 @@ export function parseArgs(argv) {
     shotEvery: 50,
     launchTimeout: 900,
     keepMain: false,
+    observe: false,
+    inspect: 0,
   };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
@@ -123,6 +138,7 @@ export function parseArgs(argv) {
   if (o.hands < 1) throw new Error("--hands must be at least 1");
   if (o.shotEvery < 1) throw new Error("--shot-every must be at least 1");
   if (!/^[A-Za-z0-9_-]{1,40}$/.test(o.seed)) throw new Error("--seed: letters, digits, - and _ only");
+  if (o.inspect) inspectArguments(o.inspect);
   return o;
 }
 
@@ -178,22 +194,58 @@ export function buildPlan(o, { area, root, profiles = loadProfiles() }) {
       WEBVIEW2_USER_DATA_FOLDER: paths.webview,
       TEMP: paths.tmp,
       TMP: paths.tmp,
+      ...(o.inspect ? { WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: inspectArguments(o.inspect) } : {}),
     },
     slots,
     seed: { command: "cargo", args: ["run", "--example", "sim_seed", ...featureArgs, "--", paths.db, paths.handHistoryRoot] },
-    app: { command: "npm", args: ["run", "tauri", "dev", ...(featureArgs.length ? ["--", ...featureArgs] : [])] },
+    // --no-watch: an edit under src-tauri during the session must not
+    // rebuild and restart the app halfway through it.
+    app: { command: "npm", args: ["run", "tauri", "dev", "--", "--no-watch", ...featureArgs] },
     generators: generatorRuns(o, paths),
     steps: [
       `guard every path, create ${paths.root} with ${ROOT_MARKER}`,
       `seed ${paths.db} with the app's migrations (cargo run --example sim_seed, under vcvars)`,
       o.backlog > 0 ? `write a backlog of ${o.backlog} hands per cash table (simulated clock)` : null,
       `start the fake tables (${TABLE_CLASS}); open the ${o.cash} cash table(s) before their first hand`,
-      `launch the app (npm run tauri dev${featureArgs.length ? ` -- ${featureArgs.join(" ")}` : ""}) with the overridden environment; wait for "${MAIN_WINDOW_TITLE}"${o.keepMain ? "" : ", then minimize it"}`,
+      `launch the app (npm run tauri dev -- --no-watch${featureArgs.length ? ` ${featureArgs.join(" ")}` : ""}) with the overridden environment; wait for "${MAIN_WINDOW_TITLE}"${o.keepMain ? "" : ", then minimize it"}`,
       `start the generators (live clock, ${o.pace}s per hand); open an MTT window when its tournament file appears, close it when the hero's tournament ends`,
-      `every ${o.shotEvery} hands: desktop and per-table screenshots, hover a villain chip, click the felt outside HUD elements and read the click counter, list the overlay windows; once: toggle the side panel (Ctrl+Alt+P)`,
+      o.observe
+        ? `every ${o.shotEvery} hands: list the overlay windows (observe only: no mouse, keyboard or screenshots)`
+        : `every ${o.shotEvery} hands: desktop and per-table screenshots, hover a villain chip, click the felt outside HUD elements and read the click counter, list the overlay windows; once: toggle the side panel (Ctrl+Alt+P)`,
+      o.inspect
+        ? `every round also, through the app's WebView2 DevTools port ${o.inspect} (loopback): read each overlay's chips, render each table with its HUD on top (no screen involved), hover a chip; once: open and close a drawer; from the second round: show the side panel, read it and search a villain`
+        : null,
+      "after the second round, once: move a cash table and put it back, close another and reopen it, listing the overlay windows after each step",
       `write ${paths.summary}; close every fake window, the generators and the app`,
     ].filter(Boolean),
   };
+}
+
+/**
+ * Why the desktop cannot be driven, from a fake-tables probe, or null. A
+ * locked session shows the lock screen over every window and takes the mouse
+ * and keyboard: screenshots would show the lock screen and no click or
+ * shortcut would reach a table, the HUD or the side panel.
+ */
+export function desktopBlocker(probed) {
+  if (probed?.locked === true) {
+    return "the Windows session is locked: the lock screen covers every window and takes the mouse and keyboard, so screenshots show the lock screen and no click or shortcut reaches a table; unlock the session and leave the computer alone while the driver runs";
+  }
+  return null;
+}
+
+const inside = (rect, p) => p.x >= rect.x && p.x < rect.x + rect.width && p.y >= rect.y && p.y < rect.y + rect.height;
+
+/**
+ * The open tables (in opening order, so the last is on top) whose points
+ * `pointsOf(entry)` no later window covers: on a small screen the windows
+ * overlap, and a hover or click on a covered point lands on another table.
+ */
+export function exposedTables(entries, pointsOf) {
+  return entries.filter(([, e], i) => {
+    const later = entries.slice(i + 1).map(([, l]) => l.slot.rect);
+    return pointsOf(e).every((p) => !later.some((r) => inside(r, p)));
+  });
 }
 
 // ---------------------------------------------------------------- dry run
@@ -243,8 +295,16 @@ async function dryRun(o) {
     probed = probe({ env: { ...process.env, TEMP: scratch, TMP: scratch } });
     return `${probed.monitors.length} monitor(s), class ${probed.className}`;
   }));
+  checks.push(check("Fake table titles read back whole by other processes (what table_track sees)", () => {
+    if (!probed) throw new Error("no probe");
+    if (probed.titleRoundTrip !== true) throw new Error("a window title reads back truncated: table_track would track no table");
+    return "ok";
+  }));
   rmSync(scratch, { recursive: true, force: true });
 
+  // Not a failure of the dry run: the environment is ready, only the
+  // moment is wrong. A real run refuses to start until it is cleared.
+  const blocker = probed ? desktopBlocker(probed) : null;
   const area = probed ? primaryWorkArea(probed) : { x: 0, y: 0, width: 1920, height: 1040 };
   const root = o.root ? resolve(o.root) : join(tmpdir(), "velora-e2e-<timestamp>");
   const plan = buildPlan(o, { area, root });
@@ -264,6 +324,7 @@ async function dryRun(o) {
   line();
   line("Checks");
   for (const c of checks) line(`  [${c.ok ? "ok" : "FAIL"}] ${c.name}${c.detail ? `: ${c.detail}` : ""}`);
+  line(blocker ? `  [warn] Desktop can be driven now: no, ${blocker}` : "  [ok] Desktop can be driven now (session not locked)");
   line();
   line("Paths");
   for (const [k, v] of Object.entries(plan.paths)) line(`  ${k.padEnd(16)}${v}`);
@@ -300,6 +361,32 @@ async function dryRun(o) {
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 
+/** The player a chip belongs to, from its accessible name ("Name, 30 hands, ..."). */
+export const chipName = (chip) => (chip.label ?? "").split(",")[0].trim();
+
+/** Chips of players other than the hero. */
+export const villainChips = (chips, hero) => chips.filter((c) => chipName(c) && chipName(c) !== hero);
+
+/** The chip to hover in round `n`: rotating over villains with a tag, else over any villain. */
+export function pickChip(chips, n, hero) {
+  const villains = villainChips(chips, hero);
+  const tagged = villains.filter((c) => /, tag [^,]+,/.test(c.label ?? ""));
+  const pool = tagged.length ? tagged : villains;
+  return pool[(n - 1) % pool.length] ?? null;
+}
+
+/** Round log suffix for --inspect. */
+function inspected(x) {
+  if (!x) return "";
+  const chips = x.overlays.reduce((sum, o) => sum + o.chips.length, 0);
+  const parts = [`${x.overlays.length} overlay page(s), ${chips} chip(s)`];
+  if (x.hover) parts.push(`hover card ${x.hover.card ? "shown" : "NOT shown"}`);
+  if (x.drawer) parts.push(`drawer ${x.drawer.text ? "opened" : "NOT opened"}`);
+  if (x.panel) parts.push(`panel ${x.panel.search ? `search "${x.panel.search.query}": ${x.panel.search.result}` : "read"}`);
+  if (x.errors.length) parts.push(`${x.errors.length} error(s): ${x.errors[0]}`);
+  return `; inspect: ${parts.join(", ")}`;
+}
+
 class Session {
   constructor(o, plan) {
     this.o = o;
@@ -315,6 +402,9 @@ class Session {
     this.counter = 0;
     this.cleaned = false;
     this.env = appEnvironment(this.paths);
+    if (plan.env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS) {
+      this.env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = plan.env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS;
+    }
   }
 
   log(message) {
@@ -378,6 +468,31 @@ class Session {
   async startTables() {
     this.tables = await FakeTables.start({ statusPath: this.scope.allow(this.paths.status), env: this.env });
     for (const slot of this.plan.slots.filter((s) => s.kind === "cash")) await this.openTable(slot, slot.table, slot.title);
+    if (!this.o.observe) await this.calibrate();
+  }
+
+  /**
+   * Before the app starts: a left click on the first table's felt must reach
+   * it, or nothing the session measures would mean anything (a lock screen
+   * or a window on top takes the clicks).
+   */
+  async calibrate() {
+    // The last window opened is on top.
+    const [id, e] = [...this.open].at(-1) ?? [];
+    if (!id) return;
+    await sleep(800);
+    const felt = pointIn(e.slot.rect, FELT_CLICK_POINT);
+    const count = async () => (await this.tables.status()).tables.find((t) => t.id === id)?.clicks ?? 0;
+    const before = await count();
+    await this.tables.click(felt);
+    await sleep(400);
+    const after = await count();
+    const shot = await this.shot("r00-calibration.png", e.slot.rect);
+    this.event("calibrate", { id, point: felt, before, after, shot });
+    if (after <= before) {
+      throw new Error(`a left click on the felt of ${id} did not reach it (${before} -> ${after} clicks): another window covers it or the session is locked; see ${shot}`);
+    }
+    this.log(`calibration click reached ${id}`);
   }
 
   async openTable(slot, table, title) {
@@ -451,20 +566,36 @@ class Session {
     return name;
   }
 
+  async overlayWindows() {
+    return (await this.tables.list("Velora")).map(({ hwnd, title, visible, rect }) => ({ hwnd, title, visible, rect }));
+  }
+
   async round(hands, { panel = false } = {}) {
     const n = this.rounds.length + 1;
     const tag = String(n).padStart(2, "0");
     const record = { round: n, hands, at: new Date().toISOString(), shots: [], hover: null, click: null, overlays: null, panel: null };
     const area = this.plan.area;
+    if (this.o.inspect) record.inspect = await this.inspect(n, tag);
+    if (this.o.observe) {
+      record.overlays = await this.overlayWindows();
+      record.tables = [...this.open].map(([id, e]) => ({ id, table: e.table }));
+      this.rounds.push(record);
+      this.log(`round ${n}: ${hands} hands, ${record.overlays.length} overlay window(s), ${record.overlays.filter((w) => w.visible).length} visible${inspected(record.inspect)}`);
+      return;
+    }
     record.shots.push(await this.shot(`r${tag}-desktop.png`, area));
     for (const [id, e] of this.open) {
       record.shots.push(await this.shot(`r${tag}-${id}-${e.slot.kind}-${e.slot.seats}max-${e.slot.size}.png`, e.slot.rect));
     }
-    const entries = [...this.open];
+    const hoverOf = (e) => {
+      const points = chipHoverPoints(e.slot.seats);
+      return pointIn(e.slot.rect, points[(n - 1) % points.length]);
+    };
+    const entries = exposedTables([...this.open], (e) => [hoverOf(e), pointIn(e.slot.rect, FELT_CLICK_POINT)]);
+    if (!entries.length && this.open.size) this.log(`round ${n}: every table is partly covered; no hover or click this round`);
     if (entries.length) {
       const [id, e] = entries[(n - 1) % entries.length];
-      const points = chipHoverPoints(e.slot.seats);
-      const target = pointIn(e.slot.rect, points[(n - 1) % points.length]);
+      const target = hoverOf(e);
       await this.tables.mouse(target);
       await sleep(900);
       record.hover = { id, table: e.table, point: target, shot: await this.shot(`r${tag}-${id}-hover.png`, e.slot.rect) };
@@ -476,7 +607,7 @@ class Session {
       record.click = { id, table: e.table, point: felt, before, after, reached: after !== null && before !== null && after > before };
       await this.tables.mouse({ x: area.x + area.width - 2, y: area.y + area.height - 2 });
     }
-    record.overlays = (await this.tables.list("Velora")).map(({ hwnd, title, visible, rect }) => ({ hwnd, title, visible, rect }));
+    record.overlays = await this.overlayWindows();
     if (panel) {
       await this.tables.keys(PANEL_SHORTCUT);
       await sleep(1500);
@@ -489,6 +620,165 @@ class Session {
     this.log(`round ${n}: ${hands} hands, ${record.shots.length} shots${record.click ? `, felt click ${record.click.reached ? "reached" : "did NOT reach"} ${record.click.id}` : ""}`);
   }
 
+  /**
+   * --inspect: what the real app's pages show, read through the WebView2
+   * DevTools port: every overlay's chips (matched to its fake table by
+   * window position), each table rendered with that HUD on top, one chip
+   * hovered (rotating), one drawer opened and closed once, and from the
+   * second round the side panel shown, read and searched. Pointer events go
+   * to the page, not the desktop. Errors are recorded, never fatal.
+   */
+  async inspect(n, tag) {
+    const out = { overlays: [], hover: null, drawer: null, panel: null, errors: [] };
+    const fail = (what, err) => out.errors.push(`${what}: ${err.message}`);
+    let pages = [];
+    try {
+      pages = await listPages(this.o.inspect);
+    } catch (err) {
+      fail("list pages", err);
+      return out;
+    }
+    const overlays = [];
+    for (const page of pages.filter((p) => pageKind(p.url) === "overlay")) {
+      let cdp;
+      try {
+        cdp = await CdpPage.connect(page.ws);
+        const state = await cdp.evaluate(
+          `(() => { const s = ${OVERLAY_STATE}; s.screen = { x: screenX, y: screenY }; s.label = window.__TAURI_INTERNALS__?.metadata?.currentWindow?.label ?? null; return s; })()`,
+        );
+        const fake = [...this.open].find(([, e]) => e.slot.rect.x === state.screen.x && e.slot.rect.y === state.screen.y);
+        const entry = { label: state.label, url: state.url, size: state.size, screen: state.screen, id: fake?.[0] ?? null, table: fake?.[1].table ?? null, chips: state.chips };
+        if (fake && state.chips.length) {
+          const e = fake[1];
+          entry.shot = await this.composite(cdp, fake, `r${tag}-${fake[0]}-${e.slot.kind}-${e.slot.seats}max-${e.slot.size}`);
+        }
+        out.overlays.push(entry);
+        overlays.push({ cdp, entry, fake });
+      } catch (err) {
+        fail(`overlay ${page.url}`, err);
+        cdp?.close();
+      }
+    }
+    try {
+      const withChips = overlays.filter((x) => x.fake && villainChips(x.entry.chips, this.plan.hero).length);
+      if (withChips.length) {
+        const { cdp, entry, fake } = withChips[(n - 1) % withChips.length];
+        const chip = pickChip(entry.chips, n, this.plan.hero);
+        const at = { x: chip.rect.x + chip.rect.width / 2, y: chip.rect.y + chip.rect.height / 2 };
+        await cdp.mouseMove(at.x, at.y);
+        await sleep(900);
+        const state = await cdp.evaluate(OVERLAY_STATE);
+        out.hover = { id: fake[0], table: entry.table, chip: chip.text, label: chip.label, card: state.hoverCard };
+        out.hover.shot = await this.composite(cdp, fake, `r${tag}-${fake[0]}-hover`);
+        await cdp.mouseMove(1, 1);
+        await sleep(400);
+        out.hover.closedOnLeave = (await cdp.evaluate(OVERLAY_STATE)).hoverCard === null;
+        if (!this.drawerDone) {
+          this.drawerDone = true;
+          await cdp.click(at.x, at.y);
+          await sleep(1200);
+          const opened = await cdp.evaluate(OVERLAY_STATE);
+          out.drawer = { id: fake[0], table: entry.table, chip: chip.text, text: opened.drawer?.slice(0, 1500) ?? null };
+          out.drawer.shot = await this.composite(cdp, fake, `r${tag}-${fake[0]}-drawer`);
+          const hit = `(() => { const el = document.elementFromPoint(${at.x}, ${at.y}); return el ? el.tagName + (el.closest("[data-hud-chip]") ? " in chip" : "") + (el.closest("aside") ? " in drawer" : "") : null; })()`;
+          out.drawer.secondClickHits = await cdp.evaluate(hit);
+          await cdp.click(at.x, at.y);
+          await sleep(800);
+          out.drawer.closedAgain = (await cdp.evaluate(OVERLAY_STATE)).drawer === null;
+        }
+      }
+    } catch (err) {
+      fail("hover/drawer", err);
+    }
+    for (const { cdp } of overlays) cdp.close();
+    const seated = out.overlays.flatMap((o) => villainChips(o.chips, this.plan.hero)).map(chipName);
+    if (n >= 2) out.panel = await this.inspectPanel(pages, tag, seated).catch((err) => (fail("panel", err), null));
+    return out;
+  }
+
+  /** Renders fake table `id` with the page's own capture (its HUD) on top. */
+  async composite(cdp, [id], name) {
+    const hud = this.shotPath(`${name}-hud.png`);
+    writeFileSync(hud, await cdp.screenshot());
+    const file = `${name}.png`;
+    await this.tables.print(id, this.shotPath(file), hud);
+    return file;
+  }
+
+  /** Shows the side panel (the command HUD Profiles → Open side panel calls), reads it and searches a villain. */
+  async inspectPanel(pages, tag, seated) {
+    const main = pages.find((p) => pageKind(p.url) === "main");
+    const panelPage = pages.find((p) => pageKind(p.url) === "panel");
+    if (!panelPage) throw new Error("no side panel page");
+    if (!this.panelShown && main) {
+      const cdp = await CdpPage.connect(main.ws);
+      try {
+        await cdp.evaluate(`window.__TAURI_INTERNALS__.invoke("show_side_panel").then(() => true)`);
+      } finally {
+        cdp.close();
+      }
+      this.panelShown = true;
+      await sleep(1500);
+    }
+    const cdp = await CdpPage.connect(panelPage.ws);
+    try {
+      const out = { before: await cdp.evaluate(PANEL_STATE) };
+      out.shot = `r${tag}-panel.png`;
+      writeFileSync(this.shotPath(out.shot), await cdp.screenshot());
+      // Rows start collapsed: search for a villain an overlay shows, rotating.
+      const players = loadProfiles().profiles.flatMap((p) => p.players).filter((p) => seated.includes(p));
+      const name = players[(Number(tag) - 2) % Math.max(players.length, 1)];
+      if (name) {
+        const query = name.slice(1, 6).toLowerCase();
+        await cdp.evaluate(panelSearch(query));
+        await sleep(700);
+        const { text, ...found } = await cdp.evaluate(PANEL_STATE);
+        out.search = { player: name, query, ...found, shot: `r${tag}-panel-search.png` };
+        writeFileSync(this.shotPath(out.search.shot), await cdp.screenshot());
+        await cdp.evaluate(panelSearch(""));
+      }
+      return out;
+    } finally {
+      cdp.close();
+    }
+  }
+
+  /**
+   * Once per run: moves a cash table and puts it back, then closes another
+   * and reopens it, listing the overlay windows after each step. The HUD must
+   * follow the move, hide the closed table's overlay without destroying it
+   * (the window count stays) and reuse a pooled window for the reopened one.
+   */
+  async churn() {
+    const cash = [...this.open].filter(([, e]) => e.slot.kind === "cash");
+    if (cash.length < 2) return;
+    const record = { at: new Date().toISOString(), steps: [] };
+    const step = async (op, detail, waitMs, shotRect) => {
+      await sleep(waitMs);
+      const entry = { op, ...detail, overlays: await this.overlayWindows() };
+      if (shotRect && !this.o.observe) entry.shot = await this.shot(`churn-${op}.png`, shotRect);
+      record.steps.push(entry);
+    };
+    await step("before", {}, 0);
+    const [moveId, moved] = cash[0];
+    const home = moved.slot.rect;
+    const away = { ...home, x: home.x + 30, y: home.y + 20 };
+    await this.tables.move(moveId, away);
+    this.event("move", { id: moveId, table: moved.table, rect: away });
+    await step("moved", { id: moveId, rect: away }, 2000, away);
+    await this.tables.move(moveId, home);
+    this.event("move", { id: moveId, table: moved.table, rect: home });
+    await step("moved-back", { id: moveId, rect: home }, 2000);
+    const [closeId, closed] = cash.at(-1);
+    await this.closeTable(closeId);
+    await step("closed", { id: closeId, table: closed.table }, 3000);
+    await this.openTable(closed.slot, closed.table, closed.title);
+    await step("reopened", { table: closed.table }, 4000, closed.slot.rect);
+    this.churned = record;
+    const counts = record.steps.map((x) => `${x.op} ${x.overlays.length}/${x.overlays.filter((w) => w.visible).length}`);
+    this.log(`churn (overlay windows total/visible): ${counts.join(", ")}`);
+  }
+
   async play() {
     const live = this.plan.generators.filter((g) => g.phase === "live").map((g) => this.generator(g, `generator-${g.format}`));
     let nextShot = this.o.shotEvery;
@@ -499,6 +789,7 @@ class Session {
       if (hands >= nextShot) {
         await this.round(hands, { panel: !panelDone && this.rounds.length >= 1 });
         panelDone ||= this.rounds.at(-1).panel !== null;
+        if (this.rounds.length === 2 && !this.churned) await this.churn();
         while (nextShot <= hands) nextShot += this.o.shotEvery;
       }
       await sleep(1000);
@@ -518,6 +809,7 @@ class Session {
       slots: this.plan.slots,
       events: this.events,
       rounds: this.rounds,
+      churn: this.churned ?? null,
       generators: this.children.map((c) => ({ name: c.name, exit: c.exit })),
       ...extra,
     };
@@ -550,7 +842,8 @@ async function liveRun(o) {
   // Guards first: nothing is written before every path has been checked.
   const session = new Session(o, buildPlan(o, { area: { x: 0, y: 0, width: 1920, height: 1040 }, root }));
   session.prepare();
-  const area = primaryWorkArea(probe({ env: session.env }));
+  const probed = probe({ env: session.env });
+  const area = primaryWorkArea(probed);
   const plan = buildPlan(o, { area, root });
   session.plan = plan;
   const onSignal = (signal) => {
@@ -563,6 +856,9 @@ async function liveRun(o) {
   let hands = 0;
   try {
     session.log(`root ${plan.paths.root}`);
+    const blocker = desktopBlocker(probed);
+    if (blocker && !o.observe) throw new Error(`refusing to start: ${blocker}`);
+    if (blocker) session.log(`observe only: ${blocker}`);
     session.seed();
     await session.backlog();
     await session.startTables();

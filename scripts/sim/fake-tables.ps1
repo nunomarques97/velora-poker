@@ -22,6 +22,8 @@
 #       {"seq":3,"op":"retitle","id":"t1","title":"..."}
 #       {"seq":4,"op":"close","id":"t1"}
 #       {"seq":5,"op":"shot","path":"C:\\...\\a.png","x":0,"y":0,"width":800,"height":600}
+#       {"seq":5,"op":"print","id":"t1","path":"C:\...\t1.png","overlay":"C:\...\hud.png"}
+#           renders the table's own window (works on a locked session), HUD PNG on top
 #       {"seq":6,"op":"mouse","x":100,"y":100}   {"seq":7,"op":"click","x":100,"y":100}
 #       {"seq":8,"op":"list","title":"Velora"}   top-level windows whose title contains it
 #       {"seq":9,"op":"keys","ctrl":true,"alt":true,"vk":80}   presses Ctrl+Alt+P
@@ -91,7 +93,10 @@ namespace VeloraSim
         [DllImport("user32.dll")] static extern bool ClientToScreen(IntPtr hWnd, ref POINT p);
         [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
         [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc proc, IntPtr data);
-        [DllImport("user32.dll")] static extern IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+        // Unicode like the class and its windows: DefWindowProcA would store a
+        // Unicode title as ANSI, which other processes read as "S".
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern IntPtr DefWindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowTextLength(IntPtr hWnd);
         [DllImport("user32.dll")] static extern int GetMessage(out MSG msg, IntPtr hWnd, uint min, uint max);
         [DllImport("user32.dll")] static extern bool TranslateMessage(ref MSG msg);
         [DllImport("user32.dll")] static extern IntPtr DispatchMessage(ref MSG msg);
@@ -109,6 +114,12 @@ namespace VeloraSim
         [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO info);
         [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
         [DllImport("user32.dll")] static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
+        [DllImport("user32.dll")] static extern IntPtr GetDC(IntPtr hWnd);
+        [DllImport("user32.dll")] static extern int ReleaseDC(IntPtr hWnd, IntPtr hdc);
+        [DllImport("user32.dll")] static extern bool PrintWindow(IntPtr hWnd, IntPtr hdc, uint flags);
+        [DllImport("gdi32.dll", SetLastError = true)] static extern bool BitBlt(IntPtr dest, int x, int y, int w, int h, IntPtr src, int sx, int sy, uint rop);
+        [DllImport("wtsapi32.dll", SetLastError = true)] static extern bool WTSQuerySessionInformation(IntPtr server, int session, int infoClass, out IntPtr buffer, out int bytes);
+        [DllImport("wtsapi32.dll")] static extern void WTSFreeMemory(IntPtr memory);
         [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] static extern IntPtr GetModuleHandle(string name);
 
@@ -117,6 +128,8 @@ namespace VeloraSim
         const uint WM_LBUTTONDOWN = 0x0201, WM_APP = 0x8000;
         const uint SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
         const uint MOUSEEVENTF_LEFTDOWN = 0x0002, MOUSEEVENTF_LEFTUP = 0x0004;
+        const uint SRCCOPY = 0x00CC0020, CAPTUREBLT = 0x40000000;
+        const uint PW_RENDERFULLCONTENT = 2;
         static readonly IntPtr PER_MONITOR_AWARE_V2 = new IntPtr(-4);
 
         class Table
@@ -151,7 +164,66 @@ namespace VeloraSim
 
         // ------------------------------------------------------------ probe
 
-        /// Monitors (physical pixels) as JSON, from a DPI-aware thread; no window is created.
+        /// "true" when this Windows session is locked (the lock screen covers
+        /// every window and takes the mouse and keyboard), "false" when it is
+        /// not, "null" when Windows does not say.
+        public static string SessionLocked()
+        {
+            const int WTSSessionInfoEx = 25;
+            IntPtr buffer;
+            int bytes;
+            if (!WTSQuerySessionInformation(IntPtr.Zero, -1, WTSSessionInfoEx, out buffer, out bytes)) return "null";
+            try
+            {
+                // WTSINFOEX: Level (DWORD), then the 8-aligned WTSINFOEX_LEVEL1:
+                // SessionId, SessionState, SessionFlags (0 locked, 1 unlocked).
+                if (bytes < 20 || Marshal.ReadInt32(buffer, 0) != 1) return "null";
+                int flags = Marshal.ReadInt32(buffer, 16);
+                return flags == 0 ? "true" : flags == 1 ? "false" : "null";
+            }
+            finally
+            {
+                WTSFreeMemory(buffer);
+            }
+        }
+
+        /// The title Windows reports for `hwnd`, as any other process (the
+        /// HUD's table_track) reads it.
+        static string ReadTitle(IntPtr hwnd)
+        {
+            StringBuilder sb = new StringBuilder(GetWindowTextLength(hwnd) + 2);
+            GetWindowText(hwnd, sb, sb.Capacity);
+            return sb.ToString();
+        }
+
+        /// A hidden window (never shown) of a class of its own, given a
+        /// non-ASCII title and read back, then destroyed: "true" when the
+        /// title survives, as the HUD must read the table titles whole.
+        static string TitleRoundTrip()
+        {
+            const string title = "Session: 00:00 - Velora probe \u00e9\u20ac - Logged Out";
+            WNDCLASSEX wc = new WNDCLASSEX();
+            wc.cbSize = (uint)Marshal.SizeOf(typeof(WNDCLASSEX));
+            WndProc probeProc = DefWindowProc;
+            wc.lpfnWndProc = probeProc;
+            wc.hInstance = GetModuleHandle(null);
+            wc.lpszClassName = "VeloraSimProbe";
+            if (RegisterClassEx(ref wc) == 0) return "false";
+            IntPtr hwnd = CreateWindowEx(0, wc.lpszClassName, title, WS_OVERLAPPEDWINDOW, 0, 0, 100, 100, IntPtr.Zero, IntPtr.Zero, wc.hInstance, IntPtr.Zero);
+            if (hwnd == IntPtr.Zero) return "false";
+            try
+            {
+                return ReadTitle(hwnd) == title ? "true" : "false";
+            }
+            finally
+            {
+                DestroyWindow(hwnd);
+                GC.KeepAlive(probeProc);
+            }
+        }
+
+        /// Monitors (physical pixels) as JSON, from a DPI-aware thread; no
+        /// window is shown.
         public static string Probe()
         {
             string result = null;
@@ -175,7 +247,8 @@ namespace VeloraSim
                     }
                     return true;
                 }, IntPtr.Zero);
-                sb.Append("]}");
+                sb.Append("],\"locked\":").Append(SessionLocked());
+                sb.Append(",\"titleRoundTrip\":").Append(TitleRoundTrip()).Append("}");
                 result = sb.ToString();
             });
             t.Start();
@@ -286,9 +359,16 @@ namespace VeloraSim
                 tables.Add(t);
                 ShowWindow(hwnd, 4); // SW_SHOWNOACTIVATE
                 UpdateWindow(hwnd);
+                AssertTitle(t);
                 WriteStatus();
                 return TableJson(t);
             });
+        }
+
+        static void AssertTitle(Table t)
+        {
+            string seen = ReadTitle(t.Hwnd);
+            if (seen != t.Title) throw new InvalidOperationException("table " + t.Id + ": Windows reports the title as \"" + seen + "\", not \"" + t.Title + "\"");
         }
 
         public string Move(string id, int x, int y, int width, int height)
@@ -310,6 +390,7 @@ namespace VeloraSim
                 Table t = Require(id);
                 SetWindowText(t.Hwnd, title);
                 t.Title = title;
+                AssertTitle(t);
                 WriteStatus();
                 return TableJson(t);
             });
@@ -348,8 +429,57 @@ namespace VeloraSim
                 {
                     using (Graphics g = Graphics.FromImage(bmp))
                     {
-                        // CaptureBlt includes layered windows: the transparent overlay.
-                        g.CopyFromScreen(x, y, 0, 0, new Size(width, height), CopyPixelOperation.SourceCopy | CopyPixelOperation.CaptureBlt);
+                        // CAPTUREBLT includes layered windows: the transparent overlay.
+                        // BitBlt directly: CopyFromScreen rejects SourceCopy | CaptureBlt
+                        // as an undefined CopyPixelOperation value.
+                        IntPtr screen = GetDC(IntPtr.Zero);
+                        IntPtr dest = g.GetHdc();
+                        try
+                        {
+                            if (!BitBlt(dest, 0, 0, width, height, screen, x, y, SRCCOPY | CAPTUREBLT))
+                                throw new InvalidOperationException("BitBlt failed: " + Marshal.GetLastWin32Error());
+                        }
+                        finally
+                        {
+                            g.ReleaseHdc(dest);
+                            ReleaseDC(IntPtr.Zero, screen);
+                        }
+                    }
+                    bmp.Save(path, ImageFormat.Png);
+                }
+                return "{\"path\":\"" + Esc(path) + "\",\"width\":" + width + ",\"height\":" + height + "}";
+            });
+        }
+
+        // Renders one fake table's own window to a PNG (PrintWindow: no
+        // screen involved, so it also works on a locked session or under
+        // another window), then draws `overlayPath` (a PNG the size of the
+        // window, transparent outside the HUD) on top if given.
+        public string Print(string id, string path, string overlayPath)
+        {
+            return Invoke(delegate ()
+            {
+                Table t = Require(id);
+                RECT r;
+                if (!GetWindowRect(t.Hwnd, out r)) throw new InvalidOperationException("GetWindowRect failed");
+                int width = r.Right - r.Left, height = r.Bottom - r.Top;
+                if (width <= 0 || height <= 0) throw new ArgumentException("empty window");
+                using (Bitmap bmp = new Bitmap(width, height, PixelFormat.Format32bppArgb))
+                {
+                    using (Graphics g = Graphics.FromImage(bmp))
+                    {
+                        IntPtr dest = g.GetHdc();
+                        bool printed;
+                        try { printed = PrintWindow(t.Hwnd, dest, PW_RENDERFULLCONTENT); }
+                        finally { g.ReleaseHdc(dest); }
+                        if (!printed) throw new InvalidOperationException("PrintWindow failed");
+                        if (!string.IsNullOrEmpty(overlayPath))
+                        {
+                            using (Image hud = Image.FromFile(overlayPath))
+                            {
+                                g.DrawImage(hud, new Rectangle(0, 0, width, height));
+                            }
+                        }
                     }
                     bmp.Save(path, ImageFormat.Png);
                 }
@@ -699,6 +829,7 @@ try {
         'close'   { $app.Close([string]$cmd.id) }
         'closeAll' { $app.CloseAll() }
         'shot'    { $app.Shot([string]$cmd.path, [int]$cmd.x, [int]$cmd.y, [int]$cmd.width, [int]$cmd.height) }
+        'print'   { $app.Print([string]$cmd.id, [string]$cmd.path, [string]$cmd.overlay) }
         'mouse'   { $app.Mouse([int]$cmd.x, [int]$cmd.y, $false) }
         'click'   { $app.Mouse([int]$cmd.x, [int]$cmd.y, $true) }
         'keys'    { $app.Keys([bool]$cmd.ctrl, [bool]$cmd.alt, [bool]$cmd.shift, [int]$cmd.vk) }

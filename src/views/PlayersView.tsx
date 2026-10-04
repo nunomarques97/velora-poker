@@ -53,7 +53,7 @@ export function PlayersView({ onSelectPlayer }: PlayersViewProps) {
   const [searchInput, setSearchInput] = useState("");
 
   function load(search: string) {
-    getPlayersPage(0, PAGE_SIZE, search || undefined)
+    return getPlayersPage(0, PAGE_SIZE, search || undefined)
       .then(({ players, total }) => {
         setState({ status: "ready", players, total, search });
       })

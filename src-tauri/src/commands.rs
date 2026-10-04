@@ -20,6 +20,27 @@ use crate::stats::{self, PlayerStats};
 use crate::table_track;
 use crate::watcher;
 
+// A plain `#[tauri::command]` runs on the main thread, the one that also
+// runs the event loop every overlay window move, show and build waits on.
+// The commands every window calls on each `hands-imported` event wait on
+// the database lock, which the watcher holds while it imports; on the main
+// thread that wait stalled the overlays (D107: with a backlog importing at
+// start-up, three of eight tables never got a HUD and a closed table's HUD
+// stayed up for 53 s). So those commands are `#[tauri::command(async)]`:
+// same body, run off the main thread. Every caller already keeps only its
+// newest response. Listed in `REFRESH_COMMANDS` and checked by a test.
+pub const REFRESH_COMMANDS: &[&str] = &[
+    "get_players",
+    "get_players_page",
+    "get_active_table_players",
+    "get_active_table_max_players",
+    "get_side_panel_snapshot",
+    "get_app_settings",
+    "get_active_hud_profile",
+    "get_seat_positions",
+    "get_ingestion_health",
+];
+
 // ---------------------------------------------------------------------
 // Players
 // ---------------------------------------------------------------------
@@ -179,7 +200,7 @@ pub fn build_player_payload(
 /// overlay's own per-hand refresh on every open table. No frontend view calls
 /// this any more (`PlayersView`/`HudProfilesView` use `get_players_page`);
 /// kept for any future caller that genuinely needs the entire set at once.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_players(state: State<AppState>) -> Result<Vec<PlayerPayload>, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let rows = db::list_players(&conn).map_err(|e| e.to_string())?;
@@ -212,7 +233,7 @@ pub struct PlayersPagePayload {
 /// `limit` rows actually returned, not the whole `players` table, so a tab
 /// open with a huge roster costs the same regardless of how large the table
 /// has grown.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_players_page(
     state: State<AppState>,
     offset: i64,
@@ -289,7 +310,7 @@ impl TableScope {
 /// scope is per-overlay rather than process-wide:
 /// `table_id` identifies the caller's own table, so N overlays each show N
 /// different rosters. See `table_scope` for the unparsed-title case.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_active_table_players(
     state: State<AppState>,
     table_id: u32,
@@ -378,7 +399,7 @@ pub fn active_table_payloads(
 /// seat-mapping template is looked up by. `None` until at
 /// least one hand has been imported at that table. Same per-table scoping as
 /// `get_active_table_players`.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_active_table_max_players(
     state: State<AppState>,
     table_id: u32,
@@ -572,7 +593,7 @@ pub fn side_panel_snapshot(
 
 /// Every tracked table with its villains, for the side panel window. One
 /// connection lock for the whole snapshot.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_side_panel_snapshot(state: State<AppState>) -> Result<SidePanelSnapshot, String> {
     let tables: Vec<PanelTable> = table_track::tracked_tables().iter().map(PanelTable::from).collect();
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
@@ -1274,7 +1295,7 @@ pub struct AppSettingsPayload {
     pub auto_center_enabled: bool,
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_app_settings(state: State<AppState>) -> Result<AppSettingsPayload, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     let onboarding_complete =
@@ -1389,7 +1410,7 @@ pub fn get_hud_profiles(state: State<AppState>) -> Result<Vec<HudProfile>, Strin
     hud::list_profiles(&conn).map_err(|e| e.to_string())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_active_hud_profile(state: State<AppState>) -> Result<HudProfile, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     hud::get_active_profile(&conn).map_err(|e| e.to_string())
@@ -1552,7 +1573,7 @@ pub struct SeatPositionPayload {
 
 /// The chip positions a user dragged for one table size in one frame. Seats
 /// not listed use the frontend's computed default.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_seat_positions(
     state: State<AppState>,
     max_players: i64,
@@ -2059,7 +2080,7 @@ pub fn ingestion_health(conn: &rusqlite::Connection) -> Result<IngestionHealthPa
 
 /// Tauri wrapper around `ingestion_health`: read-only status the Settings
 /// "Ingestão" section and the main-window status line poll on demand.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_ingestion_health(state: State<AppState>) -> Result<IngestionHealthPayload, String> {
     let conn = state.conn.lock().map_err(|e| e.to_string())?;
     ingestion_health(&conn)
@@ -2100,4 +2121,22 @@ pub fn app_version() -> AppVersionPayload {
 #[tauri::command]
 pub fn get_app_version() -> AppVersionPayload {
     app_version()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::REFRESH_COMMANDS;
+
+    /// Every command a window calls on each `hands-imported` event runs off
+    /// the main thread (see `REFRESH_COMMANDS`).
+    #[test]
+    fn refresh_commands_run_off_the_main_thread() {
+        let source = include_str!("commands.rs").replace("\r\n", "\n");
+        for name in REFRESH_COMMANDS {
+            let signature = format!("pub fn {name}(");
+            let at = source.find(&signature).unwrap_or_else(|| panic!("{name} not found"));
+            let attribute = source[..at].trim_end().lines().last().unwrap_or_default();
+            assert_eq!(attribute, "#[tauri::command(async)]", "{name} must not run on the main thread");
+        }
+    }
 }

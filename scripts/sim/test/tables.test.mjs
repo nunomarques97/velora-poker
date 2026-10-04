@@ -197,6 +197,18 @@ test("the window program, this module and the HUD's seat layout agree on class a
   }
 });
 
+test("the probe reports the monitors and whether the session is locked", { skip: process.platform !== "win32" }, async () => {
+  const { probe } = await import("../fake-tables.mjs");
+  const dir = scratch("probe");
+  const probed = probe({ env: { ...process.env, TEMP: dir, TMP: dir } });
+  assert.equal(probed.className, TABLE_CLASS);
+  assert.ok(probed.monitors.length >= 1);
+  assert.ok([true, false, null].includes(probed.locked), String(probed.locked));
+  // A hidden window's non-ASCII title reads back whole: with an ANSI
+  // DefWindowProc it read back as "S", and table_track tracked no table.
+  assert.equal(probed.titleRoundTrip, true);
+});
+
 test("the window program answers commands and writes its status without opening a window", { skip: process.platform !== "win32" }, async () => {
   const { FakeTables } = await import("../fake-tables.mjs");
   const dir = scratch("program");
@@ -212,6 +224,15 @@ test("the window program answers commands and writes its status without opening 
     await assert.rejects(tables.close("t1"), /no open table t1/);
     await assert.rejects(tables.move("t9", { x: 0, y: 0, width: 483, height: 359 }), /no open table t9/);
     await assert.rejects(tables.send("format-disk"), /unknown op/);
+    // A screen capture writes a PNG (the overlay needs SRCCOPY | CAPTUREBLT,
+    // which CopyFromScreen refused as an enum value).
+    const png = join(dir, "region.png");
+    assert.deepEqual(await tables.shot(png, { x: 0, y: 0, width: 8, height: 6 }), { path: png, width: 8, height: 6 });
+    assert.deepEqual([...readFileSync(png).subarray(0, 4)], [0x89, 0x50, 0x4e, 0x47]);
+    await assert.rejects(tables.shot(join(dir, "empty.png"), { x: 0, y: 0, width: 0, height: 6 }), /empty capture region/);
+    // Rendering a table's own window needs that table open (the live run
+    // renders every open table with its HUD on top).
+    await assert.rejects(tables.print("t1", join(dir, "t1.png")), /no open table t1/);
   } finally {
     await tables.quit();
   }

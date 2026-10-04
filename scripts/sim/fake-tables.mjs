@@ -135,6 +135,13 @@ export class FakeTables {
   shot(path, rect) {
     return this.send("shot", { path, ...rect });
   }
+  /**
+   * Renders table `id`'s own window to a PNG, with the HUD PNG `overlay` (if
+   * given) drawn on top. No screen involved: works on a locked session too.
+   */
+  print(id, path, overlay = "") {
+    return this.send("print", { id, path, overlay });
+  }
   mouse(point) {
     return this.send("mouse", point);
   }

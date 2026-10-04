@@ -70,7 +70,32 @@ What it does:
 6. Every `--shot-every` hands, it takes a desktop screenshot and one per table. It hovers a villain chip and screenshots the hover, then clicks the felt outside HUD elements and reads that table's click counter. It also lists the overlay windows. Once per run, it toggles the side panel with Ctrl+Alt+P.
 7. Writes `<root>/e2e-summary.json` (events, rounds, clicks, overlay windows). Then it closes every fake window, the generators and the app. The same cleanup runs on an error or Ctrl+C.
 
-Options: `--cash n`, `--mtt n`, `--hands n` (per table or tournament seat, default 60), `--backlog n` (cash hands imported before launch), `--pace s`, `--seed s`, `--shot-every n`, `--launch-timeout s`, `--root dir`, `--shots dir`.
+Options: `--cash n`, `--mtt n`, `--hands n` (per table or tournament seat, default 60), `--backlog n` (cash hands imported before launch), `--pace s`, `--seed s`, `--shot-every n`, `--launch-timeout s`, `--root dir`, `--shots dir`, `--observe`, `--inspect port`.
+
+**Locked session.** A real run refuses to start while Windows is locked: the lock screen covers every window and takes the mouse and keyboard. The dry run warns about it. `--observe` runs the session without mouse, keyboard or screen captures and only lists the windows.
+
+**`--inspect port`** reads what the real app shows without using the screen, so it also works on a locked session. The app's own temporary environment gets `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` with a DevTools port on `127.0.0.1` (never set for your normal app). Every round, `lib/cdp.mjs` does the following:
+
+- Reads each overlay's chips from its DOM: text and accessible name, which includes the tag, the top read and its sample.
+- Renders each table window with its HUD on top. The fake table draws itself (`print`, PrintWindow) and the overlay page captures itself.
+- Hovers a tagged villain's chip and checks that the hover card closes when the pointer leaves.
+- Once per run, opens that player's drawer.
+- From the second round, shows the side panel (the same `show_side_panel` command as HUD Profiles → Open side panel), reads it and searches a seated villain.
+
+The pointer events go to the page, not to the desktop, so this does not prove that the OS hands clicks through to the table. Only an unlocked run checks that, with its click counter.
+
+```sh
+node scripts/sim/e2e.mjs --observe --inspect 9333 --features strategic-analysis --shots <folder>
+```
+
+**Reads vs profiles after a run.** `src-tauri/examples/sim_reads.rs` opens a run's database read-only. For each simulated villain and each format he played, it prints one JSON line: his chip tag and his ranked reads at his latest hand of that format, the profile's expected reads, and whether the first tendency read is one of them:
+
+```sh
+cd src-tauri
+cargo run --example sim_reads --features strategic-analysis -- <root>/AppData/Roaming/com.velora.poker/velora.db ../scripts/sim/profiles.json
+```
+
+Run it under the VS2022 environment, like the tests (see `lib/msvc.mjs`).
 
 Guards (`lib/e2e-guard.mjs`, tested in `test/e2e-guard.test.mjs`):
 

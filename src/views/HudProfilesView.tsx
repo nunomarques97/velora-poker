@@ -90,7 +90,7 @@ export function HudProfilesView({ onSelectPlayer }: HudProfilesViewProps) {
   const resetPending = useRef(false);
 
   function loadPreviewPlayers() {
-    getPlayersPage(0, PREVIEW_GRID_MAX_PLAYERS)
+    return getPlayersPage(0, PREVIEW_GRID_MAX_PLAYERS)
       .then(({ players: page, total }) => {
         if (!mounted.current) return;
         setPlayers(page);

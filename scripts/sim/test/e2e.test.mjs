@@ -6,10 +6,12 @@
 
 import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { buildPlan, generatorRuns, parseArgs, tableSlots } from "../e2e.mjs";
+import { buildPlan, chipName, desktopBlocker, exposedTables, generatorRuns, parseArgs, pickChip, tableSlots, villainChips } from "../e2e.mjs";
+import { CdpPage, inspectArguments, listPages, pageKind, panelSearch } from "../lib/cdp.mjs";
 import { parseArgs as parseGeneratorArgs } from "../generate.mjs";
 import { assertPlainArgs, vcvarsLine } from "../lib/msvc.mjs";
 import { LOGGED_IN_MARKER, TABLE_SIZES } from "../lib/tables.mjs";
@@ -59,14 +61,14 @@ test("the plan: cash windows titled before launch, data paths and environment in
   }
   for (const value of Object.values(plan.env)) assert.ok(value.startsWith(plan.paths.root), value);
   assert.ok(plan.shots.startsWith(plan.paths.root));
-  assert.deepEqual(plan.app.args, ["run", "tauri", "dev", "--", "--features", "strategic-analysis"]);
+  assert.deepEqual(plan.app.args, ["run", "tauri", "dev", "--", "--no-watch", "--features", "strategic-analysis"]);
   assert.deepEqual(plan.seed.args.slice(0, 5), ["run", "--example", "sim_seed", "--features", "strategic-analysis"]);
   assert.deepEqual(plan.seed.args.slice(-3), ["--", plan.paths.db, plan.paths.handHistoryRoot]);
   // Every command line survives cmd.exe verbatim (the temp root has no spaces).
   for (const cmd of [plan.seed, plan.app]) assert.doesNotThrow(() => assertPlainArgs([cmd.command, ...cmd.args]));
 
   const plain = buildPlan(parseArgs([]), { area: AREA, root: root() });
-  assert.deepEqual(plain.app.args, ["run", "tauri", "dev"]);
+  assert.deepEqual(plain.app.args, ["run", "tauri", "dev", "--", "--no-watch"]);
   assert.deepEqual(plain.seed.args.slice(0, 4), ["run", "--example", "sim_seed", "--"]);
 });
 
@@ -96,4 +98,98 @@ test("vcvars command lines refuse cmd metacharacters", () => {
   for (const bad of ["a b", 'a"b', "a&b", "a|b", "a>b", "%PATH%", "a^b", "(x)"]) {
     assert.throws(() => vcvarsLine("cargo", [bad]), /unsupported argument/, bad);
   }
+});
+
+test("a locked session blocks the run with the reason; unlocked or unknown does not", () => {
+  assert.match(desktopBlocker({ locked: true }), /session is locked/);
+  assert.equal(desktopBlocker({ locked: false }), null);
+  assert.equal(desktopBlocker({ locked: null }), null);
+  assert.equal(desktopBlocker(null), null);
+});
+
+test("hover and click target only tables no later window covers", () => {
+  const entry = (id, x, y) => [id, { slot: { rect: { x, y, width: 483, height: 359 } } }];
+  const centre = (e) => [{ x: e.slot.rect.x + 200, y: e.slot.rect.y + 200 }];
+  // Cascaded 40px apart, as on a small screen: only the top window is exposed.
+  const cascade = [entry("a", 0, 0), entry("b", 40, 40), entry("c", 80, 80)];
+  assert.deepEqual(exposedTables(cascade, centre).map(([id]) => id), ["c"]);
+  // Side by side: all exposed.
+  const tiled = [entry("a", 0, 0), entry("b", 483, 0), entry("c", 966, 0)];
+  assert.deepEqual(exposedTables(tiled, centre).map(([id]) => id), ["a", "b", "c"]);
+  // A later window covering a corner the points do not use does not count.
+  assert.deepEqual(exposedTables([entry("a", 0, 0), entry("b", 400, 300)], centre).map(([id]) => id), ["a", "b"]);
+  assert.deepEqual(exposedTables([], centre), []);
+});
+
+test("observe mode: no mouse, keyboard or screenshots in the plan", () => {
+  assert.equal(parseArgs([]).observe, false);
+  const o = parseArgs(["--observe"]);
+  assert.equal(o.observe, true);
+  const steps = buildPlan(o, { area: AREA, root: root() }).steps.join(" | ");
+  assert.match(steps, /observe only/);
+  assert.doesNotMatch(steps, /hover a villain chip/);
+  assert.match(buildPlan(parseArgs([]), { area: AREA, root: root() }).steps.join(" | "), /hover a villain chip/);
+});
+
+test("inspect mode: loopback DevTools port in the app's own environment only", () => {
+  assert.equal(parseArgs([]).inspect, 0);
+  const plain = buildPlan(parseArgs([]), { area: AREA, root: root() });
+  assert.equal(plain.env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS, undefined);
+  assert.doesNotMatch(plain.steps.join(" | "), /DevTools/);
+  const o = parseArgs(["--observe", "--inspect", "9333"]);
+  assert.equal(o.inspect, 9333);
+  const plan = buildPlan(o, { area: AREA, root: root() });
+  const args = plan.env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS;
+  assert.match(args, /--remote-debugging-port=9333/);
+  assert.match(args, /--remote-debugging-address=127\.0\.0\.1/);
+  assert.match(plan.steps.join(" | "), /DevTools port 9333 \(loopback\)/);
+  // The driver's own process never gets it: only the plan's app environment.
+  assert.equal(process.env.WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS, undefined);
+  for (const bad of ["80", "70000", "x"]) assert.throws(() => parseArgs(["--inspect", bad]));
+  assert.throws(() => inspectArguments(1023));
+});
+
+test("inspect mode: page kinds, chip picking and the search script", () => {
+  assert.equal(pageKind("http://localhost:1420/overlay.html?table=4"), "overlay");
+  assert.equal(pageKind("http://localhost:1420/panel.html"), "panel");
+  assert.equal(pageKind("http://localhost:1420/"), "main");
+  assert.equal(pageKind("https://example.com/x.html"), null);
+  assert.equal(pageKind("not a url"), null);
+  const chip = (label) => ({ label, rect: { x: 0, y: 0, width: 10, height: 10 } });
+  const hero = chip("SimHero, 41 hands, VPIP 17, PFR 15, 3-Bet 5. Open details");
+  const plain = chip("RockSolidRui, 32 hands, VPIP 3, PFR 3, 3-Bet 0. Open details");
+  const cc = chip("CallMeMaybe77, 30 hands, VPIP 40, PFR 0, 3-Bet 0, tag CC+, Cold-calls 50% (8/16) of opens., based on 16 opportunities. Open details");
+  const lag = chip("TripleBarrelTom, 21 hands, VPIP 38, PFR 33, 3-Bet 25, under 25 hands, small sample, tag LAG, Plays 38%. Open details");
+  assert.equal(chipName(cc), "CallMeMaybe77");
+  assert.deepEqual(villainChips([hero, plain, cc], "SimHero").map(chipName), ["RockSolidRui", "CallMeMaybe77"]);
+  // Tagged villains first, rotating by round; never the hero.
+  assert.equal(pickChip([hero, plain, cc, lag], 1, "SimHero"), cc);
+  assert.equal(pickChip([hero, plain, cc, lag], 2, "SimHero"), lag);
+  assert.equal(pickChip([hero, plain], 1, "SimHero"), plain);
+  assert.equal(pickChip([hero], 1, "SimHero"), null);
+  // The query is embedded as a JSON string: quotes cannot break out of it.
+  const script = panelSearch('a"); alert(1); ("');
+  assert.match(script, /set\.call\(input, "a\\"\); alert\(1\); \(\\""\)/);
+});
+
+test("inspect mode: only loopback DevTools targets are listed or connected to", async () => {
+  const targets = [
+    { id: "a", type: "page", url: "http://localhost:1420/overlay.html?table=1", title: "o", webSocketDebuggerUrl: "ws://127.0.0.1:9333/devtools/page/a" },
+    { id: "b", type: "page", url: "http://localhost:1420/panel.html", title: "p", webSocketDebuggerUrl: "ws://192.168.1.20:9333/devtools/page/b" },
+    { id: "c", type: "service_worker", url: "http://localhost:1420/sw.js", title: "w", webSocketDebuggerUrl: "ws://127.0.0.1:9333/devtools/page/c" },
+    { id: "d", type: "page", url: "http://localhost:1420/", title: "m", webSocketDebuggerUrl: "ws://evil.example:9333/devtools/page/d" },
+  ];
+  const server = createServer((req, res) => {
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify(req.url === "/json/list" ? targets : []));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const pages = await listPages(server.address().port);
+    assert.deepEqual(pages.map((p) => p.id), ["a"]);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+  await assert.rejects(CdpPage.connect("ws://evil.example:9333/devtools/page/d"), /non-loopback/);
+  await assert.rejects(CdpPage.connect("ws://127.0.0.1.evil.example:9333/devtools/page/d"), /non-loopback/);
 });

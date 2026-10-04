@@ -40,7 +40,7 @@ function App() {
     if (!isTauriAvailable()) return;
     let cancelled = false;
     function poll() {
-      getIngestionHealth()
+      return getIngestionHealth()
         .then((health) => {
           if (!cancelled) setHandsRejected(health.handsRejected);
         })

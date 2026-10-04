@@ -195,9 +195,7 @@ export function SidePanelApp() {
   useEffect(() => {
     mounted.current = true;
     load();
-    const unlistenHands = onHandsImported(() => {
-      load();
-    }).catch(() => undefined);
+    const unlistenHands = onHandsImported(() => load()).catch(() => undefined);
     const unlistenTables = onTrackedTablesChanged(() => {
       load();
     }).catch(() => undefined);

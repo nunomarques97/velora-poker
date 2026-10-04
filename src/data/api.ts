@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { singleFlight } from "./singleFlight";
 import type {
   AppSettings,
   DashboardSummary,
@@ -521,9 +522,20 @@ export async function setPanelShortcut(shortcut: string): Promise<PanelShortcut>
 // Live events
 // ---------------------------------------------------------------------
 
-/** Fires whenever the watcher or a manual folder change imports new hands. */
-export async function onHandsImported(callback: () => void): Promise<UnlistenFn> {
-  return listen<number>("hands-imported", () => callback());
+/**
+ * Fires whenever the watcher or a manual folder change imports new hands —
+ * once per hand at every table during a session. A callback that returns its
+ * refresh's promise runs at most once at a time; events that arrive meanwhile
+ * collapse into one more run after it (`singleFlight`).
+ */
+export async function onHandsImported(callback: () => unknown): Promise<UnlistenFn> {
+  let stopped = false;
+  const trigger = singleFlight(() => (stopped ? undefined : callback()));
+  const unlisten = await listen<number>("hands-imported", trigger);
+  return () => {
+    stopped = true;
+    unlisten();
+  };
 }
 
 /**
