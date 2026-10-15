@@ -380,13 +380,13 @@ fn check_bounty(conn: &Connection, cache: &mut EngineCache) {
 }
 
 /// The chip tag keeps section 7's precedence under the context ranking: a
-/// tournament villain on 25bb or less shows his stack, above it the top
-/// read's tag.
+/// tournament villain on 25bb or less shows his best all-in read (his stack
+/// only without one), above it the top read's tag.
 fn check_chip_tag(conn: &Connection, cache: &mut EngineCache) {
     let (pid, base) = villain(conn, "TwentyBigBlinds");
     let short = payload(cache, conn, pid, &staged(at(&base, 20.0), Stage::Middle));
     let tag = short.tag.as_ref().expect("a tag");
-    assert_eq!((tag.text.as_str(), tag.source), ("20bb", TagSource::Stack));
+    assert_eq!((tag.text.as_str(), tag.rule_id.as_str(), tag.source), ("RSV", "stk.reshove.high", TagSource::Read));
     assert_top("reshover at 20bb", &short, &["stk.reshove.high"]);
     let deeper = payload(cache, conn, pid, &staged(at(&base, 30.0), Stage::Middle));
     let tag = deeper.tag.as_ref().expect("a tag");

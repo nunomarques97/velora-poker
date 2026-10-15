@@ -28,8 +28,8 @@ pub const RULE_MIN_HANDS_GATE: &str = "gate.min_hands_archetype";
 
 /// Reads shown on the hover card and the side panel.
 pub const TOP_READS: usize = 2;
-/// The stack tag replaces the read tag in tournaments at or below this
-/// effective stack (bb).
+/// In tournaments at or below this effective stack (bb) the chip names his
+/// best all-in read, or his stack when he has none.
 pub const STACK_TAG_MAX_BB: f64 = 25.0;
 /// The rule id a stack tag reports when `ctx.short_stack` did not fire
 /// (15–25bb): the effective-stack derivation itself (row S06).
@@ -240,12 +240,22 @@ pub fn context_multiplier(def: &RuleDef, context: Option<&EngineContext>) -> f64
     seat_factor(def, ctx) * stack_factor(lever, ctx) * stage_factor(lever, ctx) * bounty_factor(lever, ctx)
 }
 
-/// Section 7's order: score descending, then confidence descending, then
-/// rule id ascending. Total and deterministic, whatever order the reads
-/// came in.
+/// Facts of the latest hand rather than tendencies of the player: his stack
+/// depth (`ctx.short_stack`, `ctx.deep_stack`) and his bounty
+/// (`ko.big_bounty`). They carry a fixed score at 100% confidence, so they
+/// would outrank most real reads; section 7 ranks them after every
+/// tendency (mock MTT session report, item 5).
+pub fn is_fact(rule_id: &str) -> bool {
+    rule_id.starts_with("ctx.") || rule_id == "ko.big_bounty"
+}
+
+/// Section 7's order: tendencies before facts ([`is_fact`]), then score
+/// descending, then confidence descending, then rule id ascending. Total
+/// and deterministic, whatever order the reads came in.
 pub fn compare(a: &EngineRuleResult, b: &EngineRuleResult) -> Ordering {
-    b.score
-        .total_cmp(&a.score)
+    is_fact(&a.rule_id)
+        .cmp(&is_fact(&b.rule_id))
+        .then_with(|| b.score.total_cmp(&a.score))
         .then_with(|| b.confidence_pct.cmp(&a.confidence_pct))
         .then_with(|| a.rule_id.cmp(&b.rule_id))
 }
@@ -262,9 +272,10 @@ pub fn rank(mut reads: Vec<EngineRuleResult>) -> Vec<EngineRuleResult> {
 pub enum TagSource {
     /// `rec.tilt` fired.
     Tilt,
-    /// A tournament villain on 25bb or less.
+    /// A tournament villain on 25bb or less without an all-in read.
     Stack,
-    /// The top-ranked read's own tag.
+    /// A read's own tag: the top-ranked read, or at 25bb or less in a
+    /// tournament his best-ranked all-in read.
     Read,
 }
 
@@ -294,9 +305,11 @@ fn tournament(context: &EngineContext) -> bool {
 }
 
 /// The chip tag by section 7's precedence, first match wins: `TILT` when
-/// `rec.tilt` fired; `NNbb` (effective stack rounded down) for a tournament
-/// villain on 25bb or less; the top-ranked read's tag; otherwise none.
-/// `ranked` must be in [`rank`] order.
+/// `rec.tilt` fired; for a tournament villain on 25bb or less, the tag of
+/// his best-ranked all-in read (his shoves, reshoves and calls of shoves:
+/// `TCS`, `SHV`, `RSV`, `ICM-`, `KO+`…), else `NNbb` (effective stack
+/// rounded down); the top-ranked read's tag; otherwise none. `ranked` must
+/// be in [`rank`] order.
 pub fn chip_tag(ranked: &[EngineRuleResult], context: Option<&EngineContext>) -> Option<ChipTag> {
     if let Some(tilt) = ranked.iter().find(|r| r.rule_id == TILT_RULE) {
         return Some(ChipTag {
@@ -307,6 +320,16 @@ pub fn chip_tag(ranked: &[EngineRuleResult], context: Option<&EngineContext>) ->
     }
     if let Some(ctx) = context.filter(|c| tournament(c)) {
         if let Some(eff) = ctx.effective_stack_bb.filter(|e| *e <= STACK_TAG_MAX_BB + 1e-9) {
+            // The stack is already on the PokerStars table; his shove/call
+            // tendency is what wins chips at this depth (mock MTT session
+            // report, item 1).
+            let all_in_read = ranked
+                .iter()
+                .filter(|r| all_in(lever(&r.rule_id)))
+                .find_map(|r| r.tag.as_ref().filter(|t| is_valid_tag(t)).map(|t| (t, r)));
+            if let Some((text, read)) = all_in_read {
+                return Some(ChipTag { text: text.clone(), rule_id: read.rule_id.clone(), source: TagSource::Read });
+            }
             let short = ranked.iter().any(|r| r.rule_id == SHORT_STACK_RULE);
             return Some(ChipTag {
                 text: format!("{}bb", eff.max(0.0).floor() as u32),

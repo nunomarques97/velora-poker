@@ -3613,9 +3613,9 @@
               }
             ],
             "tag": {
-              "ruleId": "ctx.effective_stack",
-              "source": "stack",
-              "text": "24bb"
+              "ruleId": "stk.reshove.low",
+              "source": "read",
+              "text": "RS-"
             },
             "topReads": [
               {
@@ -5254,21 +5254,6 @@
           },
           "descriptions": [
             {
-              "advice": "Shove or fold against him; don't min-raise hands you'd fold to his jam.",
-              "category": "tendency",
-              "confidencePct": 100,
-              "confidenceTier": "high",
-              "evidence": [
-                {
-                  "opportunities": 1,
-                  "statName": "effective_stack_bb",
-                  "value": 2.3
-                }
-              ],
-              "observation": "Sits on 2.3bb effective after the last hand.",
-              "ruleId": "ctx.short_stack"
-            },
-            {
               "advice": "Call his rare shoves only with 88+, AJ+ and KQs (directly on your right).",
               "category": "tendency",
               "confidencePct": 87,
@@ -5282,33 +5267,26 @@
               ],
               "observation": "Open-shoves only 7% (5/69) when folded to at 15bb or less.",
               "ruleId": "stk.open_shove.tight"
+            },
+            {
+              "advice": "Shove or fold against him; don't min-raise hands you'd fold to his jam.",
+              "category": "tendency",
+              "confidencePct": 100,
+              "confidenceTier": "high",
+              "evidence": [
+                {
+                  "opportunities": 1,
+                  "statName": "effective_stack_bb",
+                  "value": 2.3
+                }
+              ],
+              "observation": "Sits on 2.3bb effective after the last hand.",
+              "ruleId": "ctx.short_stack"
             }
           ],
           "engine": {
             "reads": [
               {
-                "advice": "Shove or fold against him; don't min-raise hands you'd fold to his jam.",
-                "category": "tendency",
-                "confidencePct": 100,
-                "confidenceTier": "high",
-                "evidence": [
-                  {
-                    "hits": 0,
-                    "opportunities": 1,
-                    "shrunk": null,
-                    "statName": "effective_stack_bb",
-                    "value": 2.3
-                  }
-                ],
-                "family": "context",
-                "observation": "Sits on 2.3bb effective after the last hand.",
-                "ruleId": "ctx.short_stack",
-                "sample": null,
-                "scenarioId": "S04",
-                "score": 2.5,
-                "tag": "2bb"
-              },
-              {
                 "advice": "Call his rare shoves only with 88+, AJ+ and KQs (directly on your right).",
                 "category": "tendency",
                 "confidencePct": 87,
@@ -5332,36 +5310,36 @@
                 "scenarioId": "S01",
                 "score": 0.824840907522397,
                 "tag": "NSV"
+              },
+              {
+                "advice": "Shove or fold against him; don't min-raise hands you'd fold to his jam.",
+                "category": "tendency",
+                "confidencePct": 100,
+                "confidenceTier": "high",
+                "evidence": [
+                  {
+                    "hits": 0,
+                    "opportunities": 1,
+                    "shrunk": null,
+                    "statName": "effective_stack_bb",
+                    "value": 2.3
+                  }
+                ],
+                "family": "context",
+                "observation": "Sits on 2.3bb effective after the last hand.",
+                "ruleId": "ctx.short_stack",
+                "sample": null,
+                "scenarioId": "S04",
+                "score": 2.5,
+                "tag": "2bb"
               }
             ],
             "tag": {
-              "ruleId": "ctx.short_stack",
-              "source": "stack",
-              "text": "2bb"
+              "ruleId": "stk.open_shove.tight",
+              "source": "read",
+              "text": "NSV"
             },
             "topReads": [
-              {
-                "advice": "Shove or fold against him; don't min-raise hands you'd fold to his jam.",
-                "category": "tendency",
-                "confidencePct": 100,
-                "confidenceTier": "high",
-                "evidence": [
-                  {
-                    "hits": 0,
-                    "opportunities": 1,
-                    "shrunk": null,
-                    "statName": "effective_stack_bb",
-                    "value": 2.3
-                  }
-                ],
-                "family": "context",
-                "observation": "Sits on 2.3bb effective after the last hand.",
-                "ruleId": "ctx.short_stack",
-                "sample": null,
-                "scenarioId": "S04",
-                "score": 2.5,
-                "tag": "2bb"
-              },
               {
                 "advice": "Call his rare shoves only with 88+, AJ+ and KQs (directly on your right).",
                 "category": "tendency",
@@ -5386,6 +5364,28 @@
                 "scenarioId": "S01",
                 "score": 0.824840907522397,
                 "tag": "NSV"
+              },
+              {
+                "advice": "Shove or fold against him; don't min-raise hands you'd fold to his jam.",
+                "category": "tendency",
+                "confidencePct": 100,
+                "confidenceTier": "high",
+                "evidence": [
+                  {
+                    "hits": 0,
+                    "opportunities": 1,
+                    "shrunk": null,
+                    "statName": "effective_stack_bb",
+                    "value": 2.3
+                  }
+                ],
+                "family": "context",
+                "observation": "Sits on 2.3bb effective after the last hand.",
+                "ruleId": "ctx.short_stack",
+                "sample": null,
+                "scenarioId": "S04",
+                "score": 2.5,
+                "tag": "2bb"
               }
             ],
             "version": 1
@@ -5642,21 +5642,6 @@
           },
           "descriptions": [
             {
-              "advice": "You don't cover him: ignore his bounty and call his shoves with 55+, A9+, KQ.",
-              "category": "tendency",
-              "confidencePct": 100,
-              "confidenceTier": "high",
-              "evidence": [
-                {
-                  "opportunities": 1,
-                  "statName": "bounty_ratio",
-                  "value": 3.0
-                }
-              ],
-              "observation": "Carries a 3× bounty ($15.00).",
-              "ruleId": "ko.big_bounty"
-            },
-            {
               "advice": "Jam 99+, AJ+ and KQs over his 3-bets of your opens.",
               "category": "exploit",
               "confidencePct": 58,
@@ -5715,32 +5700,25 @@
               ],
               "observation": "Raises 25% (4/16) of river bets he faces.",
               "ruleId": "post.river_raise.high"
+            },
+            {
+              "advice": "You don't cover him: ignore his bounty and call his shoves with 55+, A9+, KQ.",
+              "category": "tendency",
+              "confidencePct": 100,
+              "confidenceTier": "high",
+              "evidence": [
+                {
+                  "opportunities": 1,
+                  "statName": "bounty_ratio",
+                  "value": 3.0
+                }
+              ],
+              "observation": "Carries a 3× bounty ($15.00).",
+              "ruleId": "ko.big_bounty"
             }
           ],
           "engine": {
             "reads": [
-              {
-                "advice": "You don't cover him: ignore his bounty and call his shoves with 55+, A9+, KQ.",
-                "category": "tendency",
-                "confidencePct": 100,
-                "confidenceTier": "high",
-                "evidence": [
-                  {
-                    "hits": 0,
-                    "opportunities": 1,
-                    "shrunk": null,
-                    "statName": "bounty_ratio",
-                    "value": 3.0
-                  }
-                ],
-                "family": "bounty",
-                "observation": "Carries a 3× bounty ($15.00).",
-                "ruleId": "ko.big_bounty",
-                "sample": null,
-                "scenarioId": "K01",
-                "score": 2.5,
-                "tag": "KO"
-              },
               {
                 "advice": "Jam 99+, AJ+ and KQs over his 3-bets of your opens.",
                 "category": "exploit",
@@ -5840,14 +5818,7 @@
                 "scenarioId": "F11",
                 "score": 0.9468024557046455,
                 "tag": "RR+"
-              }
-            ],
-            "tag": {
-              "ruleId": "ko.big_bounty",
-              "source": "read",
-              "text": "KO"
-            },
-            "topReads": [
+              },
               {
                 "advice": "You don't cover him: ignore his bounty and call his shoves with 55+, A9+, KQ.",
                 "category": "tendency",
@@ -5869,7 +5840,14 @@
                 "scenarioId": "K01",
                 "score": 2.5,
                 "tag": "KO"
-              },
+              }
+            ],
+            "tag": {
+              "ruleId": "h2h.3bet_vs_hero.high",
+              "source": "read",
+              "text": "H2H"
+            },
+            "topReads": [
               {
                 "advice": "Jam 99+, AJ+ and KQs over his 3-bets of your opens.",
                 "category": "exploit",
@@ -5894,6 +5872,31 @@
                 "scenarioId": "H01",
                 "score": 1.6606342541605479,
                 "tag": "H2H"
+              },
+              {
+                "advice": "Min-raise wider into him; call his reshove with JJ+ and AK (directly on your left).",
+                "category": "tendency",
+                "confidencePct": 80,
+                "confidenceTier": "high",
+                "evidence": [
+                  {
+                    "hits": 0,
+                    "opportunities": 40,
+                    "shrunk": 2.2,
+                    "statName": "reshove",
+                    "value": 0.0
+                  }
+                ],
+                "family": "stack",
+                "observation": "Reshoves only 0% (0/40) over opens at 15–25bb.",
+                "ruleId": "stk.reshove.low",
+                "sample": {
+                  "count": 40,
+                  "unit": "opportunities"
+                },
+                "scenarioId": "S03",
+                "score": 1.6209342518577332,
+                "tag": "RS-"
               }
             ],
             "version": 1

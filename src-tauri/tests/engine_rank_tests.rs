@@ -15,11 +15,11 @@ use velora_poker_lib::classification::{self, PlayerClassification};
 use velora_poker_lib::commands::{active_table_payloads, build_player_payload};
 use velora_poker_lib::db;
 use velora_poker_lib::description_rules::{ConfidenceTier, RuleCategory};
-use velora_poker_lib::engine::rank::{context_multiplier, score, spot_weight, H2H_WEIGHT, MINOR_SPOT_WEIGHT};
+use velora_poker_lib::engine::rank::{context_multiplier, is_fact, score, spot_weight, H2H_WEIGHT, MINOR_SPOT_WEIGHT};
 use velora_poker_lib::engine::{
     chip_tag, engine_payload, evaluate_rules, is_valid_tag, latest_table_hand, player_replay, rank,
     rank_reads, rule_def, stat_spec, villain_context, EngineCache, EngineContext, EngineRuleResult, Family,
-    FormatKey, RuleInput, ShrunkStat, StackBucket, StatKey, TagSource, RULES,
+    BountyContext, FormatKey, RuleInput, ShrunkStat, StackBucket, StatKey, TagSource, RULES,
 };
 
 // ------------------------------------------------------------------ helpers
@@ -152,8 +152,63 @@ fn ranking_orders_by_money_relevance_score() {
             assert_eq!(r.multiplier, context_multiplier(def, input.context.as_ref()), "{}", r.rule_id);
             assert!((r.score - r.deviation * r.confidence * r.weight * r.multiplier).abs() < 1e-12, "{}", r.rule_id);
         }
-        assert!(ranked.windows(2).all(|w| w[0].score >= w[1].score), "{:?}", ids(&ranked));
+        // Facts of the latest hand rank below every tendency (mock MTT
+        // session report, item 5); within each group the score never rises.
+        let first_fact = ranked.iter().position(|r| is_fact(&r.rule_id)).unwrap_or(ranked.len());
+        assert!(ranked[first_fact..].iter().all(|r| is_fact(&r.rule_id)), "{:?}", ids(&ranked));
+        for group in [&ranked[..first_fact], &ranked[first_fact..]] {
+            assert!(group.windows(2).all(|w| w[0].score >= w[1].score), "{:?}", ids(&ranked));
+        }
     }
+}
+
+#[test]
+fn stack_and_bounty_facts_rank_below_every_tendency() {
+    // `ctx.short_stack` (2.5), `ko.big_bounty` (up to 3) and
+    // `ctx.deep_stack` (0.5) are facts at 100% confidence, not reads of the
+    // player: a 0.3 tendency still goes first, and the facts keep their own
+    // score order after the tendencies (mock MTT session report, item 5).
+    assert!(is_fact("ctx.short_stack") && is_fact("ctx.deep_stack") && is_fact("ko.big_bounty"));
+    for id in ["stk.call_shove.tight", "ko.calls_when_covering", "ko.hunts_bounties", "rec.tilt", "sd.tell.big_is_value"] {
+        assert!(!is_fact(id), "{id}");
+    }
+    let short = read("ctx.short_stack", Some("12bb"), 2.5, 1.0, 1.0);
+    let bounty = read("ko.big_bounty", Some("KO"), 3.0, 1.0, 1.0);
+    let deep = read("ctx.deep_stack", Some("DEEP"), 0.5, 1.0, 1.0);
+    let tcs = read("stk.call_shove.tight", Some("TCS"), 1.0, 0.6, 1.5);
+    let weak = read("pf.limp.high", Some("LMP"), 0.5, 0.6, 1.0);
+    let orders = [
+        vec![short.clone(), bounty.clone(), deep.clone(), tcs.clone(), weak.clone()],
+        vec![weak.clone(), deep.clone(), tcs.clone(), bounty.clone(), short.clone()],
+    ];
+    for order in orders {
+        assert_eq!(
+            ids(&rank(order)),
+            ["stk.call_shove.tight", "pf.limp.high", "ko.big_bounty", "ctx.short_stack", "ctx.deep_stack"]
+        );
+    }
+    // The hover card's top two are tendencies; a fact fills a slot only
+    // when there is no second tendency.
+    let ranked = rank_reads(vec![short.clone(), bounty.clone(), tcs.clone(), weak], None);
+    assert_eq!(ids(&ranked.top_reads), ["stk.call_shove.tight", "pf.limp.high"]);
+    let ranked = rank_reads(vec![short, bounty, tcs], None);
+    assert_eq!(ids(&ranked.top_reads), ["stk.call_shove.tight", "ko.big_bounty"]);
+
+    // On real rule output: a short-stacked knockout villain with a big
+    // bounty and a tight call-vs-shove read.
+    let format = FormatKey::Mtt;
+    let prior = builtin(format);
+    let mut input = RuleInput::default();
+    input.stats.insert(StatKey::CallVsShove, ShrunkStat::new(StatKey::CallVsShove, 2, 60, prior(StatKey::CallVsShove)));
+    let mut ctx = context(format, Some(9.0));
+    ctx.bounty = Some(BountyContext { amount: 20.0, currency: Some("USD".into()), ratio: Some(4.0), hero_covers: Some(true) });
+    input.context = Some(ctx);
+    let ranked = rank(evaluate_rules(&input));
+    let got = ids(&ranked);
+    assert!(got.contains(&"stk.call_shove.tight") && got.contains(&"ko.big_bounty") && got.contains(&"ctx.short_stack"), "{got:?}");
+    assert_eq!(got[0], "stk.call_shove.tight", "{got:?}");
+    let first_fact = got.iter().position(|id| is_fact(id)).unwrap();
+    assert!(got[first_fact..].iter().all(|id| is_fact(id)), "{got:?}");
 }
 
 #[test]
@@ -215,9 +270,10 @@ fn tag_precedence_tilt_then_stack_then_top_read() {
     let tilt = read("rec.tilt", Some("TILT"), 0.5, 0.5, 1.0);
     let short = read("ctx.short_stack", Some("12bb"), 2.5, 1.0, 1.0);
 
-    // (1) Tilt beats everything, even ranked last and with a short stack.
+    // (1) Tilt beats everything, even ranked below another read and with a
+    // short stack (the stack fact ranks after every tendency).
     let reads = rank(vec![top.clone(), tilt.clone(), short.clone()]);
-    assert_eq!(reads.last().unwrap().rule_id, "rec.tilt");
+    assert_eq!(ids(&reads), ["pf.fold_to_3bet.high", "rec.tilt", "ctx.short_stack"]);
     let tag = chip_tag(&reads, Some(&context(FormatKey::Mtt, Some(12.4)))).unwrap();
     assert_eq!((tag.text.as_str(), tag.rule_id.as_str(), tag.source), ("TILT", "rec.tilt", TagSource::Tilt));
 
@@ -245,6 +301,56 @@ fn tag_precedence_tilt_then_stack_then_top_read() {
     // (4) Nothing to say: no tag segment.
     assert_eq!(chip_tag(&[], None), None);
     assert_eq!(chip_tag(&[], Some(&context(FormatKey::Cash, Some(100.0)))), None);
+}
+
+#[test]
+fn short_stack_chip_shows_his_all_in_read_over_the_stack() {
+    // Mock MTT session report, item 1: at 25bb or less the tag slot names
+    // his shove/call tendency (the stack is already on the PokerStars
+    // table); the stack tag remains only when he has no all-in read.
+    let short = read("ctx.short_stack", Some("12bb"), 2.5, 1.0, 1.0);
+    let steal = read("pf.steal.high", Some("ST+"), 3.0, 0.9, 1.0);
+    let tilt = read("rec.tilt", Some("TILT"), 0.5, 0.5, 1.0);
+    let all_in = [
+        ("stk.call_shove.tight", "TCS"),
+        ("stk.call_shove.wide", "CLS"),
+        ("stk.open_shove.wide", "SHV"),
+        ("stk.open_shove.tight", "NSV"),
+        ("stk.reshove.high", "RSV"),
+        ("stk.reshove.low", "RS-"),
+        ("stage.late.calls_shoves", "ICM-"),
+        ("stage.late.shoves_wide", "SHV"),
+        ("ko.calls_when_covering", "KO+"),
+        ("ko.hunts_bounties", "HNT"),
+    ];
+    for (id, text) in all_in {
+        // Ranked below a non-all-in read and the stack fact, it still names the chip.
+        let shove = read(id, Some(text), 0.4, 0.5, 1.0);
+        let reads = rank(vec![short.clone(), steal.clone(), shove.clone()]);
+        assert_ne!(reads[0].rule_id, id);
+        for (format, eff) in [(FormatKey::Mtt, 12.9), (FormatKey::Mtt, 25.0), (FormatKey::Spin, 8.0)] {
+            let tag = chip_tag(&reads, Some(&context(format, Some(eff)))).unwrap();
+            assert_eq!((tag.text.as_str(), tag.rule_id.as_str(), tag.source), (text, id, TagSource::Read), "{format:?} {eff}");
+        }
+        // Tilt still comes first.
+        let with_tilt = rank(vec![short.clone(), shove.clone(), tilt.clone()]);
+        assert_eq!(chip_tag(&with_tilt, Some(&context(FormatKey::Mtt, Some(12.0)))).unwrap().source, TagSource::Tilt);
+        // Above 25bb and in cash games the top read keeps the tag.
+        for ctx in [context(FormatKey::Mtt, Some(25.1)), context(FormatKey::Cash, Some(12.0))] {
+            assert_eq!(chip_tag(&reads, Some(&ctx)).unwrap().text, "ST+");
+        }
+    }
+    // The best-ranked all-in read wins when he has several.
+    let reads = rank(vec![
+        read("stk.reshove.high", Some("RSV"), 0.5, 0.5, 1.0),
+        read("stage.late.calls_shoves", Some("ICM-"), 1.0, 0.8, 1.25),
+        short.clone(),
+    ]);
+    assert_eq!(chip_tag(&reads, Some(&context(FormatKey::Mtt, Some(18.0)))).unwrap().text, "ICM-");
+    // No all-in read: the stack tag, as before.
+    let reads = rank(vec![short, steal]);
+    let tag = chip_tag(&reads, Some(&context(FormatKey::Mtt, Some(12.9)))).unwrap();
+    assert_eq!((tag.text.as_str(), tag.source), ("12bb", TagSource::Stack));
 }
 
 #[test]
