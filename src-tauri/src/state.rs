@@ -80,8 +80,10 @@ impl AppState {
             settings::detect_default_hand_history_dir().map(|p| p.to_string_lossy().to_string())
         });
 
+        // "starting", not "watching": no watcher exists yet. The startup
+        // thread in `lib.rs` sets the real status once it has tried.
         let parser_status = if configured_dir.is_some() {
-            "watching".to_string()
+            "starting".to_string()
         } else {
             "not_configured".to_string()
         };

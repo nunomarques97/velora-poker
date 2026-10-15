@@ -187,6 +187,11 @@
   overflow-wrap: anywhere;
 }
 
+/* A watcher that failed (or never started) means frozen HUDs: never subtle. */
+.statusValueError {
+  color: var(--negative);
+}
+
 .roomRow {
   display: flex;
   align-items: center;

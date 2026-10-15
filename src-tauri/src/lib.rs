@@ -167,22 +167,10 @@ pub fn run() {
                     std::thread::spawn(move || {
                         let state = thread_handle.state::<AppState>();
 
-                        let summary = {
-                            let mut conn = match state.conn.lock() {
-                                Ok(conn) => conn,
-                                Err(_) => return,
-                            };
-                            match import::import_directory(&mut conn, &dir_path) {
-                                Ok(summary) => summary,
-                                Err(err) => {
-                                    eprintln!("initial hand history import failed: {err}");
-                                    if let Ok(mut import_state) = state.import.lock() {
-                                        import_state.parser_status = format!("error: {err}");
-                                    }
-                                    return;
-                                }
-                            }
-                        };
+                        // Never aborts: an unreadable file is skipped and
+                        // counted, and a poisoned lock is recovered, so the
+                        // watcher below always gets started.
+                        let summary = import::run_backlog_import(&state.conn, &dir_path);
 
                         if summary.hands_imported > 0 {
                             if let Ok(mut import_state) = state.import.lock() {
@@ -191,20 +179,30 @@ pub fn run() {
                             let _ = thread_handle.emit("hands-imported", summary.hands_imported);
                         }
 
-                        match watcher::start_watching(thread_handle.clone(), dir_path) {
+                        let watcher_error = match watcher::start_watching(thread_handle.clone(), dir_path) {
                             Ok(w) => {
                                 if let Ok(mut watcher_slot) = state.watcher.lock() {
                                     *watcher_slot = Some(w);
                                 }
+                                None
                             }
                             Err(err) => {
                                 eprintln!("failed to start hand history watcher: {err}");
-                                if let Ok(mut import_state) = state.import.lock() {
-                                    import_state.parser_status = format!("error: {err}");
-                                }
+                                Some(err.to_string())
                             }
-                        }
+                        };
+                        let status =
+                            import::status_after_startup(&summary, watcher_error.as_deref());
+                        if let Ok(mut import_state) = state.import.lock() {
+                            import_state.parser_status = status;
+                        };
                     });
+                } else {
+                    let state = app.state::<AppState>();
+                    if let Ok(mut import_state) = state.import.lock() {
+                        import_state.parser_status =
+                            format!("error: hand history folder not found: {dir}");
+                    };
                 }
             }
 

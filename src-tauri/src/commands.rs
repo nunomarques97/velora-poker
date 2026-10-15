@@ -968,21 +968,20 @@ pub fn set_hand_history_dir(
     {
         let mut import_state = state.import.lock().map_err(|e| e.to_string())?;
         import_state.configured_dir = Some(path.clone());
-        import_state.parser_status = "watching".to_string();
         if summary.hands_imported > 0 {
             import_state.last_import_at = Some(db::now_iso());
         }
     }
 
-    match watcher::start_watching(app_handle.clone(), dir_path) {
+    let watcher_error = match watcher::start_watching(app_handle.clone(), dir_path) {
         Ok(w) => {
             *state.watcher.lock().map_err(|e| e.to_string())? = Some(w);
+            None
         }
-        Err(err) => {
-            let mut import_state = state.import.lock().map_err(|e| e.to_string())?;
-            import_state.parser_status = format!("error: {err}");
-        }
-    }
+        Err(err) => Some(err.to_string()),
+    };
+    state.import.lock().map_err(|e| e.to_string())?.parser_status =
+        import::status_after_startup(&summary, watcher_error.as_deref());
 
     if summary.hands_imported > 0 {
         let _ = app_handle.emit("hands-imported", summary.hands_imported);

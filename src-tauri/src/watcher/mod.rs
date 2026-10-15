@@ -19,7 +19,19 @@ pub fn start_watching(
     dir: PathBuf,
 ) -> notify::Result<RecommendedWatcher> {
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        let Ok(event) = res else { return };
+        let event = match res {
+            Ok(event) => event,
+            Err(err) => {
+                // Surfaced in Settings instead of dropped: a watcher that
+                // stopped delivering events leaves every HUD frozen.
+                eprintln!("hand history watcher error: {err}");
+                let state = app_handle.state::<AppState>();
+                if let Ok(mut import_state) = state.import.lock() {
+                    import_state.parser_status = import::status_for_watcher_error(&err.to_string());
+                }
+                return;
+            }
+        };
         if !matches!(event.kind, EventKind::Create(_) | EventKind::Modify(_)) {
             return;
         }
@@ -37,10 +49,12 @@ pub fn start_watching(
 fn handle_file_event(app_handle: &tauri::AppHandle, path: &Path) {
     let state = app_handle.state::<AppState>();
     let summary = {
-        let mut conn = match state.conn.lock() {
-            Ok(conn) => conn,
-            Err(_) => return,
-        };
+        // A lock poisoned by a panic elsewhere is recovered: returning here
+        // would silently stop every live import for the rest of the session.
+        let mut conn = state
+            .conn
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         match import::import_file(&mut conn, path) {
             Ok(summary) => summary,
             Err(err) => {
@@ -50,10 +64,16 @@ fn handle_file_event(app_handle: &tauri::AppHandle, path: &Path) {
         }
     };
 
-    if summary.hands_imported > 0 {
-        if let Ok(mut import_state) = state.import.lock() {
+    if let Ok(mut import_state) = state.import.lock() {
+        if let Some(status) = import::status_after_watched_import(&import_state.parser_status) {
+            import_state.parser_status = status;
+        }
+        if summary.hands_imported > 0 {
             import_state.last_import_at = Some(db::now_iso());
         }
+    }
+
+    if summary.hands_imported > 0 {
         // Event-driven refresh: the frontend (main window and overlay) listen
         // for this instead of polling SQLite on a timer.
         let _ = app_handle.emit("hands-imported", summary.hands_imported);

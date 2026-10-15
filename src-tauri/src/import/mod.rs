@@ -17,6 +17,10 @@ pub struct ImportSummary {
     /// Seat lines seen but not dealt into their hand — sitting out, or moved in
     /// from another table. Counted, not an error.
     pub seats_not_dealt_in: i64,
+    /// Files that could not be read at all (locked, deleted or moved
+    /// mid-scan). Skipped and logged, never fatal: the watcher re-imports a
+    /// file whole on its next change, so its hands arrive then.
+    pub files_failed: i64,
 }
 
 impl ImportSummary {
@@ -27,6 +31,7 @@ impl ImportSummary {
         self.hands_rejected_invalid += other.hands_rejected_invalid;
         self.hands_with_warnings += other.hands_with_warnings;
         self.seats_not_dealt_in += other.seats_not_dealt_in;
+        self.files_failed += other.files_failed;
     }
 }
 
@@ -125,12 +130,63 @@ pub fn import_directory(
     conn: &mut Connection,
     dir: &std::path::Path,
 ) -> Result<ImportSummary, String> {
+    Ok(import_files(conn, &collect_txt_files(dir)))
+}
+
+/// Imports each file in turn. A file that cannot be read is logged, counted
+/// in `files_failed` and skipped: one locked or vanished file must never stop
+/// the rest of the backlog (or, at startup, the watcher) from starting.
+pub fn import_files(conn: &mut Connection, paths: &[std::path::PathBuf]) -> ImportSummary {
     let mut summary = ImportSummary::default();
-    for path in collect_txt_files(dir) {
-        let file_summary = import_file(conn, &path)?;
-        summary.merge(file_summary);
+    for path in paths {
+        match import_file(conn, path) {
+            Ok(file_summary) => summary.merge(file_summary),
+            Err(err) => {
+                summary.files_failed += 1;
+                eprintln!("skipped unreadable hand history file {path:?}: {err}");
+            }
+        }
     }
-    Ok(summary)
+    summary
+}
+
+/// The startup backlog import. A lock poisoned by a panic elsewhere is
+/// recovered rather than treated as "nothing to do": a panicking hand import
+/// has already rolled its transaction back, so the connection is consistent.
+pub fn run_backlog_import(
+    conn: &std::sync::Mutex<Connection>,
+    dir: &std::path::Path,
+) -> ImportSummary {
+    let mut conn = conn.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+    import_files(&mut conn, &collect_txt_files(dir))
+}
+
+/// Parser status once the backlog import ran and the watcher was (or was
+/// not) started. `"watching"` only when a watcher really exists.
+pub fn status_after_startup(summary: &ImportSummary, watcher_error: Option<&str>) -> String {
+    match watcher_error {
+        Some(err) => format!("error: hand history watcher did not start: {err}"),
+        None if summary.files_failed > 0 => format!(
+            "watching ({} file{} could not be read; retried when PokerStars writes {})",
+            summary.files_failed,
+            if summary.files_failed == 1 { "" } else { "s" },
+            if summary.files_failed == 1 { "it" } else { "them" },
+        ),
+        None => "watching".to_string(),
+    }
+}
+
+/// Parser status after the running watcher reported an error event.
+pub fn status_for_watcher_error(err: &str) -> String {
+    format!("error: watcher: {err}")
+}
+
+/// After a watched file imported fine, the watcher evidently works again:
+/// clears a watcher error. Any other status is left unchanged (`None`).
+pub fn status_after_watched_import(current: &str) -> Option<String> {
+    current
+        .starts_with("error: watcher:")
+        .then(|| "watching".to_string())
 }
 
 /// Recursively collects `.txt` file paths under `dir`, descending into any

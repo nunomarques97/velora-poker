@@ -142,6 +142,8 @@ function formatParserStatus(status: string): string {
   switch (status) {
     case "watching":
       return "Watching for new hands";
+    case "starting":
+      return "Starting…";
     case "not_configured":
       return "No folder configured";
     default:
@@ -521,7 +523,13 @@ export function SettingsView() {
             </div>
             <div className={styles.statusCell}>
               <span className={styles.statusLabel}>Parser Status</span>
-              <span className={styles.statusValue}>
+              <span
+                className={
+                  state.data.parserStatus.startsWith("error")
+                    ? `${styles.statusValue} ${styles.statusValueError}`
+                    : styles.statusValue
+                }
+              >
                 {formatParserStatus(state.data.parserStatus)}
               </span>
             </div>
