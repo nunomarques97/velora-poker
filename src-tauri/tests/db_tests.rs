@@ -460,3 +460,101 @@ fn active_table_max_players_excludes_a_sitting_older_than_the_tracked_tables_own
         Some(3)
     );
 }
+
+/// A tournament hand in which Shorty shoves and loses everything to the
+/// hero: once it is over he has no chips and plays no next hand at this
+/// table (mock MTT session report, item 6 [orig 7]).
+const TOURNAMENT_BUST_HAND: &str = r#"PokerStars Hand #261851768300: Tournament #4025638900, $10+$1 USD Hold'em No Limit - Level V (50/100) - 2026/08/24 13:05:00 WET [2026/08/24 8:05:00 ET]
+Table '4025638900 7' 9-max Seat #1 is the button
+Seat 1: BustHero (5000 in chips)
+Seat 2: Shorty (800 in chips)
+Seat 3: Folder (3000 in chips)
+Seat 4: Sitter (4000 in chips)
+BustHero: posts the ante 10
+Shorty: posts the ante 10
+Folder: posts the ante 10
+Sitter: posts the ante 10
+Shorty: posts small blind 50
+Folder: posts big blind 100
+*** HOLE CARDS ***
+Dealt to BustHero [Ah Ad]
+Sitter: folds
+BustHero: raises 200 to 300
+Shorty: raises 490 to 790 and is all-in
+Folder: folds
+BustHero: calls 490
+*** FLOP *** [2c 7d 9h]
+*** TURN *** [2c 7d 9h] [Js]
+*** RIVER *** [2c 7d 9h Js] [3s]
+*** SHOW DOWN ***
+Shorty: shows [Kc Kd] (a pair of Kings)
+BustHero: shows [Ah Ad] (a pair of Aces)
+BustHero collected 1720 from pot
+Shorty finished the tournament in 45th place
+*** SUMMARY ***
+Total pot 1720 | Rake 0
+Board [2c 7d 9h Js 3s]
+Seat 1: BustHero (button) showed [Ah Ad] and won (1720) with a pair of Aces
+Seat 2: Shorty (small blind) showed [Kc Kd] and lost with a pair of Kings
+Seat 3: Folder (big blind) folded before Flop
+Seat 4: Sitter folded before Flop (didn't bet)
+"#;
+
+/// Report item 6: a player who busted in the table's latest hand leaves the
+/// roster (overlay chips and side panel) at once, instead of showing as a
+/// `0bb` ghost with call advice until the next hand. Players with chips left
+/// stay, with their seats.
+#[test]
+fn active_table_roster_drops_a_player_who_busted_in_the_latest_tournament_hand() {
+    let mut conn = setup_db();
+    import::import_text(&mut conn, TOURNAMENT_BUST_HAND).expect("import bust hand");
+
+    let rows = db::list_active_table_players_with_seats(&conn, Some("4025638900 7"), None).unwrap();
+    let mut names: Vec<String> = rows.iter().map(|p| p.name.clone()).collect();
+    names.sort();
+    assert_eq!(names, vec!["BustHero", "Folder", "Sitter"], "the busted player must leave the roster");
+    let folder = rows.iter().find(|r| r.name == "Folder").unwrap();
+    assert_eq!(folder.seat, Some(3));
+    assert_eq!(folder.seat_offset, Some(2), "seat offsets still rotate around the hero");
+}
+
+/// The hero is the seat anchor and his table stays open until he closes it,
+/// so a hero who busted keeps his own row (the other players' chips stay
+/// placed, as the mock session wanted between the bust and the close).
+#[test]
+fn active_table_roster_keeps_a_busted_hero_and_the_players_left() {
+    let mut conn = setup_db();
+    let hand = include_str!("fixtures/tournament_showdown_allin.txt");
+    import::import_text(&mut conn, hand).expect("import hero bust hand");
+
+    let rows = db::list_active_table_players_with_seats(&conn, Some("4025638884 1"), None).unwrap();
+    assert_eq!(rows.len(), 9, "nobody but the hero lost his stack; the hero stays");
+    let hero = rows.iter().find(|r| r.is_hero).expect("hero row");
+    assert_eq!(hero.name, "TourneyHero");
+    assert_eq!(hero.seat_offset, Some(0));
+}
+
+/// The same bust, through what the HUD actually reads: the overlay's
+/// payloads and the side panel's villains (both builds).
+#[test]
+fn overlay_and_side_panel_drop_a_player_who_just_busted() {
+    use velora_poker_lib::commands::{active_table_payloads, side_panel_snapshot, PanelTable};
+    use velora_poker_lib::engine::EngineCache;
+
+    let mut conn = setup_db();
+    import::import_text(&mut conn, TOURNAMENT_BUST_HAND).expect("import bust hand");
+    let mut cache = EngineCache::new();
+
+    let overlay = active_table_payloads(&conn, &mut cache, Some("4025638900 7"), None).unwrap();
+    let mut chips: Vec<String> = overlay.iter().map(|p| p.name.clone()).collect();
+    chips.sort();
+    assert_eq!(chips, vec!["BustHero", "Folder", "Sitter"]);
+
+    let table = PanelTable { table_id: 1, table_name: Some("4025638900 7".into()), since: None };
+    let snapshot = side_panel_snapshot(&conn, &mut cache, &[table]).unwrap();
+    let panel = &snapshot.tables[0];
+    let mut villains: Vec<String> = panel.villains.iter().map(|v| v.name.clone()).collect();
+    villains.sort();
+    assert_eq!(villains, vec!["Folder", "Sitter"]);
+    assert_eq!(panel.player_count, 3);
+}

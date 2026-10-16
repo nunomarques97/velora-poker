@@ -1351,6 +1351,15 @@ pub fn list_active_table_players_with_seats(
         })?
         .collect::<Result<Vec<_>, _>>()?;
 
+    // A player who busted in this hand plays no next hand here: he leaves
+    // the roster at once rather than lingering as a `0bb` ghost until the
+    // next hand (mock MTT session report, item 6 [orig 7]). The hero stays:
+    // he is the seat anchor and his table stays open until he closes it.
+    let busted = busted_in_latest_hand(conn, table_name, since)?;
+    if !busted.is_empty() {
+        rows.retain(|r| r.is_hero || !busted.contains(&r.name));
+    }
+
     // Resolved here rather than by the caller so there is exactly one
     // place that knows how a stored HUD position is keyed. Both inputs come
     // from the same hand the seats above came from. `since` passed through
@@ -1368,6 +1377,40 @@ pub fn list_active_table_players_with_seats(
     }
 
     Ok(rows)
+}
+
+/// Names of the players with no chips once the latest hand in this scope
+/// (same latest-hand definition as `list_active_table_players_with_seats`)
+/// was over, read from the hand's own lines (`closing_stack`). Tournament
+/// hands only: a cash player at zero may reload, and his net result already
+/// says what he lost. Empty when the stored text no longer parses, so a
+/// parser gap can never hide a player who still has chips.
+fn busted_in_latest_hand(
+    conn: &Connection,
+    table_name: Option<&str>,
+    since: Option<&str>,
+) -> rusqlite::Result<std::collections::HashSet<String>> {
+    let latest: Option<(String, String)> = conn
+        .query_row(
+            "SELECT format, COALESCE(raw_text, '') FROM hands
+             WHERE (?1 IS NULL OR table_name = ?1)
+               AND (?2 IS NULL OR played_at >= ?2)
+             ORDER BY played_at DESC, id DESC LIMIT 1",
+            params![table_name, since],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?;
+    let Some((format, raw_text)) = latest else { return Ok(Default::default()) };
+    if format != crate::parser::HandFormat::Tournament.as_str() {
+        return Ok(Default::default());
+    }
+    let Ok(parsed) = crate::parser::parse_hand_block(&raw_text) else { return Ok(Default::default()) };
+    Ok(parsed
+        .results
+        .into_iter()
+        .filter(|(_, result)| result.closing_stack.is_some_and(|chips| chips <= 0.0))
+        .map(|(name, _)| name)
+        .collect())
 }
 
 /// `max_seats` of the current active table (same latest-hand definition and
