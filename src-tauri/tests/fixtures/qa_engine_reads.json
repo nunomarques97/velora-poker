@@ -578,21 +578,6 @@
               "ruleId": "post.probe.high"
             },
             {
-              "advice": "Shove only pairs, aces and broadways into him; no K5o or 65s-type shoves.",
-              "category": "exploit",
-              "confidencePct": 91,
-              "confidenceTier": "high",
-              "evidence": [
-                {
-                  "opportunities": 97,
-                  "statName": "call_vs_shove",
-                  "value": 53.6
-                }
-              ],
-              "observation": "Calls 54% (52/97) of all-in shoves.",
-              "ruleId": "stk.call_shove.wide"
-            },
-            {
               "advice": "Bluff him less on turns and rivers; call his flop bets with any pair.",
               "category": "tendency",
               "confidencePct": 96,
@@ -686,6 +671,21 @@
               ],
               "observation": "Stabs 88% (7/8) of turns checked to him after calling the flop in position.",
               "ruleId": "post.float.high"
+            },
+            {
+              "advice": "Shove only pairs, aces and broadways into him; no K5o or 65s-type shoves.",
+              "category": "exploit",
+              "confidencePct": 91,
+              "confidenceTier": "high",
+              "evidence": [
+                {
+                  "opportunities": 97,
+                  "statName": "call_vs_shove",
+                  "value": 53.6
+                }
+              ],
+              "observation": "Calls 54% (52/97) of all-in shoves.",
+              "ruleId": "stk.call_shove.wide"
             }
           ],
           "engine": {
@@ -866,31 +866,6 @@
                 "tag": "PRB"
               },
               {
-                "advice": "Shove only pairs, aces and broadways into him; no K5o or 65s-type shoves.",
-                "category": "exploit",
-                "confidencePct": 91,
-                "confidenceTier": "high",
-                "evidence": [
-                  {
-                    "hits": 52,
-                    "opportunities": 97,
-                    "shrunk": 50.4,
-                    "statName": "call_vs_shove",
-                    "value": 53.6
-                  }
-                ],
-                "family": "stack",
-                "observation": "Calls 54% (52/97) of all-in shoves.",
-                "ruleId": "stk.call_shove.wide",
-                "sample": {
-                  "count": 97,
-                  "unit": "opportunities"
-                },
-                "scenarioId": "S02",
-                "score": 1.3815496647230743,
-                "tag": "CLS"
-              },
-              {
                 "advice": "Bluff him less on turns and rivers; call his flop bets with any pair.",
                 "category": "tendency",
                 "confidencePct": 96,
@@ -1046,6 +1021,31 @@
                 "scenarioId": "F09",
                 "score": 0.5956996004224004,
                 "tag": "FLT"
+              },
+              {
+                "advice": "Shove only pairs, aces and broadways into him; no K5o or 65s-type shoves.",
+                "category": "exploit",
+                "confidencePct": 91,
+                "confidenceTier": "high",
+                "evidence": [
+                  {
+                    "hits": 52,
+                    "opportunities": 97,
+                    "shrunk": 50.4,
+                    "statName": "call_vs_shove",
+                    "value": 53.6
+                  }
+                ],
+                "family": "stack",
+                "observation": "Calls 54% (52/97) of all-in shoves.",
+                "ruleId": "stk.call_shove.wide",
+                "sample": {
+                  "count": 97,
+                  "unit": "opportunities"
+                },
+                "scenarioId": "S02",
+                "score": 1.3815496647230743,
+                "tag": "CLS"
               }
             ],
             "tag": {
@@ -1639,21 +1639,6 @@
               "ruleId": "pf.3bet.low"
             },
             {
-              "advice": "Shove any two into him at 10bb or less; any pair, ace or suited king up to 20bb.",
-              "category": "exploit",
-              "confidencePct": 86,
-              "confidenceTier": "high",
-              "evidence": [
-                {
-                  "opportunities": 61,
-                  "statName": "call_vs_shove",
-                  "value": 4.9
-                }
-              ],
-              "observation": "Calls only 5% (3/61) of all-in shoves.",
-              "ruleId": "stk.call_shove.tight"
-            },
-            {
               "advice": "Fold weak top pair and worse to his all-in bets; call with two pair or better.",
               "category": "exploit",
               "confidencePct": 50,
@@ -1667,6 +1652,21 @@
               ],
               "observation": "Showed value in 3 of 4 all-in bets.",
               "ruleId": "sd.tell.big_is_value"
+            },
+            {
+              "advice": "Shove any two into him at 10bb or less; any pair, ace or suited king up to 20bb.",
+              "category": "exploit",
+              "confidencePct": 86,
+              "confidenceTier": "high",
+              "evidence": [
+                {
+                  "opportunities": 61,
+                  "statName": "call_vs_shove",
+                  "value": 4.9
+                }
+              ],
+              "observation": "Calls only 5% (3/61) of all-in shoves.",
+              "ruleId": "stk.call_shove.tight"
             }
           ],
           "engine": {
@@ -1804,6 +1804,31 @@
                 "tag": "3B-"
               },
               {
+                "advice": "Fold weak top pair and worse to his all-in bets; call with two pair or better.",
+                "category": "exploit",
+                "confidencePct": 50,
+                "confidenceTier": "medium",
+                "evidence": [
+                  {
+                    "hits": 3,
+                    "opportunities": 4,
+                    "shrunk": null,
+                    "statName": "showdown_all_in",
+                    "value": 75.0
+                  }
+                ],
+                "family": "showdown",
+                "observation": "Showed value in 3 of 4 all-in bets.",
+                "ruleId": "sd.tell.big_is_value",
+                "sample": {
+                  "count": 4,
+                  "unit": "hands"
+                },
+                "scenarioId": "M04",
+                "score": 0.25,
+                "tag": "SDV"
+              },
+              {
                 "advice": "Shove any two into him at 10bb or less; any pair, ace or suited king up to 20bb.",
                 "category": "exploit",
                 "confidencePct": 86,
@@ -1827,31 +1852,6 @@
                 "scenarioId": "S02",
                 "score": 0.8669325725285368,
                 "tag": "TCS"
-              },
-              {
-                "advice": "Fold weak top pair and worse to his all-in bets; call with two pair or better.",
-                "category": "exploit",
-                "confidencePct": 50,
-                "confidenceTier": "medium",
-                "evidence": [
-                  {
-                    "hits": 3,
-                    "opportunities": 4,
-                    "shrunk": null,
-                    "statName": "showdown_all_in",
-                    "value": 75.0
-                  }
-                ],
-                "family": "showdown",
-                "observation": "Showed value in 3 of 4 all-in bets.",
-                "ruleId": "sd.tell.big_is_value",
-                "sample": {
-                  "count": 4,
-                  "unit": "hands"
-                },
-                "scenarioId": "M04",
-                "score": 0.5,
-                "tag": "SDV"
               }
             ],
             "tag": {
@@ -2674,21 +2674,6 @@
               "ruleId": "pf.3bet.high_oop"
             },
             {
-              "advice": "Fold weak top pair and worse to his all-in bets; call with two pair or better.",
-              "category": "exploit",
-              "confidencePct": 56,
-              "confidenceTier": "medium",
-              "evidence": [
-                {
-                  "opportunities": 5,
-                  "statName": "showdown_all_in",
-                  "value": 100.0
-                }
-              ],
-              "observation": "Showed value in 5 of 5 all-in bets.",
-              "ruleId": "sd.tell.big_is_value"
-            },
-            {
               "advice": "Fold AJo, KQo and ATs to his early opens.",
               "category": "tendency",
               "confidencePct": 65,
@@ -2702,6 +2687,21 @@
               ],
               "observation": "Opens 7% (2/28) from early and middle seats.",
               "ruleId": "pf.rfi.tight_early"
+            },
+            {
+              "advice": "Fold weak top pair and worse to his all-in bets; call with two pair or better.",
+              "category": "exploit",
+              "confidencePct": 56,
+              "confidenceTier": "medium",
+              "evidence": [
+                {
+                  "opportunities": 5,
+                  "statName": "showdown_all_in",
+                  "value": 100.0
+                }
+              ],
+              "observation": "Showed value in 5 of 5 all-in bets.",
+              "ruleId": "sd.tell.big_is_value"
             }
           ],
           "engine": {
@@ -2807,31 +2807,6 @@
                 "tag": "3B+"
               },
               {
-                "advice": "Fold weak top pair and worse to his all-in bets; call with two pair or better.",
-                "category": "exploit",
-                "confidencePct": 56,
-                "confidenceTier": "medium",
-                "evidence": [
-                  {
-                    "hits": 5,
-                    "opportunities": 5,
-                    "shrunk": null,
-                    "statName": "showdown_all_in",
-                    "value": 100.0
-                  }
-                ],
-                "family": "showdown",
-                "observation": "Showed value in 5 of 5 all-in bets.",
-                "ruleId": "sd.tell.big_is_value",
-                "sample": {
-                  "count": 5,
-                  "unit": "hands"
-                },
-                "scenarioId": "M04",
-                "score": 1.1111111111111112,
-                "tag": "SDV"
-              },
-              {
                 "advice": "Fold AJo, KQo and ATs to his early opens.",
                 "category": "tendency",
                 "confidencePct": 65,
@@ -2855,6 +2830,31 @@
                 "scenarioId": "P01",
                 "score": 0.7175017557805088,
                 "tag": "NIT"
+              },
+              {
+                "advice": "Fold weak top pair and worse to his all-in bets; call with two pair or better.",
+                "category": "exploit",
+                "confidencePct": 56,
+                "confidenceTier": "medium",
+                "evidence": [
+                  {
+                    "hits": 5,
+                    "opportunities": 5,
+                    "shrunk": null,
+                    "statName": "showdown_all_in",
+                    "value": 100.0
+                  }
+                ],
+                "family": "showdown",
+                "observation": "Showed value in 5 of 5 all-in bets.",
+                "ruleId": "sd.tell.big_is_value",
+                "sample": {
+                  "count": 5,
+                  "unit": "hands"
+                },
+                "scenarioId": "M04",
+                "score": 0.5555555555555556,
+                "tag": "SDV"
               }
             ],
             "tag": {
@@ -4728,21 +4728,6 @@
               "ruleId": "pf.fold_to_steal.high"
             },
             {
-              "advice": "Shove any two into him at 10bb or less, tighter when he covers your bounty.",
-              "category": "exploit",
-              "confidencePct": 90,
-              "confidenceTier": "high",
-              "evidence": [
-                {
-                  "opportunities": 89,
-                  "statName": "call_vs_shove",
-                  "value": 12.4
-                }
-              ],
-              "observation": "Calls only 12% (11/89) of all-in shoves.",
-              "ruleId": "stk.call_shove.tight"
-            },
-            {
               "advice": "Fold weak top pair and worse to his all-in bets; call with two pair or better.",
               "category": "exploit",
               "confidencePct": 50,
@@ -4756,6 +4741,21 @@
               ],
               "observation": "Showed value in 3 of 4 all-in bets.",
               "ruleId": "sd.tell.big_is_value"
+            },
+            {
+              "advice": "Shove any two into him at 10bb or less, tighter when he covers your bounty.",
+              "category": "exploit",
+              "confidencePct": 90,
+              "confidenceTier": "high",
+              "evidence": [
+                {
+                  "opportunities": 89,
+                  "statName": "call_vs_shove",
+                  "value": 12.4
+                }
+              ],
+              "observation": "Calls only 12% (11/89) of all-in shoves.",
+              "ruleId": "stk.call_shove.tight"
             },
             {
               "advice": "Call his rare shoves only with 88+, AJ+ and KQs (on your right).",
@@ -4866,6 +4866,31 @@
                 "tag": "FTS"
               },
               {
+                "advice": "Fold weak top pair and worse to his all-in bets; call with two pair or better.",
+                "category": "exploit",
+                "confidencePct": 50,
+                "confidenceTier": "medium",
+                "evidence": [
+                  {
+                    "hits": 3,
+                    "opportunities": 4,
+                    "shrunk": null,
+                    "statName": "showdown_all_in",
+                    "value": 75.0
+                  }
+                ],
+                "family": "showdown",
+                "observation": "Showed value in 3 of 4 all-in bets.",
+                "ruleId": "sd.tell.big_is_value",
+                "sample": {
+                  "count": 4,
+                  "unit": "hands"
+                },
+                "scenarioId": "M04",
+                "score": 0.25,
+                "tag": "SDV"
+              },
+              {
                 "advice": "Shove any two into him at 10bb or less, tighter when he covers your bounty.",
                 "category": "exploit",
                 "confidencePct": 90,
@@ -4889,31 +4914,6 @@
                 "scenarioId": "S02",
                 "score": 0.647509786914934,
                 "tag": "TCS"
-              },
-              {
-                "advice": "Fold weak top pair and worse to his all-in bets; call with two pair or better.",
-                "category": "exploit",
-                "confidencePct": 50,
-                "confidenceTier": "medium",
-                "evidence": [
-                  {
-                    "hits": 3,
-                    "opportunities": 4,
-                    "shrunk": null,
-                    "statName": "showdown_all_in",
-                    "value": 75.0
-                  }
-                ],
-                "family": "showdown",
-                "observation": "Showed value in 3 of 4 all-in bets.",
-                "ruleId": "sd.tell.big_is_value",
-                "sample": {
-                  "count": 4,
-                  "unit": "hands"
-                },
-                "scenarioId": "M04",
-                "score": 0.5,
-                "tag": "SDV"
               },
               {
                 "advice": "Call his rare shoves only with 88+, AJ+ and KQs (on your right).",

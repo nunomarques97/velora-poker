@@ -45,6 +45,7 @@ fn read(id: &str, tag: Option<&str>, deviation: f64, confidence: f64, multiplier
         weight: 1.0,
         multiplier,
         adapted_by: Vec::new(),
+        out_of_depth: false,
     }
 }
 
@@ -149,7 +150,7 @@ fn ranking_orders_by_money_relevance_score() {
         assert!(ranked.len() >= 3, "{:?}", ids(&ranked));
         for r in &ranked {
             let def = rule_def(&r.rule_id);
-            assert_eq!(r.weight, spot_weight(def), "{}", r.rule_id);
+            assert_eq!(r.weight, velora_poker_lib::engine::rank::rank_weight(def, r.confidence), "{}", r.rule_id);
             assert_eq!(r.multiplier, context_multiplier(def, input.context.as_ref()), "{}", r.rule_id);
             assert!((r.score - r.deviation * r.confidence * r.weight * r.multiplier).abs() < 1e-12, "{}", r.rule_id);
         }
@@ -160,6 +161,91 @@ fn ranking_orders_by_money_relevance_score() {
         for group in [&ranked[..first_fact], &ranked[first_fact..]] {
             assert!(group.windows(2).all(|w| w[0].score >= w[1].score), "{:?}", ids(&ranked));
         }
+    }
+}
+
+/// Mock MTT session report, item 7: at 100bb OverbetOscar's top read was
+/// `CLS` "Calls 42% of all-in shoves" and his second "Reshoves only 0% over
+/// opens at 15–25bb". Above 60bb (`standard`, `deep`) his shoves, reshoves
+/// and calls of shoves rank after every other tendency, ahead of the
+/// facts; at 60bb or less nothing changes.
+#[test]
+fn all_in_reads_rank_after_every_other_tendency_above_60bb() {
+    use velora_poker_lib::engine::rank::{lever, out_of_depth, Lever};
+    let all_in = |id: &str| matches!(lever(id), Lever::Shove | Lever::Reshove | Lever::CallShove);
+    let format = FormatKey::Mtt;
+    let prior = builtin(format);
+    let mut input = RuleInput::default();
+    // A wide caller of shoves (40 of 60) and a mild limper.
+    input.stats.insert(StatKey::CallVsShove, ShrunkStat::new(StatKey::CallVsShove, 40, 60, prior(StatKey::CallVsShove)));
+    input.stats.insert(StatKey::Limp, ShrunkStat::new(StatKey::Limp, 30, 150, prior(StatKey::Limp)));
+    for eff in [100.0, 200.0] {
+        input.context = Some(context(format, Some(eff)));
+        let ranked = rank_reads(evaluate_rules(&input), input.context.as_ref());
+        let got = ids(&ranked.reads);
+        assert!(got.contains(&"stk.call_shove.wide") && got.contains(&"pf.limp.high"), "{eff}bb: {got:?}");
+        let tendencies: Vec<&&str> = got.iter().filter(|id| !is_fact(id)).collect();
+        let first_all_in = tendencies.iter().position(|id| all_in(id)).unwrap();
+        assert!(tendencies[first_all_in..].iter().all(|id| all_in(id)), "{eff}bb: {got:?}");
+        assert_eq!(got[0], "pf.limp.high", "{eff}bb: {got:?}");
+        assert_eq!(ranked.tag.as_ref().map(|t| t.text.as_str()), Some("LMP"), "{eff}bb");
+        for r in &ranked.reads {
+            assert_eq!(r.out_of_depth, all_in(&r.rule_id), "{eff}bb {}", r.rule_id);
+            assert_eq!(r.out_of_depth, out_of_depth(&r.rule_id, input.context.as_ref()), "{eff}bb {}", r.rule_id);
+        }
+    }
+    // At 60bb or less, and without a table, the score alone decides.
+    for ctx in [None, Some(context(format, Some(20.0))), Some(context(format, Some(50.0)))] {
+        input.context = ctx;
+        let ranked = rank_reads(evaluate_rules(&input), input.context.as_ref());
+        assert!(ranked.reads.iter().all(|r| !r.out_of_depth), "{:?}", ids(&ranked.reads));
+        assert_eq!(ranked.reads[0].rule_id, "stk.call_shove.wide", "{:?}", ids(&ranked.reads));
+    }
+
+    // Hand-built: the out-of-depth read goes after a smaller tendency and
+    // before the facts, whatever the input order.
+    let mut cls = read("stk.call_shove.wide", Some("CLS"), 3.0, 0.9, 0.6);
+    cls.out_of_depth = true;
+    let lmp = read("pf.limp.high", Some("LMP"), 0.5, 0.6, 1.0);
+    let deep = read("ctx.deep_stack", Some("DEEP"), 0.5, 1.0, 1.0);
+    for order in [vec![cls.clone(), lmp.clone(), deep.clone()], vec![deep.clone(), cls.clone(), lmp.clone()]] {
+        assert_eq!(ids(&rank(order)), ["pf.limp.high", "stk.call_shove.wide", "ctx.deep_stack"]);
+    }
+}
+
+/// Mock MTT session report, item 7: MonkeyTilt_88's top read was `SDV`
+/// from 4 showdowns (confidence 50%). Below 60% confidence a showdown tell
+/// ranks at half its weight; from 6 showdowns (60%) it keeps its full one.
+#[test]
+fn thin_showdown_tells_rank_at_half_weight_below_60_percent_confidence() {
+    use velora_poker_lib::engine::rank::{rank_weight, WEAK_SHOWDOWN_CONFIDENCE, WEAK_SHOWDOWN_WEIGHT};
+    use velora_poker_lib::engine::{SizeBucket, SizingTell};
+    assert_eq!((WEAK_SHOWDOWN_CONFIDENCE, WEAK_SHOWDOWN_WEIGHT), (0.6, 0.5));
+    let tell = |n: u32| SizingTell { bucket: SizeBucket::Overbet, value: n, bluff: 0, neither: 0, n };
+    let format = FormatKey::Cash;
+    let prior = builtin(format);
+    let mut input = RuleInput::default();
+    // A limp read scoring 0.90: below a 4-showdown tell at full weight
+    // (1.00), above it at half weight (0.50), below a 6-showdown tell (1.20).
+    input.stats.insert(StatKey::Limp, ShrunkStat::new(StatKey::Limp, 6, 30, prior(StatKey::Limp)));
+    input.context = Some(context(format, Some(100.0)));
+    for (n, tell_first) in [(4, false), (5, false), (6, true), (10, true)] {
+        input.sizing = vec![tell(n)];
+        let ranked = rank(evaluate_rules(&input));
+        let sd = ranked.iter().find(|r| r.rule_id == "sd.tell.big_is_value").unwrap_or_else(|| panic!("{n}: {:?}", ids(&ranked)));
+        let def = rule_def(&sd.rule_id);
+        let c = f64::from(n) / f64::from(n + 4);
+        let expected = if c < 0.6 - 1e-9 { 0.5 } else { 1.0 };
+        assert_eq!(sd.weight, expected, "{n} showdowns");
+        assert_eq!(sd.weight, rank_weight(def, sd.confidence), "{n} showdowns");
+        assert!((sd.score - 4.0 * 0.5 * c * expected).abs() < 1e-12, "{n}: {}", sd.score);
+        let lmp = ranked.iter().position(|r| r.rule_id == "pf.limp.high").expect("limp read");
+        let sd_at = ranked.iter().position(|r| r.rule_id == "sd.tell.big_is_value").unwrap();
+        assert_eq!(sd_at < lmp, tell_first, "{n} showdowns: {:?}", ids(&ranked));
+    }
+    // Stat reads keep their spot weight at any confidence.
+    for def in RULES.iter().filter(|d| d.family != Family::Showdown) {
+        assert_eq!(rank_weight(def, 0.1), spot_weight(def), "{}", def.id);
     }
 }
 

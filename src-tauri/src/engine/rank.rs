@@ -84,6 +84,22 @@ pub fn spot_weight(def: &RuleDef) -> f64 {
     }
 }
 
+/// Below this confidence a showdown tell is thin: 4 or 5 showdowns
+/// (`n/(n + 4)` < 60%, the `high` tier's floor). Mock MTT session report,
+/// item 7: a 4-showdown `SDV` (50%) ranked first. A higher showdown floor
+/// would remove most tells from MTT samples, so the read stays and ranks at
+/// [`WEAK_SHOWDOWN_WEIGHT`] instead.
+pub const WEAK_SHOWDOWN_CONFIDENCE: f64 = 0.6;
+/// Rank weight of a thin showdown tell, on top of its spot weight.
+pub const WEAK_SHOWDOWN_WEIGHT: f64 = 0.5;
+
+/// The weight `w` of a read's score: its [`spot_weight`], halved for a
+/// showdown read below [`WEAK_SHOWDOWN_CONFIDENCE`].
+pub fn rank_weight(def: &RuleDef, confidence: f64) -> f64 {
+    let thin = def.family == Family::Showdown && confidence < WEAK_SHOWDOWN_CONFIDENCE - 1e-9;
+    spot_weight(def) * if thin { WEAK_SHOWDOWN_WEIGHT } else { 1.0 }
+}
+
 // --------------------------------------------------- context (section 7.2)
 
 /// The kind of spot a read is about, which decides how the between-hands
@@ -231,6 +247,19 @@ fn bounty_factor(lever: Lever, ctx: &EngineContext) -> f64 {
     }
 }
 
+/// Whether a read is an all-in read (his shoves, reshoves and calls of
+/// shoves) played above 60bb effective (`standard`, `deep`): its sample
+/// comes from 25bb or less and its spot rarely arises this deep, so it
+/// ranks after every other tendency ([`compare`]). Mock MTT session report,
+/// item 7: at 100bb `CLS` and "reshoves only 0% at 15–25bb" were the top
+/// two reads. Any format; `None` (no table scope) is never out of depth.
+pub fn out_of_depth(rule_id: &str, context: Option<&EngineContext>) -> bool {
+    let deep = context
+        .and_then(|c| c.stack_bucket)
+        .is_some_and(|b| matches!(b, StackBucket::Standard | StackBucket::Deep));
+    deep && all_in(lever(rule_id))
+}
+
 /// The context multiplier of a read (section 7.2): seat × stack depth ×
 /// tournament stage × bounty, each 1.0 where it does not apply. `None`
 /// (no table scope) is 1.0.
@@ -249,12 +278,25 @@ pub fn is_fact(rule_id: &str) -> bool {
     rule_id.starts_with("ctx.") || rule_id == "ko.big_bounty"
 }
 
-/// Section 7's order: tendencies before facts ([`is_fact`]), then score
-/// descending, then confidence descending, then rule id ascending. Total
-/// and deterministic, whatever order the reads came in.
+/// Ranking group: tendencies, then all-in reads out of depth
+/// ([`out_of_depth`]), then facts ([`is_fact`]).
+fn group(read: &EngineRuleResult) -> u8 {
+    if is_fact(&read.rule_id) {
+        2
+    } else if read.out_of_depth {
+        1
+    } else {
+        0
+    }
+}
+
+/// Section 7's order: tendencies, then all-in reads out of depth, then
+/// facts ([`group`]), then score descending, then confidence descending,
+/// then rule id ascending. Total and deterministic, whatever order the
+/// reads came in.
 pub fn compare(a: &EngineRuleResult, b: &EngineRuleResult) -> Ordering {
-    is_fact(&a.rule_id)
-        .cmp(&is_fact(&b.rule_id))
+    group(a)
+        .cmp(&group(b))
         .then_with(|| b.score.total_cmp(&a.score))
         .then_with(|| b.confidence_pct.cmp(&a.confidence_pct))
         .then_with(|| a.rule_id.cmp(&b.rule_id))

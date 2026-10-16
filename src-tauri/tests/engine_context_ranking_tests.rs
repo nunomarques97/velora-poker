@@ -19,7 +19,7 @@ use serde_json::Value;
 use velora_poker_lib::db;
 use velora_poker_lib::description_rules::{ConfidenceTier, RuleCategory};
 use velora_poker_lib::engine::rank::{
-    context_multiplier, score, DEEP_ALL_IN, DEEP_POSTFLOP, EARLY_STAGE_LIMP, LATE_STAGE_PRIORITY, RESHOVE_PRIORITY,
+    context_multiplier, lever, score, Lever, DEEP_ALL_IN, DEEP_POSTFLOP, EARLY_STAGE_LIMP, LATE_STAGE_PRIORITY, RESHOVE_PRIORITY,
     SEAT_DIRECT, SEAT_OTHER_SIDE_DIRECT, STANDARD_ALL_IN,
 };
 use velora_poker_lib::engine::rules::{
@@ -437,6 +437,16 @@ fn check_opposites(conn: &Connection, cache: &mut EngineCache, n: u32, tournamen
                         reversed.reverse();
                         assert_eq!(rank(reversed), p.reads, "{name} {ctx:?}: ranking depends on input order");
                         assert_eq!(p.top_reads[..], p.reads[..p.top_reads.len()]);
+                        // Above 60bb his all-in reads rank after every other
+                        // tendency (mock MTT session report, item 7).
+                        let all_in = |id: &str| matches!(lever(id), Lever::Shove | Lever::Reshove | Lever::CallShove);
+                        let order = tendency(&p);
+                        if eff > 60.0 {
+                            if let Some(first) = order.iter().position(|id| all_in(id)) {
+                                assert!(order[first..].iter().all(|id| all_in(id)), "{name} {ctx:?}: {order:?}");
+                            }
+                        }
+                        assert!(p.reads.iter().all(|r| r.out_of_depth == (eff > 60.0 && all_in(&r.rule_id))), "{name} {eff}bb");
                         checked += 1;
                     }
                 }
@@ -500,6 +510,7 @@ fn context_ranking_tie_break_is_deterministic() {
         weight,
         multiplier,
         adapted_by: Vec::new(),
+        out_of_depth: false,
     };
     // 2.0 × 0.5 × 1 × 1.25 = 1.25 × 0.8 × 1.25 × 1 = 1.0 × 0.5 × 1 × 2.5:
     // equal scores, the h2h read surer than the two others.

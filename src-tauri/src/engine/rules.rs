@@ -732,6 +732,10 @@ pub struct EngineRuleResult {
     /// variants).
     #[serde(skip)]
     pub adapted_by: Vec<&'static str>,
+    /// An all-in read above 60bb effective (section 7): it ranks after
+    /// every other tendency.
+    #[serde(skip)]
+    pub out_of_depth: bool,
 }
 
 impl EngineRuleResult {
@@ -1340,7 +1344,7 @@ impl Out<'_> {
         if !self.adapt.eligible(def) || tier == ConfidenceTier::InsufficientData {
             return;
         }
-        let weight = super::rank::spot_weight(def);
+        let weight = super::rank::rank_weight(def, confidence);
         let multiplier = self.adapt.multiplier(def);
         let (advice, adapted_by) = self.adapt.advice(def);
         let (deviation, score) = match score {
@@ -1365,6 +1369,7 @@ impl Out<'_> {
             weight,
             multiplier,
             adapted_by,
+            out_of_depth: super::rank::out_of_depth(def.id, self.adapt.context),
         });
     }
 
