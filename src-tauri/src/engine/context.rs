@@ -141,6 +141,9 @@ pub struct EngineContext {
     pub variant: Option<String>,
     pub format: FormatKey,
     pub effective_stack_bb: Option<f64>,
+    /// His own stack after the hand in big blinds, never clamped to the
+    /// hero's (the stack tag shows it). One decimal.
+    pub stack_bb: Option<f64>,
     pub stack_bucket: Option<StackBucket>,
     /// Tournaments only.
     pub stage: Option<Stage>,
@@ -153,12 +156,23 @@ pub struct EngineContext {
     pub seat: Option<SeatRelation>,
 }
 
-/// The player's stack once the hand was over: starting stack plus net
-/// result, or the starting stack alone where the net is unknown (tournament
-/// hands store none).
+/// The player's stack once the hand was over: the closing stack read from
+/// the hand's own lines ([`SeatFact::closing_stack`], every format), else
+/// starting stack plus net result (cash), else the starting stack alone.
 pub fn stack_after(seat: &SeatFact) -> Option<f64> {
+    if let Some(closing) = seat.closing_stack {
+        return Some(closing);
+    }
     let start = seat.starting_stack?;
     Some(start + seat.net_result.unwrap_or(0.0))
+}
+
+/// The villain's own stack after the hand in big blinds, one decimal: what
+/// the chip's stack tag shows. Unlike the effective stack it is never
+/// clamped to the hero's (mock MTT session report, item 4).
+pub fn own_stack_after_bb(hand: &HandFacts, villain_id: i64) -> Option<f64> {
+    let bb = hand.big_blind.filter(|bb| *bb > 0.0)?;
+    Some(round1(stack_after(hand.seat_of(villain_id)?)? / bb))
 }
 
 fn round1(value: f64) -> f64 {
@@ -166,12 +180,14 @@ fn round1(value: f64) -> f64 {
 }
 
 /// Effective stack in big blinds after the hand (section 5, row S06):
-/// against the hero when the hero was seated, otherwise against the
-/// biggest other stack. One decimal.
+/// against the hero when the hero was seated and still has chips,
+/// otherwise against the biggest other stack (a hero who busted plays no
+/// next hand at this table). One decimal.
 pub fn effective_stack_after_bb(hand: &HandFacts, villain_id: i64) -> Option<f64> {
     let bb = hand.big_blind.filter(|bb| *bb > 0.0)?;
     let villain = stack_after(hand.seat_of(villain_id)?)?;
-    let opponent = match hand.hero().filter(|h| h.player_id != villain_id) {
+    let busted = |seat: &SeatFact| stack_after(seat).is_some_and(|s| s <= 0.0);
+    let opponent = match hand.hero().filter(|h| h.player_id != villain_id && !busted(h)) {
         Some(hero) => stack_after(hero)?,
         None => hand
             .seats
@@ -313,6 +329,7 @@ pub fn villain_context(hand: &HandFacts, villain_id: i64) -> Option<EngineContex
         variant: hand.variant.clone(),
         format,
         effective_stack_bb,
+        stack_bb: own_stack_after_bb(hand, villain_id),
         stack_bucket: effective_stack_bb.map(StackBucket::of),
         stage: if tournament { avg_stack_bb.map(|avg| Stage::in_format(avg, format)) } else { None },
         level: if tournament { hand.level.as_deref().and_then(parse_level) } else { None },

@@ -2629,7 +2629,22 @@
               "ruleId": "stk.reshove.high"
             },
             {
-              "advice": "Jam 99+ and AQ+ over his squeezes; flat less with KJo (on your left).",
+              "advice": "4-bet his 3-bets with QQ+, AK and A5s-A4s as bluffs (on your left).",
+              "category": "exploit",
+              "confidencePct": 76,
+              "confidenceTier": "high",
+              "evidence": [
+                {
+                  "opportunities": 80,
+                  "statName": "three_bet_ip",
+                  "value": 16.3
+                }
+              ],
+              "observation": "3-bets in position 16% (13/80) of the time.",
+              "ruleId": "pf.3bet.high_ip"
+            },
+            {
+              "advice": "4-bet his squeezes with TT+ and AK; flat less with KJo (on your left).",
               "category": "exploit",
               "confidencePct": 55,
               "confidenceTier": "medium",
@@ -2642,6 +2657,21 @@
               ],
               "observation": "Squeezes 22% (4/18) when there is an open and a caller.",
               "ruleId": "pf.squeeze.high"
+            },
+            {
+              "advice": "Call his 3-bets in position with 77-JJ, AQ, AJs and KQs (on your left).",
+              "category": "exploit",
+              "confidencePct": 62,
+              "confidenceTier": "high",
+              "evidence": [
+                {
+                  "opportunities": 40,
+                  "statName": "three_bet_oop",
+                  "value": 15.0
+                }
+              ],
+              "observation": "3-bets from out of position 15% (6/40) of the time.",
+              "ruleId": "pf.3bet.high_oop"
             },
             {
               "advice": "Fold weak top pair and worse to his all-in bets; call with two pair or better.",
@@ -2698,11 +2728,36 @@
                   "unit": "opportunities"
                 },
                 "scenarioId": "S03",
-                "score": 3.112534711967833,
+                "score": 2.4900277695742665,
                 "tag": "RSV"
               },
               {
-                "advice": "Jam 99+ and AQ+ over his squeezes; flat less with KJo (on your left).",
+                "advice": "4-bet his 3-bets with QQ+, AK and A5s-A4s as bluffs (on your left).",
+                "category": "exploit",
+                "confidencePct": 76,
+                "confidenceTier": "high",
+                "evidence": [
+                  {
+                    "hits": 13,
+                    "opportunities": 80,
+                    "shrunk": 14.5,
+                    "statName": "three_bet_ip",
+                    "value": 16.3
+                  }
+                ],
+                "family": "preflop",
+                "observation": "3-bets in position 16% (13/80) of the time.",
+                "ruleId": "pf.3bet.high_ip",
+                "sample": {
+                  "count": 80,
+                  "unit": "opportunities"
+                },
+                "scenarioId": "P05",
+                "score": 2.1061809566713805,
+                "tag": "3B+"
+              },
+              {
+                "advice": "4-bet his squeezes with TT+ and AK; flat less with KJo (on your left).",
                 "category": "exploit",
                 "confidencePct": 55,
                 "confidenceTier": "medium",
@@ -2725,6 +2780,31 @@
                 "scenarioId": "P08",
                 "score": 1.437262013059711,
                 "tag": "SQZ"
+              },
+              {
+                "advice": "Call his 3-bets in position with 77-JJ, AQ, AJs and KQs (on your left).",
+                "category": "exploit",
+                "confidencePct": 62,
+                "confidenceTier": "high",
+                "evidence": [
+                  {
+                    "hits": 6,
+                    "opportunities": 40,
+                    "shrunk": 11.5,
+                    "statName": "three_bet_oop",
+                    "value": 15.0
+                  }
+                ],
+                "family": "preflop",
+                "observation": "3-bets from out of position 15% (6/40) of the time.",
+                "ruleId": "pf.3bet.high_oop",
+                "sample": {
+                  "count": 40,
+                  "unit": "opportunities"
+                },
+                "scenarioId": "P05",
+                "score": 1.233500822316552,
+                "tag": "3B+"
               },
               {
                 "advice": "Fold weak top pair and worse to his all-in bets; call with two pair or better.",
@@ -2805,33 +2885,33 @@
                   "unit": "opportunities"
                 },
                 "scenarioId": "S03",
-                "score": 3.112534711967833,
+                "score": 2.4900277695742665,
                 "tag": "RSV"
               },
               {
-                "advice": "Jam 99+ and AQ+ over his squeezes; flat less with KJo (on your left).",
+                "advice": "4-bet his 3-bets with QQ+, AK and A5s-A4s as bluffs (on your left).",
                 "category": "exploit",
-                "confidencePct": 55,
-                "confidenceTier": "medium",
+                "confidencePct": 76,
+                "confidenceTier": "high",
                 "evidence": [
                   {
-                    "hits": 4,
-                    "opportunities": 18,
-                    "shrunk": 15.0,
-                    "statName": "squeeze",
-                    "value": 22.2
+                    "hits": 13,
+                    "opportunities": 80,
+                    "shrunk": 14.5,
+                    "statName": "three_bet_ip",
+                    "value": 16.3
                   }
                 ],
                 "family": "preflop",
-                "observation": "Squeezes 22% (4/18) when there is an open and a caller.",
-                "ruleId": "pf.squeeze.high",
+                "observation": "3-bets in position 16% (13/80) of the time.",
+                "ruleId": "pf.3bet.high_ip",
                 "sample": {
-                  "count": 18,
+                  "count": 80,
                   "unit": "opportunities"
                 },
-                "scenarioId": "P08",
-                "score": 1.437262013059711,
-                "tag": "SQZ"
+                "scenarioId": "P05",
+                "score": 2.1061809566713805,
+                "tag": "3B+"
               }
             ],
             "version": 1
@@ -2871,7 +2951,7 @@
           },
           "descriptions": [
             {
-              "advice": "Squeeze-jam 88+ and AJ+ when he flats an open (on your left).",
+              "advice": "Open 2.5x for value; squeeze his flats with 99+, AQ+ and A5s (on your left).",
               "category": "exploit",
               "confidencePct": 94,
               "confidenceTier": "high",
@@ -2941,21 +3021,6 @@
               "ruleId": "pf.profile.station"
             },
             {
-              "advice": "Min-raise wider into him; call his reshove with JJ+ and AK (on your left).",
-              "category": "tendency",
-              "confidencePct": 82,
-              "confidenceTier": "high",
-              "evidence": [
-                {
-                  "opportunities": 45,
-                  "statName": "reshove",
-                  "value": 0.0
-                }
-              ],
-              "observation": "Reshoves only 0% (0/45) over opens at 15–25bb.",
-              "ruleId": "stk.reshove.low"
-            },
-            {
               "advice": "Isolate his limps to 4x with broadways and pairs; bluff less.",
               "category": "exploit",
               "confidencePct": 90,
@@ -2986,21 +3051,6 @@
               "ruleId": "pf.steal.low"
             },
             {
-              "advice": "Fold AJo, KQo and ATs to his early opens.",
-              "category": "tendency",
-              "confidencePct": 85,
-              "confidenceTier": "high",
-              "evidence": [
-                {
-                  "opportunities": 82,
-                  "statName": "rfi_mp",
-                  "value": 6.1
-                }
-              ],
-              "observation": "Opens 6% (5/82) from early and middle seats.",
-              "ruleId": "pf.rfi.tight_early"
-            },
-            {
               "advice": "C-bet flops at 2/3 pot with top pair+ and draws; check back overcards.",
               "category": "exploit",
               "confidencePct": 88,
@@ -3016,6 +3066,21 @@
               "ruleId": "post.fold_cbet_flop.low"
             },
             {
+              "advice": "Fold AJo, KQo and ATs to his early opens.",
+              "category": "tendency",
+              "confidencePct": 85,
+              "confidenceTier": "high",
+              "evidence": [
+                {
+                  "opportunities": 82,
+                  "statName": "rfi_mp",
+                  "value": 6.1
+                }
+              ],
+              "observation": "Opens 6% (5/82) from early and middle seats.",
+              "ruleId": "pf.rfi.tight_early"
+            },
+            {
               "advice": "Defend tighter: fold KTo, QJo and A9o to his late opens.",
               "category": "tendency",
               "confidencePct": 63,
@@ -3029,6 +3094,21 @@
               ],
               "observation": "Opens only 4% (1/26) from the cutoff and button.",
               "ruleId": "pf.rfi.tight_late"
+            },
+            {
+              "advice": "Min-raise wider into him; call his reshove with JJ+ and AK (on your left).",
+              "category": "tendency",
+              "confidencePct": 82,
+              "confidenceTier": "high",
+              "evidence": [
+                {
+                  "opportunities": 45,
+                  "statName": "reshove",
+                  "value": 0.0
+                }
+              ],
+              "observation": "Reshoves only 0% (0/45) over opens at 15–25bb.",
+              "ruleId": "stk.reshove.low"
             },
             {
               "advice": "Call his rare shoves only with 88+, AJ+ and KQs.",
@@ -3049,7 +3129,7 @@
           "engine": {
             "reads": [
               {
-                "advice": "Squeeze-jam 88+ and AJ+ when he flats an open (on your left).",
+                "advice": "Open 2.5x for value; squeeze his flats with 99+, AQ+ and A5s (on your left).",
                 "category": "exploit",
                 "confidencePct": 94,
                 "confidenceTier": "high",
@@ -3163,31 +3243,6 @@
                 "tag": "STN"
               },
               {
-                "advice": "Min-raise wider into him; call his reshove with JJ+ and AK (on your left).",
-                "category": "tendency",
-                "confidencePct": 82,
-                "confidenceTier": "high",
-                "evidence": [
-                  {
-                    "hits": 0,
-                    "opportunities": 45,
-                    "shrunk": 2.0,
-                    "statName": "reshove",
-                    "value": 0.0
-                  }
-                ],
-                "family": "stack",
-                "observation": "Reshoves only 0% (0/45) over opens at 15–25bb.",
-                "ruleId": "stk.reshove.low",
-                "sample": {
-                  "count": 45,
-                  "unit": "opportunities"
-                },
-                "scenarioId": "S03",
-                "score": 1.7888605191218492,
-                "tag": "RS-"
-              },
-              {
                 "advice": "Isolate his limps to 4x with broadways and pairs; bluff less.",
                 "category": "exploit",
                 "confidencePct": 90,
@@ -3238,6 +3293,31 @@
                 "tag": "ST-"
               },
               {
+                "advice": "C-bet flops at 2/3 pot with top pair+ and draws; check back overcards.",
+                "category": "exploit",
+                "confidencePct": 88,
+                "confidenceTier": "high",
+                "evidence": [
+                  {
+                    "hits": 26,
+                    "opportunities": 115,
+                    "shrunk": 26.3,
+                    "statName": "fold_to_cbet_flop",
+                    "value": 22.6
+                  }
+                ],
+                "family": "postflop",
+                "observation": "Folds to only 23% (26/115) of flop c-bets.",
+                "ruleId": "post.fold_cbet_flop.low",
+                "sample": {
+                  "count": 115,
+                  "unit": "opportunities"
+                },
+                "scenarioId": "F02",
+                "score": 1.3760781468907466,
+                "tag": "NFC"
+              },
+              {
                 "advice": "Fold AJo, KQo and ATs to his early opens.",
                 "category": "tendency",
                 "confidencePct": 85,
@@ -3261,31 +3341,6 @@
                 "scenarioId": "P01",
                 "score": 1.2551453976832,
                 "tag": "NIT"
-              },
-              {
-                "advice": "C-bet flops at 2/3 pot with top pair+ and draws; check back overcards.",
-                "category": "exploit",
-                "confidencePct": 88,
-                "confidenceTier": "high",
-                "evidence": [
-                  {
-                    "hits": 26,
-                    "opportunities": 115,
-                    "shrunk": 26.3,
-                    "statName": "fold_to_cbet_flop",
-                    "value": 22.6
-                  }
-                ],
-                "family": "postflop",
-                "observation": "Folds to only 23% (26/115) of flop c-bets.",
-                "ruleId": "post.fold_cbet_flop.low",
-                "sample": {
-                  "count": 115,
-                  "unit": "opportunities"
-                },
-                "scenarioId": "F02",
-                "score": 1.03205861016806,
-                "tag": "NFC"
               },
               {
                 "advice": "Defend tighter: fold KTo, QJo and A9o to his late opens.",
@@ -3313,6 +3368,31 @@
                 "tag": "ST-"
               },
               {
+                "advice": "Min-raise wider into him; call his reshove with JJ+ and AK (on your left).",
+                "category": "tendency",
+                "confidencePct": 82,
+                "confidenceTier": "high",
+                "evidence": [
+                  {
+                    "hits": 0,
+                    "opportunities": 45,
+                    "shrunk": 2.0,
+                    "statName": "reshove",
+                    "value": 0.0
+                  }
+                ],
+                "family": "stack",
+                "observation": "Reshoves only 0% (0/45) over opens at 15–25bb.",
+                "ruleId": "stk.reshove.low",
+                "sample": {
+                  "count": 45,
+                  "unit": "opportunities"
+                },
+                "scenarioId": "S03",
+                "score": 0.7155442076487397,
+                "tag": "RS-"
+              },
+              {
                 "advice": "Call his rare shoves only with 88+, AJ+ and KQs.",
                 "category": "tendency",
                 "confidencePct": 82,
@@ -3334,18 +3414,18 @@
                   "unit": "opportunities"
                 },
                 "scenarioId": "S01",
-                "score": 0.6153384297825736,
+                "score": 0.36920305786954416,
                 "tag": "NSV"
               }
             ],
             "tag": {
-              "ruleId": "stk.reshove.low",
+              "ruleId": "pf.cold_call.high",
               "source": "read",
-              "text": "RS-"
+              "text": "CC+"
             },
             "topReads": [
               {
-                "advice": "Squeeze-jam 88+ and AJ+ when he flats an open (on your left).",
+                "advice": "Open 2.5x for value; squeeze his flats with 99+, AQ+ and A5s (on your left).",
                 "category": "exploit",
                 "confidencePct": 94,
                 "confidenceTier": "high",
@@ -3432,7 +3512,7 @@
           },
           "descriptions": [
             {
-              "advice": "Reshove 99+ and AJ+ over his early opens.",
+              "advice": "3-bet his early opens with 99+, AJs+, KQs and AQo.",
               "category": "exploit",
               "confidencePct": 94,
               "confidenceTier": "high",
@@ -3462,7 +3542,7 @@
               "ruleId": "post.river_bet.high"
             },
             {
-              "advice": "Jam 88+, AJ+ and KQs over his blind 3-bets (on your left).",
+              "advice": "Call his 3-bets in position with 77-JJ, AQ, AJs and KQs (on your left).",
               "category": "exploit",
               "confidencePct": 81,
               "confidenceTier": "high",
@@ -3477,7 +3557,7 @@
               "ruleId": "pf.3bet.high_oop"
             },
             {
-              "advice": "Jam 99+, AJ+ and KQs over his 3-bets of your opens.",
+              "advice": "Cut KTo-type opens in front of him; 4-bet his 3-bets with QQ+, AK and A5s-A4s.",
               "category": "exploit",
               "confidencePct": 53,
               "confidenceTier": "medium",
@@ -3492,7 +3572,7 @@
               "ruleId": "h2h.3bet_vs_hero.high"
             },
             {
-              "advice": "Jam, don't 3-bet small; call his 4-bet jam with 99+ and AQ+.",
+              "advice": "Jam TT+ and AQ+ over his 4-bets; fold your light 3-bets.",
               "category": "exploit",
               "confidencePct": 65,
               "confidenceTier": "high",
@@ -3537,7 +3617,7 @@
               "ruleId": "stk.reshove.low"
             },
             {
-              "advice": "Reshove 55+, A7+ and K9s+ over his steals from the blinds.",
+              "advice": "Defend your big blind with any suited king vs his steals.",
               "category": "exploit",
               "confidencePct": 79,
               "confidenceTier": "high",
@@ -3570,7 +3650,7 @@
           "engine": {
             "reads": [
               {
-                "advice": "Reshove 99+ and AJ+ over his early opens.",
+                "advice": "3-bet his early opens with 99+, AJs+, KQs and AQo.",
                 "category": "exploit",
                 "confidencePct": 94,
                 "confidenceTier": "high",
@@ -3620,7 +3700,7 @@
                 "tag": "RV+"
               },
               {
-                "advice": "Jam 88+, AJ+ and KQs over his blind 3-bets (on your left).",
+                "advice": "Call his 3-bets in position with 77-JJ, AQ, AJs and KQs (on your left).",
                 "category": "exploit",
                 "confidencePct": 81,
                 "confidenceTier": "high",
@@ -3645,7 +3725,7 @@
                 "tag": "3B+"
               },
               {
-                "advice": "Jam 99+, AJ+ and KQs over his 3-bets of your opens.",
+                "advice": "Cut KTo-type opens in front of him; 4-bet his 3-bets with QQ+, AK and A5s-A4s.",
                 "category": "exploit",
                 "confidencePct": 53,
                 "confidenceTier": "medium",
@@ -3670,7 +3750,7 @@
                 "tag": "H2H"
               },
               {
-                "advice": "Jam, don't 3-bet small; call his 4-bet jam with 99+ and AQ+.",
+                "advice": "Jam TT+ and AQ+ over his 4-bets; fold your light 3-bets.",
                 "category": "exploit",
                 "confidencePct": 65,
                 "confidenceTier": "high",
@@ -3741,11 +3821,11 @@
                   "unit": "opportunities"
                 },
                 "scenarioId": "S03",
-                "score": 1.2354265901905952,
+                "score": 0.9883412721524761,
                 "tag": "RS-"
               },
               {
-                "advice": "Reshove 55+, A7+ and K9s+ over his steals from the blinds.",
+                "advice": "Defend your big blind with any suited king vs his steals.",
                 "category": "exploit",
                 "confidencePct": 79,
                 "confidenceTier": "high",
@@ -3802,7 +3882,7 @@
             },
             "topReads": [
               {
-                "advice": "Reshove 99+ and AJ+ over his early opens.",
+                "advice": "3-bet his early opens with 99+, AJs+, KQs and AQo.",
                 "category": "exploit",
                 "confidencePct": 94,
                 "confidenceTier": "high",
@@ -4633,21 +4713,6 @@
               "ruleId": "pf.profile.nit"
             },
             {
-              "advice": "Shove any two into him at 10bb or less, tighter when he covers your bounty.",
-              "category": "exploit",
-              "confidencePct": 90,
-              "confidenceTier": "high",
-              "evidence": [
-                {
-                  "opportunities": 89,
-                  "statName": "call_vs_shove",
-                  "value": 12.4
-                }
-              ],
-              "observation": "Calls only 12% (11/89) of all-in shoves.",
-              "ruleId": "stk.call_shove.tight"
-            },
-            {
               "advice": "Min-raise any two suited from late seats into his blinds.",
               "category": "exploit",
               "confidencePct": 64,
@@ -4663,19 +4728,34 @@
               "ruleId": "pf.fold_to_steal.high"
             },
             {
-              "advice": "Min-raise wider into him; call his reshove with JJ+ and AK.",
-              "category": "tendency",
-              "confidencePct": 84,
+              "advice": "Shove any two into him at 10bb or less, tighter when he covers your bounty.",
+              "category": "exploit",
+              "confidencePct": 90,
               "confidenceTier": "high",
               "evidence": [
                 {
-                  "opportunities": 53,
-                  "statName": "reshove",
-                  "value": 1.9
+                  "opportunities": 89,
+                  "statName": "call_vs_shove",
+                  "value": 12.4
                 }
               ],
-              "observation": "Reshoves only 2% (1/53) over opens at 15–25bb.",
-              "ruleId": "stk.reshove.low"
+              "observation": "Calls only 12% (11/89) of all-in shoves.",
+              "ruleId": "stk.call_shove.tight"
+            },
+            {
+              "advice": "Fold weak top pair and worse to his all-in bets; call with two pair or better.",
+              "category": "exploit",
+              "confidencePct": 50,
+              "confidenceTier": "medium",
+              "evidence": [
+                {
+                  "opportunities": 4,
+                  "statName": "showdown_all_in",
+                  "value": 75.0
+                }
+              ],
+              "observation": "Showed value in 3 of 4 all-in bets.",
+              "ruleId": "sd.tell.big_is_value"
             },
             {
               "advice": "Call his rare shoves only with 88+, AJ+ and KQs (on your right).",
@@ -4693,19 +4773,19 @@
               "ruleId": "stk.open_shove.tight"
             },
             {
-              "advice": "Fold weak top pair and worse to his all-in bets; call with two pair or better.",
-              "category": "exploit",
-              "confidencePct": 50,
-              "confidenceTier": "medium",
+              "advice": "Min-raise wider into him; call his reshove with JJ+ and AK.",
+              "category": "tendency",
+              "confidencePct": 84,
+              "confidenceTier": "high",
               "evidence": [
                 {
-                  "opportunities": 4,
-                  "statName": "showdown_all_in",
-                  "value": 75.0
+                  "opportunities": 53,
+                  "statName": "reshove",
+                  "value": 1.9
                 }
               ],
-              "observation": "Showed value in 3 of 4 all-in bets.",
-              "ruleId": "sd.tell.big_is_value"
+              "observation": "Reshoves only 2% (1/53) over opens at 15–25bb.",
+              "ruleId": "stk.reshove.low"
             }
           ],
           "engine": {
@@ -4761,31 +4841,6 @@
                 "tag": "NIT"
               },
               {
-                "advice": "Shove any two into him at 10bb or less, tighter when he covers your bounty.",
-                "category": "exploit",
-                "confidencePct": 90,
-                "confidenceTier": "high",
-                "evidence": [
-                  {
-                    "hits": 11,
-                    "opportunities": 89,
-                    "shrunk": 13.0,
-                    "statName": "call_vs_shove",
-                    "value": 12.4
-                  }
-                ],
-                "family": "stack",
-                "observation": "Calls only 12% (11/89) of all-in shoves.",
-                "ruleId": "stk.call_shove.tight",
-                "sample": {
-                  "count": 89,
-                  "unit": "opportunities"
-                },
-                "scenarioId": "S02",
-                "score": 1.0791829781915567,
-                "tag": "TCS"
-              },
-              {
                 "advice": "Min-raise any two suited from late seats into his blinds.",
                 "category": "exploit",
                 "confidencePct": 64,
@@ -4811,54 +4866,29 @@
                 "tag": "FTS"
               },
               {
-                "advice": "Min-raise wider into him; call his reshove with JJ+ and AK.",
-                "category": "tendency",
-                "confidencePct": 84,
+                "advice": "Shove any two into him at 10bb or less, tighter when he covers your bounty.",
+                "category": "exploit",
+                "confidencePct": 90,
                 "confidenceTier": "high",
                 "evidence": [
                   {
-                    "hits": 1,
-                    "opportunities": 53,
-                    "shrunk": 3.6,
-                    "statName": "reshove",
-                    "value": 1.9
+                    "hits": 11,
+                    "opportunities": 89,
+                    "shrunk": 13.0,
+                    "statName": "call_vs_shove",
+                    "value": 12.4
                   }
                 ],
                 "family": "stack",
-                "observation": "Reshoves only 2% (1/53) over opens at 15–25bb.",
-                "ruleId": "stk.reshove.low",
+                "observation": "Calls only 12% (11/89) of all-in shoves.",
+                "ruleId": "stk.call_shove.tight",
                 "sample": {
-                  "count": 53,
+                  "count": 89,
                   "unit": "opportunities"
                 },
-                "scenarioId": "S03",
-                "score": 1.0045751842777486,
-                "tag": "RS-"
-              },
-              {
-                "advice": "Call his rare shoves only with 88+, AJ+ and KQs (on your right).",
-                "category": "tendency",
-                "confidencePct": 88,
-                "confidenceTier": "high",
-                "evidence": [
-                  {
-                    "hits": 4,
-                    "opportunities": 76,
-                    "shrunk": 7.2,
-                    "statName": "open_shove",
-                    "value": 5.3
-                  }
-                ],
-                "family": "stack",
-                "observation": "Open-shoves only 5% (4/76) when folded to at 15bb or less.",
-                "ruleId": "stk.open_shove.tight",
-                "sample": {
-                  "count": 76,
-                  "unit": "opportunities"
-                },
-                "scenarioId": "S01",
-                "score": 0.8324698579397098,
-                "tag": "NSV"
+                "scenarioId": "S02",
+                "score": 0.647509786914934,
+                "tag": "TCS"
               },
               {
                 "advice": "Fold weak top pair and worse to his all-in bets; call with two pair or better.",
@@ -4884,6 +4914,56 @@
                 "scenarioId": "M04",
                 "score": 0.5,
                 "tag": "SDV"
+              },
+              {
+                "advice": "Call his rare shoves only with 88+, AJ+ and KQs (on your right).",
+                "category": "tendency",
+                "confidencePct": 88,
+                "confidenceTier": "high",
+                "evidence": [
+                  {
+                    "hits": 4,
+                    "opportunities": 76,
+                    "shrunk": 7.2,
+                    "statName": "open_shove",
+                    "value": 5.3
+                  }
+                ],
+                "family": "stack",
+                "observation": "Open-shoves only 5% (4/76) when folded to at 15bb or less.",
+                "ruleId": "stk.open_shove.tight",
+                "sample": {
+                  "count": 76,
+                  "unit": "opportunities"
+                },
+                "scenarioId": "S01",
+                "score": 0.4994819147638259,
+                "tag": "NSV"
+              },
+              {
+                "advice": "Min-raise wider into him; call his reshove with JJ+ and AK.",
+                "category": "tendency",
+                "confidencePct": 84,
+                "confidenceTier": "high",
+                "evidence": [
+                  {
+                    "hits": 1,
+                    "opportunities": 53,
+                    "shrunk": 3.6,
+                    "statName": "reshove",
+                    "value": 1.9
+                  }
+                ],
+                "family": "stack",
+                "observation": "Reshoves only 2% (1/53) over opens at 15–25bb.",
+                "ruleId": "stk.reshove.low",
+                "sample": {
+                  "count": 53,
+                  "unit": "opportunities"
+                },
+                "scenarioId": "S03",
+                "score": 0.48219608845331935,
+                "tag": "RS-"
               }
             ],
             "tag": {
@@ -5003,10 +5083,10 @@
                 {
                   "opportunities": 1,
                   "statName": "effective_stack_bb",
-                  "value": 2.3
+                  "value": 1.7
                 }
               ],
-              "observation": "Sits on 2.3bb effective after the last hand.",
+              "observation": "Sits on 1.7bb effective after the last hand.",
               "ruleId": "ctx.short_stack"
             }
           ],
@@ -5048,16 +5128,16 @@
                     "opportunities": 1,
                     "shrunk": null,
                     "statName": "effective_stack_bb",
-                    "value": 2.3
+                    "value": 1.7
                   }
                 ],
                 "family": "context",
-                "observation": "Sits on 2.3bb effective after the last hand.",
+                "observation": "Sits on 1.7bb effective after the last hand.",
                 "ruleId": "ctx.short_stack",
                 "sample": null,
                 "scenarioId": "S04",
                 "score": 2.5,
-                "tag": "2bb"
+                "tag": "1bb"
               }
             ],
             "tag": {
@@ -5102,16 +5182,16 @@
                     "opportunities": 1,
                     "shrunk": null,
                     "statName": "effective_stack_bb",
-                    "value": 2.3
+                    "value": 1.7
                   }
                 ],
                 "family": "context",
-                "observation": "Sits on 2.3bb effective after the last hand.",
+                "observation": "Sits on 1.7bb effective after the last hand.",
                 "ruleId": "ctx.short_stack",
                 "sample": null,
                 "scenarioId": "S04",
                 "score": 2.5,
-                "tag": "2bb"
+                "tag": "1bb"
               }
             ],
             "version": 1
@@ -5186,7 +5266,7 @@
           },
           "descriptions": [
             {
-              "advice": "Jam 99+, AJ+ and KQs over his 3-bets of your opens.",
+              "advice": "Cut KTo-type opens in front of him; 4-bet his 3-bets with QQ+, AK and A5s-A4s.",
               "category": "exploit",
               "confidencePct": 58,
               "confidenceTier": "medium",
@@ -5199,21 +5279,6 @@
               ],
               "observation": "3-bets your opens 20% (7/35).",
               "ruleId": "h2h.3bet_vs_hero.high"
-            },
-            {
-              "advice": "Min-raise wider into him; call his reshove with JJ+ and AK (directly on your left).",
-              "category": "tendency",
-              "confidencePct": 80,
-              "confidenceTier": "high",
-              "evidence": [
-                {
-                  "opportunities": 40,
-                  "statName": "reshove",
-                  "value": 0.0
-                }
-              ],
-              "observation": "Reshoves only 0% (0/40) over opens at 15–25bb.",
-              "ruleId": "stk.reshove.low"
             },
             {
               "advice": "Check top pair to him on the river; call his river bets with second pair+.",
@@ -5246,6 +5311,21 @@
               "ruleId": "post.river_raise.high"
             },
             {
+              "advice": "Min-raise wider into him; call his reshove with JJ+ and AK (directly on your left).",
+              "category": "tendency",
+              "confidencePct": 80,
+              "confidenceTier": "high",
+              "evidence": [
+                {
+                  "opportunities": 40,
+                  "statName": "reshove",
+                  "value": 0.0
+                }
+              ],
+              "observation": "Reshoves only 0% (0/40) over opens at 15–25bb.",
+              "ruleId": "stk.reshove.low"
+            },
+            {
               "advice": "You don't cover him: ignore his bounty and call his shoves with 55+, A9+, KQ.",
               "category": "tendency",
               "confidencePct": 100,
@@ -5264,7 +5344,7 @@
           "engine": {
             "reads": [
               {
-                "advice": "Jam 99+, AJ+ and KQs over his 3-bets of your opens.",
+                "advice": "Cut KTo-type opens in front of him; 4-bet his 3-bets with QQ+, AK and A5s-A4s.",
                 "category": "exploit",
                 "confidencePct": 58,
                 "confidenceTier": "medium",
@@ -5287,31 +5367,6 @@
                 "scenarioId": "H01",
                 "score": 1.6606342541605479,
                 "tag": "H2H"
-              },
-              {
-                "advice": "Min-raise wider into him; call his reshove with JJ+ and AK (directly on your left).",
-                "category": "tendency",
-                "confidencePct": 80,
-                "confidenceTier": "high",
-                "evidence": [
-                  {
-                    "hits": 0,
-                    "opportunities": 40,
-                    "shrunk": 2.2,
-                    "statName": "reshove",
-                    "value": 0.0
-                  }
-                ],
-                "family": "stack",
-                "observation": "Reshoves only 0% (0/40) over opens at 15–25bb.",
-                "ruleId": "stk.reshove.low",
-                "sample": {
-                  "count": 40,
-                  "unit": "opportunities"
-                },
-                "scenarioId": "S03",
-                "score": 1.6209342518577332,
-                "tag": "RS-"
               },
               {
                 "advice": "Check top pair to him on the river; call his river bets with second pair+.",
@@ -5364,6 +5419,31 @@
                 "tag": "RR+"
               },
               {
+                "advice": "Min-raise wider into him; call his reshove with JJ+ and AK (directly on your left).",
+                "category": "tendency",
+                "confidencePct": 80,
+                "confidenceTier": "high",
+                "evidence": [
+                  {
+                    "hits": 0,
+                    "opportunities": 40,
+                    "shrunk": 2.2,
+                    "statName": "reshove",
+                    "value": 0.0
+                  }
+                ],
+                "family": "stack",
+                "observation": "Reshoves only 0% (0/40) over opens at 15–25bb.",
+                "ruleId": "stk.reshove.low",
+                "sample": {
+                  "count": 40,
+                  "unit": "opportunities"
+                },
+                "scenarioId": "S03",
+                "score": 0.7780484408917119,
+                "tag": "RS-"
+              },
+              {
                 "advice": "You don't cover him: ignore his bounty and call his shoves with 55+, A9+, KQ.",
                 "category": "tendency",
                 "confidencePct": 100,
@@ -5393,7 +5473,7 @@
             },
             "topReads": [
               {
-                "advice": "Jam 99+, AJ+ and KQs over his 3-bets of your opens.",
+                "advice": "Cut KTo-type opens in front of him; 4-bet his 3-bets with QQ+, AK and A5s-A4s.",
                 "category": "exploit",
                 "confidencePct": 58,
                 "confidenceTier": "medium",
@@ -5418,29 +5498,29 @@
                 "tag": "H2H"
               },
               {
-                "advice": "Min-raise wider into him; call his reshove with JJ+ and AK (directly on your left).",
-                "category": "tendency",
-                "confidencePct": 80,
+                "advice": "Check top pair to him on the river; call his river bets with second pair+.",
+                "category": "exploit",
+                "confidencePct": 71,
                 "confidenceTier": "high",
                 "evidence": [
                   {
-                    "hits": 0,
-                    "opportunities": 40,
-                    "shrunk": 2.2,
-                    "statName": "reshove",
-                    "value": 0.0
+                    "hits": 21,
+                    "opportunities": 37,
+                    "shrunk": 48.1,
+                    "statName": "river_bet",
+                    "value": 56.8
                   }
                 ],
-                "family": "stack",
-                "observation": "Reshoves only 0% (0/40) over opens at 15–25bb.",
-                "ruleId": "stk.reshove.low",
+                "family": "postflop",
+                "observation": "Bets 57% (21/37) of rivers when checked to or first to act.",
+                "ruleId": "post.river_bet.high",
                 "sample": {
-                  "count": 40,
+                  "count": 37,
                   "unit": "opportunities"
                 },
-                "scenarioId": "S03",
-                "score": 1.6209342518577332,
-                "tag": "RS-"
+                "scenarioId": "F11",
+                "score": 1.288927972736975,
+                "tag": "RV+"
               }
             ],
             "version": 1

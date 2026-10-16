@@ -146,6 +146,7 @@ fn villains(conn: &Connection) -> Vec<(String, i64, EngineContext)> {
 fn at(base: &EngineContext, eff: f64) -> EngineContext {
     EngineContext {
         effective_stack_bb: Some(eff),
+        stack_bb: Some(eff),
         stack_bucket: Some(StackBucket::of(eff)),
         stage: None,
         bounty: None,

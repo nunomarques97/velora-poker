@@ -307,9 +307,10 @@ fn tournament(context: &EngineContext) -> bool {
 /// The chip tag by section 7's precedence, first match wins: `TILT` when
 /// `rec.tilt` fired; for a tournament villain on 25bb or less, the tag of
 /// his best-ranked all-in read (his shoves, reshoves and calls of shoves:
-/// `TCS`, `SHV`, `RSV`, `ICM-`, `KO+`…), else `NNbb` (effective stack
-/// rounded down); the top-ranked read's tag; otherwise none. `ranked` must
-/// be in [`rank`] order.
+/// `TCS`, `SHV`, `RSV`, `ICM-`, `KO+`…), else `NNbb` when his own stack
+/// after the last hand is 25bb or less too (his stack rounded down, never
+/// the hero's); the top-ranked read's tag (`ctx.short_stack` excluded);
+/// otherwise none. `ranked` must be in [`rank`] order.
 pub fn chip_tag(ranked: &[EngineRuleResult], context: Option<&EngineContext>) -> Option<ChipTag> {
     if let Some(tilt) = ranked.iter().find(|r| r.rule_id == TILT_RULE) {
         return Some(ChipTag {
@@ -330,15 +331,24 @@ pub fn chip_tag(ranked: &[EngineRuleResult], context: Option<&EngineContext>) ->
             if let Some((text, read)) = all_in_read {
                 return Some(ChipTag { text: text.clone(), rule_id: read.rule_id.clone(), source: TagSource::Read });
             }
-            let short = ranked.iter().any(|r| r.rule_id == SHORT_STACK_RULE);
-            return Some(ChipTag {
-                text: format!("{}bb", eff.max(0.0).floor() as u32),
-                rule_id: if short { SHORT_STACK_RULE } else { STACK_TAG_RULE }.into(),
-                source: TagSource::Stack,
-            });
+            // His own stack, not the effective one: when the hero is the
+            // short one, the effective stack is the hero's, and every chip
+            // at the table showed the same number (report item 4). A deep
+            // villain gets no stack tag at all.
+            let own = ctx.stack_bb.unwrap_or(eff);
+            if own <= STACK_TAG_MAX_BB + 1e-9 {
+                let short = ranked.iter().any(|r| r.rule_id == SHORT_STACK_RULE);
+                return Some(ChipTag {
+                    text: format!("{}bb", own.max(0.0).floor() as u32),
+                    rule_id: if short { SHORT_STACK_RULE } else { STACK_TAG_RULE }.into(),
+                    source: TagSource::Stack,
+                });
+            }
         }
     }
-    let top = ranked.first()?;
+    // `ctx.short_stack`'s own tag is the effective stack, so it never names
+    // the chip here: that is the case above, or the hero's stack.
+    let top = ranked.iter().find(|r| r.rule_id != SHORT_STACK_RULE)?;
     let text = top.tag.clone().filter(|t| is_valid_tag(t))?;
     Some(ChipTag { text, rule_id: top.rule_id.clone(), source: TagSource::Read })
 }

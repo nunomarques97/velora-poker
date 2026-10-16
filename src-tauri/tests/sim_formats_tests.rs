@@ -264,7 +264,12 @@ fn generated_spin_is_stored_like_the_real_spin_fixture() {
     let villain = hand.seats.iter().find(|s| !s.is_hero).expect("a villain");
     let ctx = villain_context(&hand, villain.player_id).expect("context");
     assert_eq!(ctx.format, FormatKey::Spin);
-    assert_eq!(ctx.effective_stack_bb, Some(25.0), "a hyper Spin starts at 25bb");
+    let bb = hand.big_blind.expect("big blind");
+    assert!(hand.seats.iter().all(|s| s.starting_stack == Some(25.0 * bb)), "a hyper Spin starts at 25bb");
+    // The context reads the stacks after that first hand (section 5).
+    let hero = hand.seats.iter().find(|s| s.is_hero).expect("the hero");
+    let (vil_after, hero_after) = (villain.closing_stack.unwrap(), hero.closing_stack.unwrap());
+    assert_eq!(ctx.effective_stack_bb, Some((vil_after.min(hero_after) / bb * 10.0).round() / 10.0));
     assert!(ctx.bounty.is_none());
 }
 

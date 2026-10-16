@@ -120,6 +120,7 @@ fn context(format: FormatKey, eff: f64) -> EngineContext {
         variant: Some(if tournament { "tournament" } else { "cash" }.into()),
         format,
         effective_stack_bb: Some(eff),
+        stack_bb: Some(eff),
         stack_bucket: Some(StackBucket::of(eff)),
         stage: tournament.then_some(Stage::Middle),
         level: tournament.then_some(5),

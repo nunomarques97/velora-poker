@@ -27,6 +27,11 @@ pub struct SeatFact {
     pub won_at_showdown: bool,
     pub net_result: Option<f64>,
     pub bounty: Option<f64>,
+    /// Chips (or money) in front of the player once the hand was over, read
+    /// from the hand's own lines (`collected`, `Uncalled bet ... returned`)
+    /// by [`load_hand`]. `None` where the hand was loaded in bulk or its text
+    /// could not be re-read.
+    pub closing_stack: Option<f64>,
 }
 
 /// One logged action. `amount` keeps PokerStars' meaning: the increment for
@@ -128,9 +133,41 @@ pub fn load_player_hands(conn: &Connection, player_id: i64) -> rusqlite::Result<
 }
 
 /// Loads one stored hand by `hands.id` (the latest completed hand at a table,
-/// for the between-hands context).
+/// for the between-hands context), with every seat's
+/// [`SeatFact::closing_stack`].
 pub fn load_hand(conn: &Connection, hand_id: i64) -> rusqlite::Result<Option<HandFacts>> {
-    Ok(load_hands(conn, "SELECT id FROM hands WHERE id = ?1", hand_id)?.pop())
+    let Some(mut hand) = load_hands(conn, "SELECT id FROM hands WHERE id = ?1", hand_id)?.pop() else {
+        return Ok(None);
+    };
+    fill_closing_stacks(conn, &mut hand)?;
+    Ok(Some(hand))
+}
+
+/// Re-reads the hand's stored text for the chips each seat had once it was
+/// over (mock MTT session report, item 4): tournament hands store no net
+/// result, so without this the context is one hand stale. Two queries for
+/// one hand. A text the parser no longer reads leaves every seat `None`.
+fn fill_closing_stacks(conn: &Connection, hand: &mut HandFacts) -> rusqlite::Result<()> {
+    let raw_text: String = conn.query_row(
+        "SELECT COALESCE(raw_text, '') FROM hands WHERE id = ?1",
+        params![hand.id],
+        |row| row.get(0),
+    )?;
+    let Ok(parsed) = crate::parser::parse_hand_block(&raw_text) else { return Ok(()) };
+    let mut names = conn.prepare(
+        "SELECT ph.player_id, p.name FROM player_hands ph JOIN players p ON p.id = ph.player_id
+         WHERE ph.hand_id = ?1",
+    )?;
+    let names: HashMap<i64, String> = names
+        .query_map(params![hand.id], |row| Ok((row.get(0)?, row.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    for seat in &mut hand.seats {
+        seat.closing_stack = names
+            .get(&seat.player_id)
+            .and_then(|name| parsed.results.get(name))
+            .and_then(|result| result.closing_stack);
+    }
+    Ok(())
 }
 
 /// Loads up to `limit` stored hands with `hands.id > after_id` (the lowest
@@ -210,6 +247,7 @@ fn load_hands(conn: &Connection, hand_ids: &str, param: i64) -> rusqlite::Result
             won_at_showdown: row.get::<_, i64>(8)? != 0,
             net_result: row.get(9)?,
             bounty: row.get(10)?,
+            closing_stack: None,
         });
     }
 

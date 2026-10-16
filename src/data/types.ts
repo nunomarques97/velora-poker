@@ -141,6 +141,8 @@ export interface EngineContext {
   variant: string | null;
   format: EngineFormat;
   effectiveStackBb: number | null;
+  /** His own stack after the last hand (bb), never clamped to the hero's. */
+  stackBb: number | null;
   stackBucket: StackBucket | null;
   /** Tournaments only. */
   stage: TournamentStage | null;

@@ -73,6 +73,67 @@ fn effective_stack_uses_min_of_hero_and_villain_after_last_hand() {
 }
 
 #[test]
+fn tournament_stacks_are_the_chips_after_the_last_hand() {
+    // Mock MTT session report, item 4: tournament hands store no net result
+    // (chips are not money), so the context used to fall back to the stack
+    // at the *start* of the last hand, one hand stale. The chips after the
+    // hand come from its own lines instead.
+    let mut t = Table::mtt("Ctx After", 300_000_250, &SIX, 40.0);
+    t.stacks.insert("Vil".into(), 10.0 * 200.0);
+    // Button = Hero, so Vil (seat 4) is UTG: he shoves 10bb, the hero calls
+    // and Vil doubles up.
+    let text = t.play(
+        0,
+        &[&[("Vil", Act::AllIn), ("Hal", Act::Fold), ("Cole", Act::Fold), (HERO, Act::Call),
+            ("Sam", Act::Fold), ("Bob", Act::Fold)]],
+        Some("Vil"),
+    );
+    assert_eq!((t.stack_bb("Vil"), t.stack_bb(HERO)), (21.5, 30.0));
+    let conn = import(&text);
+    let hand = latest_table_hand(&conn, "Ctx After").unwrap().unwrap();
+    let vil = player_id(&conn, "Vil");
+    let hal = player_id(&conn, "Hal");
+    assert_eq!(hand.seat_of(vil).unwrap().closing_stack, Some(21.5 * 200.0));
+
+    // Vil: min(21.5, Hero 30) — not his 10bb starting stack.
+    let ctx = villain_context(&hand, vil).unwrap();
+    assert_eq!(ctx.effective_stack_bb, Some(21.5));
+    assert_eq!(ctx.stack_bucket, Some(StackBucket::Reshove));
+    assert_eq!(ctx.stack_bb, Some(21.5));
+    // Hal folded with 40bb: the effective stack is the hero's 30bb after
+    // the hand, his own stack stays 40bb (never clamped).
+    let ctx = villain_context(&hand, hal).unwrap();
+    assert_eq!(ctx.effective_stack_bb, Some(30.0));
+    assert_eq!(ctx.stack_bb, Some(40.0));
+}
+
+#[test]
+fn real_tournament_closing_stacks_conserve_the_chips() {
+    // The real bounty hand: Player1 (11262) shoves over Hero's 3-bet and
+    // busts him; 755 comes back uncalled, Player1 collects 21184.
+    let mut conn = velora_poker_lib::db::open(std::path::Path::new(":memory:")).unwrap();
+    import::import_text(&mut conn, BOUNTY).unwrap();
+    let hand = latest_table_hand(&conn, "4002441239 7").unwrap().unwrap();
+    let closing = |name: &str| hand.seat_of(player_id(&conn, name)).unwrap().closing_stack;
+    assert_eq!(closing("Player1"), Some(11262.0 - 20.0 - 11242.0 + 755.0 + 21184.0));
+    assert_eq!(closing(HERO), Some(0.0));
+    assert_eq!(closing("Player2"), Some(24875.0 - 20.0 - 150.0));
+    let before: f64 = hand.seats.iter().filter_map(|s| s.starting_stack).sum();
+    let after: f64 = hand.seats.iter().filter_map(|s| s.closing_stack).sum();
+    assert_eq!(before, after, "a tournament hand has no rake");
+    // Player1's own stack after the hand, in bb (21939 / 150).
+    let p1 = villain_context(&hand, player_id(&conn, "Player1")).unwrap();
+    assert_eq!(p1.stack_bb, Some(146.3));
+    // The hero busted (0 chips): he plays no next hand at this table, so the
+    // effective stack is taken against the biggest other stack, as when he
+    // is not seated, never 0bb for everyone (min(24705, 21939) / 150).
+    assert_eq!(p1.effective_stack_bb, Some(146.3));
+    let p2 = villain_context(&hand, player_id(&conn, "Player2")).unwrap();
+    assert_eq!(p2.effective_stack_bb, Some(146.3));
+    assert_eq!(p2.stack_bb, Some(164.7));
+}
+
+#[test]
 fn stack_buckets_follow_section_five_boundaries() {
     assert_eq!(StackBucket::of(15.0), StackBucket::PushFold);
     assert_eq!(StackBucket::of(15.1), StackBucket::Reshove);
@@ -138,8 +199,7 @@ fn bounty_ratio_uses_buy_in_bounty_component() {
     assert_eq!(bounty.currency.as_deref(), Some("EUR"));
     assert_eq!(bounty.ratio, Some(1.5));
     assert!(!bounty.is_big());
-    // Tournament hands store no net result: stacks fall back to the
-    // starting stack (Hero 10507 < Player2 24875).
+    // Stacks after the hand: Hero busted (0) < Player2 24705.
     assert_eq!(bounty.hero_covers, Some(false));
 
     let p1 = villain_context(&hand, player_id(&conn, "Player1")).unwrap();

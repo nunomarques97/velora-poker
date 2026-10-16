@@ -715,6 +715,7 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
                             went_to_showdown,
                             won_at_showdown,
                             net_result: None,
+                            closing_stack: None,
                         },
                     );
                 }
@@ -842,8 +843,22 @@ pub fn parse_hand_block(block: &str) -> Result<ParsedHand, ParseError> {
     // to convert them with, so tournament hands never get a `net_result`
     // (see `ParsedPlayerResult::net_result` doc).
     // Every dealt-in cash player gets one, 0 for a player who put nothing in.
+    let contributed = compute_contributed(&actions, &dead_blinds, header.big_blind);
+    // The chips each dealt-in player has once the hand is over, in every
+    // format: what the next hand at this table starts from (opponent-engine
+    // section 5, "stack after").
+    for seat in &seats {
+        let name = &seat.player_name;
+        let won = collected.get(name).copied().unwrap_or(0.0);
+        let returned = uncalled_returned.get(name).copied().unwrap_or(0.0);
+        let spent = contributed.get(name).copied().unwrap_or(0.0);
+        results
+            .entry(name.clone())
+            .or_insert_with(ParsedPlayerResult::default)
+            .closing_stack = Some(round_cents(seat.starting_stack + won + returned - spent).max(0.0));
+    }
+
     if header.format == HandFormat::Cash {
-        let contributed = compute_contributed(&actions, &dead_blinds, header.big_blind);
         let mut names: std::collections::HashSet<String> = std::collections::HashSet::new();
         names.extend(seats.iter().map(|s| s.player_name.clone()));
         names.extend(contributed.keys().cloned());

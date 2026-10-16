@@ -63,6 +63,7 @@ fn context(format: FormatKey, eff: Option<f64>) -> EngineContext {
         }),
         format,
         effective_stack_bb: eff,
+        stack_bb: eff,
         stack_bucket: eff.map(StackBucket::of),
         stage: None,
         level: None,
@@ -354,6 +355,37 @@ fn short_stack_chip_shows_his_all_in_read_over_the_stack() {
 }
 
 #[test]
+fn stack_tag_shows_his_own_stack_not_the_hero_s() {
+    // Mock MTT session report, item 4: the stack tag was the effective
+    // stack, min(villain, hero), so when the hero was the short one every
+    // villain without an all-in read showed the hero's own stack (`11bb` on
+    // 7 of 8 chips at table 112). The tag names his own stack after the
+    // last hand; the effective stack still gates it and drives the buckets.
+    let short = read("ctx.short_stack", Some("9bb"), 2.5, 1.0, 1.0);
+    let steal = read("pf.steal.high", Some("ST+"), 3.0, 0.9, 1.0);
+    let big_bounty = read("ko.big_bounty", Some("KO"), 2.0, 1.0, 1.0);
+    let hero_short = |own: f64| EngineContext { stack_bb: Some(own), ..context(FormatKey::Mtt, Some(9.0)) };
+
+    // He is short too: his own stack, rounded down.
+    let tag = chip_tag(&rank(vec![short.clone()]), Some(&hero_short(18.4))).unwrap();
+    assert_eq!((tag.text.as_str(), tag.rule_id.as_str(), tag.source), ("18bb", "ctx.short_stack", TagSource::Stack));
+    let tag = chip_tag(&rank(vec![steal.clone()]), Some(&hero_short(25.0))).unwrap();
+    assert_eq!((tag.text.as_str(), tag.rule_id.as_str()), ("25bb", "ctx.effective_stack"));
+
+    // He is deep: no stack tag (it would be the hero's own stack); his top
+    // read names the chip, never the effective-stack fact.
+    let tag = chip_tag(&rank(vec![short.clone(), steal.clone()]), Some(&hero_short(60.0))).unwrap();
+    assert_eq!((tag.text.as_str(), tag.source), ("ST+", TagSource::Read));
+    let tag = chip_tag(&rank(vec![short.clone(), big_bounty]), Some(&hero_short(60.0))).unwrap();
+    assert_eq!(tag.text, "KO");
+    assert_eq!(chip_tag(&rank(vec![short.clone()]), Some(&hero_short(25.1))), None);
+    // His all-in read still wins at that effective depth.
+    let shove = read("stk.call_shove.wide", Some("CLS"), 0.4, 0.5, 1.0);
+    let tag = chip_tag(&rank(vec![short, steal, shove]), Some(&hero_short(60.0))).unwrap();
+    assert_eq!((tag.text.as_str(), tag.source), ("CLS", TagSource::Read));
+}
+
+#[test]
 fn tag_is_two_to_four_chars() {
     // Every rule's tag is valid (`NNbb` is a template filled with the stack).
     for def in RULES {
@@ -414,7 +446,7 @@ fn engine_payload_matches_spec_json_contract() {
     assert_eq!(keys(&v["reads"][0]["evidence"][0]), ["hits", "opportunities", "shrunk", "statName", "value"]);
     assert_eq!(
         keys(&v["context"]),
-        ["avgStackBb", "bounty", "effectiveStackBb", "format", "level", "seat", "sourceHandId", "stackBucket", "stage", "variant"]
+        ["avgStackBb", "bounty", "effectiveStackBb", "format", "level", "seat", "sourceHandId", "stackBb", "stackBucket", "stage", "variant"]
     );
     assert_eq!(v["context"]["sourceHandId"], hand.hand_ref.as_str());
     assert_eq!(v["context"]["format"], "cash");

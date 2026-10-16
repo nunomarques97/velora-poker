@@ -117,6 +117,12 @@ pub struct ParsedPlayerResult {
     /// so this stays `None` for every tournament hand rather than reporting a
     /// fabricated or chip-denominated value.
     pub net_result: Option<f64>,
+    /// Chips (or money) in front of the player once the hand was over:
+    /// starting stack plus everything collected and returned, minus
+    /// everything put in. Set for every dealt-in seat of every format; in a
+    /// tournament it is chips, never money, so it is never stored as
+    /// `net_result` (session results read that column as money).
+    pub closing_stack: Option<f64>,
 }
 
 /// Cash-game stakes and tournament levels have different semantics (real/play
