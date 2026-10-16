@@ -32,6 +32,7 @@ import {
   type Point,
   type Rect,
 } from "./seatLayout";
+import { mergeDrawerUpdate } from "./rosterUpdate";
 import styles from "./OverlayApp.module.css";
 
 /**
@@ -471,8 +472,10 @@ function TableOverlay({ tableId }: { tableId: number }) {
   }
 
   function handlePlayerUpdated(updated: Player) {
-    setDetailPlayer(updated);
-    setPlayers((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    const roster = players.find((p) => p.id === updated.id);
+    const merged = roster ? mergeDrawerUpdate(roster, updated) : updated;
+    setDetailPlayer(merged);
+    setPlayers((prev) => prev.map((p) => (p.id === merged.id ? mergeDrawerUpdate(p, updated) : p)));
   }
 
   // ----- Hover read card -----------------------------------------------

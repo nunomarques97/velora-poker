@@ -145,14 +145,36 @@ pub fn build_player_payload(
     seat_offset: Option<i64>,
     include_note: bool,
 ) -> Result<PlayerPayload, String> {
+    build_payload(conn, rules, engine, context_hand, id, name, hands, seat, seat_offset, include_note, true)
+}
+
+/// `build_player_payload` with a switch for the reads: `with_reads: false`
+/// leaves `engine` empty (no chip tag, no hover card) and `descriptions`
+/// empty, and computes neither. The overlay roster passes it for the hero:
+/// reads are about opponents, never advice against yourself.
+#[allow(clippy::too_many_arguments)]
+fn build_payload(
+    conn: &rusqlite::Connection,
+    rules: &[classification::ClassificationRule],
+    engine: &mut EngineCache,
+    context_hand: Option<&HandFacts>,
+    id: i64,
+    name: String,
+    hands: i64,
+    seat: Option<i64>,
+    seat_offset: Option<i64>,
+    include_note: bool,
+    with_reads: bool,
+) -> Result<PlayerPayload, String> {
     let (player_stats, opportunities) =
         stats::compute_player_stats_with_opportunities(conn, id).map_err(|e| e.to_string())?;
-    let engine = player_engine(conn, engine, context_hand, id)?;
+    let engine = if with_reads { player_engine(conn, engine, context_hand, id)? } else { None };
     // The engine supersedes `description_rules` for the strategic payload;
     // without it (default build) `descriptions_for_player` is empty.
     let descriptions = match &engine {
         Some(payload) => payload.reads.iter().map(|r| r.to_rule_result()).collect(),
-        None => description_rules::descriptions_for_player(&player_stats, &opportunities),
+        None if with_reads => description_rules::descriptions_for_player(&player_stats, &opportunities),
+        None => Vec::new(),
     };
     let classification_result =
         classification::resolve_for_player(conn, rules, id, hands, &player_stats)
@@ -378,8 +400,10 @@ pub fn active_table_payloads(
     let mut players = Vec::with_capacity(rows.len());
     for row in rows {
         // `include_note: false` — the overlay never renders notes, so this
-        // path must not gain a per-player note lookup.
-        players.push(build_player_payload(
+        // path must not gain a per-player note lookup. The hero's chip keeps
+        // his plain stats but no reads about himself (mock-session report,
+        // item 3), same as the side panel.
+        players.push(build_payload(
             conn,
             &rules,
             engine,
@@ -390,6 +414,7 @@ pub fn active_table_payloads(
             row.seat,
             row.seat_offset,
             false,
+            !row.is_hero,
         )?);
     }
     Ok(players)

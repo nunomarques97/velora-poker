@@ -519,6 +519,39 @@ fn strategic_build_payload_carries_engine_ranked_reads() {
     );
 }
 
+/// Mock-session report item 3: the hero's own chip carried reads about the
+/// hero (`3B+`, `RS-`, `KO`) and its hover card gave advice against himself.
+/// The overlay roster keeps the hero's plain stats and drops his reads; the
+/// Players list still reviews him.
+#[cfg(feature = "strategic-analysis")]
+#[test]
+fn overlay_roster_carries_no_reads_about_the_hero() {
+    let mut t = Table::cash("Rank Hero", 300_008_250, &SIX);
+    let conn = import(&fold_to_three_bet_hands(&mut t, 30, 0));
+    let rules = classification::list_rules(&conn).unwrap();
+    let mut cache = EngineCache::new();
+    let hero_id = player_id(&conn, HERO);
+
+    // He does have reads: he 3-bets every hand.
+    let page = build_player_payload(&conn, &rules, &mut cache, None, hero_id, HERO.into(), 30, None, None, true).unwrap();
+    assert!(page.engine.as_ref().is_some_and(|e| e.tag.is_some() && !e.reads.is_empty()));
+    assert!(!page.descriptions.is_empty());
+
+    let overlay = active_table_payloads(&conn, &mut cache, Some("Rank Hero"), None).unwrap();
+    assert_eq!(overlay.len(), 6);
+    let hero = overlay.iter().find(|p| p.name == HERO).expect("hero seated");
+    assert_eq!(hero.seat_offset, Some(0));
+    let v = json(hero);
+    assert_eq!(v["engine"], Value::Null, "no chip tag, no hover card");
+    assert_eq!(v["descriptions"], Value::Array(vec![]), "no reads in the drawer");
+    // Plain stats stay on his chip.
+    assert_eq!(hero.hands, 30);
+    assert!(hero.stats.vpip.is_some_and(|vpip| vpip > 90.0), "{:?}", hero.stats.vpip);
+    // Villains keep theirs.
+    let vil = overlay.iter().find(|p| p.name == "Vil").expect("Vil seated");
+    assert!(vil.engine.as_ref().is_some_and(|e| e.tag.is_some()));
+}
+
 #[test]
 fn engine_respects_min_hands_for_archetype_colour() {
     // 24 hands of a maniac's profile: below the 25-hand gate, so whatever

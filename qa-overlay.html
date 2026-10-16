@@ -279,9 +279,10 @@
         // reads, samples, stats and archetype are the engine's; the drawer's
         // other sections (head-to-head, showdowns, sizing, recent form,
         // auto-notes) are not in the fixture and stay illustrative. The hero's
-        // own payload is dropped: the harness shows opponents' reads.
+        // payload is passed through as the roster returns it (no reads: the
+        // roster drops them), so the harness shows what the overlay shows.
         function fromFixture(p) {
-          const engine = p.seatOffset === 0 || !p.engine ? null : { ...p.engine, ...drawerExtras(p.hands) };
+          const engine = !p.engine ? null : { ...p.engine, ...drawerExtras(p.hands) };
           return {
             id: `p${p.seat}`,
             name: p.name,
