@@ -1956,8 +1956,8 @@ pub fn get_diagnostics_report(
         ));
     }
     out.push_str(&format!(
-        "Cursor tracker: ticks={}  style writes={}\n",
-        probe.ticks, probe.style_writes
+        "Cursor tracker: ticks={}  style writes={}  overlays put back on top={}\n",
+        probe.ticks, probe.style_writes, probe.topmost_restores
     ));
 
     Ok(out)

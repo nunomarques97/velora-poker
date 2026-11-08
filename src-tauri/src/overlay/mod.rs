@@ -7,6 +7,8 @@ use tauri::{AppHandle, Manager};
 pub mod hittest;
 pub mod manager;
 pub mod plan;
+#[cfg(windows)]
+pub mod zorder;
 
 /// Label of the overlay window declared statically in `tauri.conf.json`. It
 /// is a *prototype*, never shown: every per-table overlay window is
@@ -182,6 +184,9 @@ pub struct HitTestProbe {
     pub overlays: Vec<OverlayProbe>,
     pub ticks: u64,
     pub style_writes: u64,
+    /// Times an overlay had fallen below a table and was put back on top
+    /// (`zorder`).
+    pub topmost_restores: u64,
 }
 
 pub struct OverlayProbe {
@@ -207,6 +212,7 @@ pub fn hit_test_probe() -> HitTestProbe {
                 .collect(),
             ticks,
             style_writes,
+            topmost_restores: zorder::restore_count(),
         }
     }
     #[cfg(not(windows))]
@@ -215,6 +221,7 @@ pub fn hit_test_probe() -> HitTestProbe {
             overlays: Vec::new(),
             ticks: 0,
             style_writes: 0,
+            topmost_restores: 0,
         }
     }
 }

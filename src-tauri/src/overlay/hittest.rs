@@ -213,9 +213,32 @@ pub fn install(label: &str, hwnd_raw: isize) {
     if !TRACKER_STARTED.swap(true, Ordering::SeqCst) {
         std::thread::spawn(|| loop {
             std::thread::sleep(CURSOR_POLL);
-            TICKS.fetch_add(1, Ordering::SeqCst);
+            let tick = TICKS.fetch_add(1, Ordering::SeqCst);
             apply_for_current_cursor();
+            if tick % ZORDER_CHECK_EVERY_TICKS == 0 {
+                keep_overlays_on_top();
+            }
         });
+    }
+}
+
+/// How often, in tracker ticks, the shown overlays are checked against the
+/// always-on-top band: 16 ticks is about a quarter of a second, so a HUD that
+/// fell behind its table is back before the player has looked for it.
+const ZORDER_CHECK_EVERY_TICKS: u64 = 16;
+
+/// Puts any shown overlay that has fallen below a table back on top — see
+/// `zorder` for the live failure this guards against. The HWNDs are copied
+/// out first so no Win32 call runs under the registry lock.
+fn keep_overlays_on_top() {
+    let hwnds: Vec<isize> = match OVERLAYS.lock() {
+        Ok(overlays) => overlays.iter().map(|o| o.hwnd).collect(),
+        Err(_) => return,
+    };
+    for hwnd in hwnds {
+        if unsafe { IsWindowVisible(HWND(hwnd as *mut _)) }.as_bool() {
+            super::zorder::keep_on_top(hwnd);
+        }
     }
 }
 
